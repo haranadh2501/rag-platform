@@ -58,11 +58,24 @@ if settings.MCP_ENABLED:
 
 @app.get("/health", tags=["Health"])
 async def health_check():
-    """Health check — returns status of all services."""
+    """Health check — pings the database and reports service status."""
+    from sqlalchemy import text
+    from app.core.database import engine
+
+    database = "connected"
+    overall = "ok"
+    try:
+        async with engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+    except Exception as exc:  # don't 500 the health probe — report degraded
+        logger.warning("Health check DB ping failed: %s", exc)
+        database = "unreachable"
+        overall = "degraded"
+
     return JSONResponse({
-        "status": "ok",
-        "database": "unchecked",   # M2: add real DB ping
-        "n8n": "unchecked",        # M2: add real n8n ping
+        "status": overall,
+        "database": database,
+        "n8n": "mocked" if settings.MOCK_N8N else "unchecked",
         "mock_n8n": settings.MOCK_N8N,
         "mcp_enabled": settings.MCP_ENABLED,
         "version": "1.0.0",
