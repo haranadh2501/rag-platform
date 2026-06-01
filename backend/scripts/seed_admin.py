@@ -1,37 +1,69 @@
-"""
-Seed script — creates demo tenant + admin user.
-Owner: M2 — implement create_admin().
-Run: python -m app.scripts.seed_admin
+"""Seed script — creates the demo tenant + super_admin user.
+
+Owner: M2. Idempotent: safe to run repeatedly (it only inserts what's missing).
+
+Run from the backend/ directory (or inside the backend container, WORKDIR=/app):
+    python -m scripts.seed_admin
+
+Reads from .env: SEED_ADMIN_EMAIL, SEED_ADMIN_PASSWORD, SEED_TENANT_NAME,
+SEED_TENANT_SLUG.
 """
 import asyncio
 import logging
-import sys
 import os
+import sys
 
-# Add backend dir to path
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+# Put backend/ on sys.path so `import app...` works when run as a script.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.core.config import settings
-from app.core.security import get_password_hash
+from sqlalchemy import select  # noqa: E402
+
+from app.core.config import settings  # noqa: E402
+from app.core.database import AsyncSessionLocal, engine  # noqa: E402
+from app.core.security import get_password_hash  # noqa: E402
+from app.models.models import Tenant, User  # noqa: E402
 
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("seed_admin")
 
 
-async def create_admin():
-    """
-    M2: Implement using SQLAlchemy async session:
-    1. Check if tenant with slug=SEED_TENANT_SLUG exists
-    2. If not, create Tenant(name=SEED_TENANT_NAME, slug=SEED_TENANT_SLUG)
-    3. Check if user with email=SEED_ADMIN_EMAIL exists
-    4. If not, create User(email, hashed_password, role='super_admin', tenant_id)
-    5. Log success
-    """
-    logger.info(f"Seeding admin: {settings.SEED_ADMIN_EMAIL}")
-    logger.info(f"Tenant: {settings.SEED_TENANT_NAME} ({settings.SEED_TENANT_SLUG})")
-    # M2: implement DB operations
-    logger.warning("M2: implement seed_admin.py DB operations")
-    logger.info("✅ Seed complete (mock)")
+async def create_admin() -> None:
+    logger.info("Seeding tenant '%s' (%s) + admin %s",
+                settings.SEED_TENANT_NAME, settings.SEED_TENANT_SLUG, settings.SEED_ADMIN_EMAIL)
+
+    async with AsyncSessionLocal() as db:
+        # 1. Tenant (by slug)
+        tenant = (
+            await db.execute(select(Tenant).where(Tenant.slug == settings.SEED_TENANT_SLUG))
+        ).scalar_one_or_none()
+        if tenant is None:
+            tenant = Tenant(name=settings.SEED_TENANT_NAME, slug=settings.SEED_TENANT_SLUG)
+            db.add(tenant)
+            await db.flush()  # assign tenant.id
+            logger.info("  + created tenant %s", tenant.id)
+        else:
+            logger.info("  = tenant already exists (%s)", tenant.id)
+
+        # 2. Admin user (by email)
+        user = (
+            await db.execute(select(User).where(User.email == settings.SEED_ADMIN_EMAIL))
+        ).scalar_one_or_none()
+        if user is None:
+            user = User(
+                tenant_id=tenant.id,
+                email=settings.SEED_ADMIN_EMAIL,
+                hashed_password=get_password_hash(settings.SEED_ADMIN_PASSWORD),
+                role="super_admin",
+            )
+            db.add(user)
+            logger.info("  + created super_admin %s", settings.SEED_ADMIN_EMAIL)
+        else:
+            logger.info("  = user already exists (%s)", user.id)
+
+        await db.commit()
+
+    await engine.dispose()
+    logger.info("✅ Seed complete")
 
 
 if __name__ == "__main__":

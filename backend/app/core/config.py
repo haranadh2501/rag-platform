@@ -26,6 +26,12 @@ class Settings(BaseSettings):
     # ── Database ─────────────────────────────────────────────────────
     DATABASE_URL: str = "postgresql+asyncpg://raguser:changeme@localhost:5432/ragplatform"
 
+    @property
+    def SYNC_DATABASE_URL(self) -> str:
+        """Sync (psycopg2) DSN derived from DATABASE_URL — used by Alembic, which
+        runs migrations synchronously."""
+        return self.DATABASE_URL.replace("+asyncpg", "+psycopg2")
+
     # ── n8n ──────────────────────────────────────────────────────────
     N8N_BASE_URL: str = "http://localhost:5678"
     N8N_INGEST_WEBHOOK_URL: str = "http://localhost:5678/webhook/ingest"
