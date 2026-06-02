@@ -3,14 +3,20 @@
 > Owner: M8. Check off tasks as you complete them. One PR per phase; title: `feat(admin-ui): <phase-name>`.
 
 ## Phase 1 — Scaffold
-- [ ] Confirm `npm run dev` opens http://localhost:3000
+- [x] Next.js 14 project created: package.json, tsconfig.json, next.config.mjs, tailwind.config.ts, postcss.config.js, .eslintrc.json
+- [x] `@admin-types` path alias wired in tsconfig.json → `./admin/types/admin`
+- [x] `next-env.d.ts` committed so `tsc --noEmit` runs without a prior build
+- [x] Run `npm install` — package-lock.json generated (node v24.16.0 / npm 11.13.0)
+- [x] `npm run typecheck` — passed (0 errors)
+- [x] `npm run lint` — passed (0 warnings, 0 errors)
+- [x] `npm run build` — passed; Next.js 14.2.35; 3 routes compiled (/, /admin, /admin/documents)
 - [ ] Run `npx openapi-typescript ../../specs/openapi.yaml -o src/types/openapi.ts`
-- [ ] Copy `frontend/admin/types/admin.ts` → `frontend/src/types/admin.ts`
 - [ ] Create `src/lib/apiClient.ts` — fetch wrapper: attaches `Authorization: Bearer`, handles `401` → clear token → redirect to `/login?next=`
 - [ ] Create `src/lib/authContext.tsx` — `AuthContext` with `user`, `role`, `login()`, `logout()`
 
 ## Phase 2 — Shared Layout
-- [ ] `src/app/admin/layout.tsx` — wraps all `/admin/*` pages with `AuthGuard`; redirects to `/login?next=` when unauthenticated
+- [x] `src/app/admin/layout.tsx` — bare shell placeholder; Phase 2 replaces with AuthGuard + sidebar
+- [x] `src/app/admin/documents/page.tsx` — placeholder with upload, quota, and table stubs
 - [ ] `src/components/admin/AdminLayout.tsx` — 240 px sidebar (Documents, Users, Tenants🔒, Settings, Chat→) + header (tenant name, user menu, logout)
 - [ ] Sidebar collapses to hamburger on < 768 px
 - [ ] Active nav item: `indigo-600` left border + background tint
