@@ -1,3 +1,6 @@
+'use client';
+
+import { useState } from 'react';
 import type { DocumentOut } from '@admin-types';
 
 // Mock knowledge sources — replaced by GET /admin/documents in Phase 3.
@@ -86,14 +89,7 @@ function StorageQuotaCard({ usedMb, totalMb }: { usedMb: number; totalMb: number
   );
 }
 
-function relativeTime(iso: string): string {
-  const diffMs = Date.now() - new Date(iso).getTime();
-  const diffSec = Math.floor(diffMs / 1000);
-  if (diffSec < 60) return 'just now';
-  const diffMin = Math.floor(diffSec / 60);
-  if (diffMin < 60) return `${diffMin} min ago`;
-  const diffHr = Math.floor(diffMin / 60);
-  if (diffHr < 24) return `${diffHr} hr ago`;
+function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('en-GB', {
     day: 'numeric',
     month: 'short',
@@ -126,49 +122,84 @@ function StatusBadge({ doc }: { doc: DocumentOut }) {
   }
 }
 
+type UploadTab = 'file' | 'url';
+
 function UploadSourcePanel() {
+  const [activeTab, setActiveTab] = useState<UploadTab>('file');
+
+  const tabClass = (tab: UploadTab) =>
+    activeTab === tab
+      ? 'border-b-2 border-indigo-600 px-4 py-2.5 text-sm font-medium text-indigo-600'
+      : 'px-4 py-2.5 text-sm font-medium text-slate-400 hover:text-slate-600';
+
   return (
     <div className="mb-6 overflow-hidden rounded-lg border border-slate-200 bg-white">
-      {/* Tab bar — interactive switching added in Phase 5 with use client */}
+      {/* Tab bar */}
       <div className="flex border-b border-slate-200">
-        <div className="border-b-2 border-indigo-600 px-4 py-2.5 text-sm font-medium text-indigo-600">
+        <button type="button" onClick={() => setActiveTab('file')} className={tabClass('file')}>
           Upload File
-        </div>
-        <div className="px-4 py-2.5 text-sm font-medium text-slate-400">
+        </button>
+        <button type="button" onClick={() => setActiveTab('url')} className={tabClass('url')}>
           Add by URL
-        </div>
+        </button>
       </div>
 
       <div className="p-6">
-        {/* Upload File tab visual */}
-        <div className="rounded-lg border-2 border-dashed border-slate-300 bg-slate-50 p-8 text-center">
-          <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm">
-            <svg className="h-5 w-5 text-slate-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m6.75 12-3-3m0 0-3 3m3-3v6m-1.5-15H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
-            </svg>
+        {/* Upload File panel */}
+        {activeTab === 'file' && (
+          <div className="rounded-lg border-2 border-dashed border-slate-300 bg-slate-50 p-8 text-center">
+            <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm">
+              <svg className="h-5 w-5 text-slate-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m6.75 12-3-3m0 0-3 3m3-3v6m-1.5-15H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+              </svg>
+            </div>
+            <p className="text-sm font-medium text-slate-700">
+              Drag &amp; drop PDF, DOCX, or TXT
+            </p>
+            <p className="mt-1 text-xs text-slate-400">or</p>
+            <button
+              type="button"
+              disabled
+              className="mt-2 cursor-not-allowed rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white opacity-40"
+            >
+              Browse files
+            </button>
+            <p className="mt-3 text-xs text-slate-400">Max 25 MB · 20 uploads/hour</p>
           </div>
-          <p className="text-sm font-medium text-slate-700">
-            Drag &amp; drop PDF, DOCX, or TXT
-          </p>
-          <p className="mt-1 text-xs text-slate-400">or</p>
-          <span className="mt-2 inline-block cursor-not-allowed rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white opacity-40">
-            Browse files
-          </span>
-          <p className="mt-3 text-xs text-slate-400">Max 25 MB · 20 uploads/hour</p>
-        </div>
+        )}
 
-        {/* Add by URL tab visual */}
-        <div className="mt-4 rounded-lg border border-slate-200 p-4">
-          <p className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-400">
-            Add by URL
-          </p>
-          <div className="flex gap-2">
-            <div className="h-9 flex-1 rounded-md border border-slate-200 bg-slate-50" />
-            <div className="h-9 w-24 rounded-md border border-slate-200 bg-slate-50" />
-            <div className="h-9 w-16 rounded-md bg-indigo-100 opacity-50" />
+        {/* Add by URL panel */}
+        {activeTab === 'url' && (
+          <div className="space-y-3">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-700">
+                URL
+              </label>
+              <input
+                type="url"
+                placeholder="https://example.com/document"
+                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-700">
+                Title <span className="font-normal text-slate-400">(optional)</span>
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. API Reference"
+                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              />
+            </div>
+            <button
+              type="button"
+              disabled
+              className="cursor-not-allowed rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white opacity-40"
+            >
+              Add source
+            </button>
           </div>
-          <p className="mt-1.5 text-xs text-slate-400">URL · Optional title · Ingest</p>
-        </div>
+        )}
 
         {/* MOCK_N8N notice */}
         <p className="mt-4 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-700">
@@ -227,7 +258,7 @@ export default function DocumentsPage() {
                   {doc.status === 'completed' ? doc.chunk_count : '—'}
                 </td>
                 <td className="px-4 py-3 text-sm text-slate-500">
-                  {relativeTime(doc.created_at)}
+                  {formatDate(doc.created_at)}
                 </td>
                 <td className="px-4 py-3 text-sm text-slate-400">—</td>
               </tr>
