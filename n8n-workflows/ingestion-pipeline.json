@@ -12,71 +12,457 @@
       "name": "Webhook /ingest",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1.1,
-      "position": [240, 300]
+      "position": [240, 460],
+      "webhookId": "ingest-persistent-v1"
     },
     {
       "parameters": {
-        "functionCode": "// M5: 1) Read file at $json.file_path  2) extract text (pypdf/docx/txt)\n// 3) if scanned PDF (no text layer) → call OpenAI gpt-4o vision OCR\n// 4) Return { text, page_count, used_ocr }\nreturn [{ json: { text: 'TODO M5: extract text', page_count: 0, used_ocr: false, ...$json } }];"
+        "mode": "rules",
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+                "conditions": [
+                  {
+                    "id": "cond-url",
+                    "leftValue": "={{ $json.source_type }}",
+                    "rightValue": "url",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "url"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+                "conditions": [
+                  {
+                    "id": "cond-file",
+                    "leftValue": "={{ $json.source_type }}",
+                    "rightValue": "url",
+                    "operator": { "type": "string", "operation": "notEquals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "file"
+            }
+          ]
+        },
+        "options": {}
       },
-      "id": "extract",
-      "name": "Extract + OCR",
-      "type": "n8n-nodes-base.function",
-      "typeVersion": 1,
-      "position": [460, 300]
+      "id": "sw-type",
+      "name": "Switch: URL vs File",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [460, 460]
+    },
+
+    {
+      "parameters": {
+        "url": "={{ $json.source_url }}",
+        "method": "GET",
+        "options": {
+          "response": {
+            "response": { "responseFormat": "text", "fullResponse": false }
+          },
+          "timeout": 30000
+        }
+      },
+      "id": "fetch-url",
+      "name": "Fetch URL",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 280],
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
-        "functionCode": "// M5: chunk into ~512-token windows, 50-token overlap.\n// Return array of {content, chunk_index, page_number, token_count}.\nreturn [{ json: { chunks: [], ...$json } }];"
+        "jsCode": "const item = $input.first().json;\nconst raw = String(item.data || item.body || '');\nconst text = raw\n  .replace(/<script[\\s\\S]*?<\\/script>/gi, '')\n  .replace(/<style[\\s\\S]*?<\\/style>/gi, '')\n  .replace(/<[^>]+>/g, ' ')\n  .replace(/&nbsp;/g, ' ')\n  .replace(/&amp;/g, '&')\n  .replace(/&lt;/g, '<')\n  .replace(/&gt;/g, '>')\n  .replace(/\\s+/g, ' ')\n  .trim();\nreturn [{\n  json: {\n    document_id: item.document_id,\n    tenant_id: item.tenant_id,\n    title: item.title,\n    source_type: item.source_type,\n    text,\n    page_count: 1,\n    used_ocr: false\n  }\n}];"
       },
-      "id": "chunk",
-      "name": "Chunk (512/50)",
-      "type": "n8n-nodes-base.function",
-      "typeVersion": 1,
-      "position": [680, 300]
+      "id": "strip-html",
+      "name": "Strip HTML",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 280]
     },
+
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs');\nconst item = $input.first().json;\nconst { source_type, file_path } = item;\n\nlet text = '';\nlet page_count = 1;\nconst used_ocr = false;\n\nif (source_type === 'txt') {\n  text = fs.readFileSync(file_path, 'utf-8');\n\n} else if (source_type === 'pdf') {\n  try {\n    // pdf-parse ships with n8n; set NODE_FUNCTION_ALLOW_EXTERNAL=pdf-parse\n    const pdfParse = require('pdf-parse');\n    const buf = fs.readFileSync(file_path);\n    const data = await pdfParse(buf);\n    text = data.text || '';\n    page_count = data.numpages || 1;\n  } catch (_) {\n    // empty text -> OCR branch takes over downstream\n    text = '';\n  }\n\n} else if (source_type === 'docx') {\n  try {\n    // mammoth ships with many n8n installs; set NODE_FUNCTION_ALLOW_EXTERNAL=mammoth\n    const mammoth = require('mammoth');\n    const result = await mammoth.extractRawText({ path: file_path });\n    text = result.value || '';\n  } catch (_) {\n    // Fallback: strip XML tags from raw docx bytes (approximate)\n    const buf = fs.readFileSync(file_path);\n    text = buf.toString('latin1').replace(/<[^>]+>/g, ' ').replace(/\\s+/g, ' ').trim();\n  }\n}\n\nreturn [{\n  json: {\n    document_id: item.document_id,\n    tenant_id: item.tenant_id,\n    title: item.title,\n    file_path: item.file_path,\n    source_type,\n    text,\n    page_count,\n    used_ocr\n  }\n}];"
+      },
+      "id": "extract-file",
+      "name": "Extract File Text",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 640],
+      "onError": "continueErrorOutput"
+    },
+
+    {
+      "parameters": {
+        "mode": "passThrough",
+        "output": "single"
+      },
+      "id": "merge-text",
+      "name": "Merge: Text Ready",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [1120, 460]
+    },
+
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "cond-is-pdf",
+              "leftValue": "={{ $json.source_type }}",
+              "rightValue": "pdf",
+              "operator": { "type": "string", "operation": "equals" }
+            },
+            {
+              "id": "cond-empty-text",
+              "leftValue": "={{ ($json.text || '').trim().length }}",
+              "rightValue": 100,
+              "operator": { "type": "number", "operation": "smallerEqual" }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "if-ocr",
+      "name": "IF: Needs OCR",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1340, 460]
+    },
+
+    {
+      "parameters": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.OPENAI_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"gpt-4o-mini\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": [\n        {\n          \"type\": \"text\",\n          \"text\": \"You are an OCR assistant. Extract ALL text verbatim from the provided document pages. Return only the raw extracted text with paragraph breaks. No commentary.\"\n        },\n        {\n          \"type\": \"image_url\",\n          \"image_url\": {\n            \"url\": \"data:image/jpeg;base64,{{ require('fs').readFileSync($json.file_path).toString('base64') }}\",\n            \"detail\": \"high\"\n          }\n        }\n      ]\n    }\n  ],\n  \"max_tokens\": 4096\n}",
+        "options": { "timeout": 120000 }
+      },
+      "id": "ocr-openai",
+      "name": "OpenAI Vision OCR",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1560, 320],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Merge OCR text back with original document metadata\nconst ocrResp = $input.first().json;\nconst orig = $('IF: Needs OCR').first().json;\nconst ocrText = ocrResp.choices?.[0]?.message?.content || '';\nreturn [{\n  json: {\n    document_id: orig.document_id,\n    tenant_id: orig.tenant_id,\n    title: orig.title,\n    file_path: orig.file_path,\n    source_type: orig.source_type,\n    text: ocrText,\n    page_count: orig.page_count || 1,\n    used_ocr: true\n  }\n}];"
+      },
+      "id": "parse-ocr",
+      "name": "Parse OCR Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1780, 320]
+    },
+
+    {
+      "parameters": {
+        "mode": "passThrough",
+        "output": "single"
+      },
+      "id": "merge-ocr",
+      "name": "Merge: Post-OCR",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [2000, 460]
+    },
+
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst text = (item.text || '').trim();\n\nif (!text) {\n  throw new Error(`No text extracted from document ${item.document_id} (source_type: ${item.source_type})`);\n}\n\nconst CHUNK_WORDS = 512;\nconst OVERLAP_WORDS = 50;\n\nconst words = text.split(/\\s+/).filter(w => w.length > 0);\nconst chunks = [];\nlet i = 0;\n\nwhile (i < words.length) {\n  const slice = words.slice(i, i + CHUNK_WORDS);\n  const content = slice.join(' ');\n  chunks.push({\n    content,\n    chunk_index: chunks.length,\n    page_number: null,\n    token_count: Math.ceil(content.length / 4)\n  });\n  if (i + CHUNK_WORDS >= words.length) break;\n  i += CHUNK_WORDS - OVERLAP_WORDS;\n}\n\n// Edge case: very short text produces zero chunks with above loop\nif (chunks.length === 0) {\n  chunks.push({\n    content: text,\n    chunk_index: 0,\n    page_number: null,\n    token_count: Math.ceil(text.length / 4)\n  });\n}\n\nreturn [{\n  json: {\n    document_id: item.document_id,\n    tenant_id: item.tenant_id,\n    source_type: item.source_type,\n    page_count: item.page_count || 1,\n    used_ocr: item.used_ocr || false,\n    chunk_count: chunks.length,\n    chunks\n  }\n}];"
+      },
+      "id": "chunk-text",
+      "name": "Chunk Text (512/50)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2220, 460]
+    },
+
     {
       "parameters": {
         "url": "https://api.voyageai.com/v1/embeddings",
-        "authentication": "headerAuth",
         "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.VOYAGE_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
         "sendBody": true,
-        "bodyContentType": "json",
-        "jsonBody": "={\n  \"model\": \"voyage-4-large\",\n  \"input\": $json.chunks.map(c => c.content),\n  \"input_type\": \"document\"\n}",
-        "options": {}
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"voyage-4-large\",\n  \"input\": {{ JSON.stringify($json.chunks.map(c => c.content)) }},\n  \"input_type\": \"document\"\n}",
+        "options": { "timeout": 120000 }
       },
-      "id": "embed",
-      "name": "Voyage embed",
+      "id": "voyage-embed",
+      "name": "Voyage Embed",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [900, 300]
+      "position": [2440, 460],
+      "onError": "continueErrorOutput"
+    },
+
+    {
+      "parameters": {
+        "jsCode": "// Zip Voyage embeddings with chunk metadata, output one item per chunk\nconst voyageResp = $input.first().json;\nconst chunkNode = $('Chunk Text (512/50)').first().json;\n\nconst embeddings = voyageResp.data || [];\nconst chunks = chunkNode.chunks || [];\n\nif (embeddings.length !== chunks.length) {\n  throw new Error(\n    `Embedding count mismatch: got ${embeddings.length} embeddings for ${chunks.length} chunks`\n  );\n}\n\nreturn chunks.map((chunk, i) => ({\n  json: {\n    document_id: chunkNode.document_id,\n    tenant_id: chunkNode.tenant_id,\n    content: chunk.content,\n    embedding: JSON.stringify(embeddings[i].embedding),\n    chunk_index: chunk.chunk_index,\n    page_number: chunk.page_number,\n    token_count: chunk.token_count,\n    metadata: JSON.stringify({ used_ocr: chunkNode.used_ocr }),\n    _total_chunks: chunks.length\n  }\n}));"
+      },
+      "id": "zip-chunks",
+      "name": "Zip Chunks + Embeddings",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2660, 460]
+    },
+
+    {
+      "parameters": {
+        "batchSize": 50,
+        "options": {}
+      },
+      "id": "split-batches",
+      "name": "Split In Batches",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [2880, 460]
+    },
+
+    {
+      "parameters": {
+        "jsCode": "// Build parameterized SQL row for this chunk\nconst item = $input.first().json;\nreturn [{\n  json: {\n    ...item,\n    _sql: 'INSERT INTO document_chunks (tenant_id, document_id, content, embedding, chunk_index, page_number, token_count, metadata) VALUES ($1::uuid, $2::uuid, $3, $4::vector, $5, $6, $7, $8::jsonb)',\n    _params: [\n      item.tenant_id,\n      item.document_id,\n      item.content,\n      item.embedding,\n      item.chunk_index,\n      item.page_number,\n      item.token_count,\n      item.metadata\n    ]\n  }\n}];"
+      },
+      "id": "prep-insert",
+      "name": "Prepare Insert SQL",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3100, 460]
     },
     {
       "parameters": {
-        "functionCode": "// M5: bulk INSERT into document_chunks(tenant_id,document_id,content,embedding,...)\n// then POST /webhooks/n8n/ingestion-status with {document_id, status:'completed', chunk_count}.\nreturn [{ json: { status: 'TODO M5: bulk insert + callback' } }];"
+        "operation": "executeQuery",
+        "query": "={{ $json._sql }}",
+        "options": {
+          "queryReplacement": "={{ $json._params }}"
+        }
       },
-      "id": "store",
-      "name": "Store + Callback",
-      "type": "n8n-nodes-base.function",
-      "typeVersion": 1,
-      "position": [1120, 300]
+      "id": "pg-insert",
+      "name": "Insert Chunk",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [3320, 460],
+      "credentials": {
+        "postgres": {
+          "id": "pg-ragplatform",
+          "name": "ragplatform-pg"
+        }
+      },
+      "onError": "continueErrorOutput"
     },
+
     {
-      "parameters": { "respondWith": "json", "responseBody": "={{ $json }}" },
-      "id": "respond",
-      "name": "Respond",
+      "parameters": {
+        "url": "={{ $env.BACKEND_BASE_URL || 'http://backend:8000' }}/webhooks/n8n/ingestion-status",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"document_id\": \"{{ $json.document_id }}\",\n  \"status\": \"completed\",\n  \"chunk_count\": {{ $json._total_chunks }},\n  \"callback_token\": \"{{ $env.N8N_CALLBACK_TOKEN }}\"\n}",
+        "options": {}
+      },
+      "id": "callback-ok",
+      "name": "Callback: Success",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [3540, 460]
+    },
+
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'accepted', document_id: $json.document_id, chunk_count: $json._total_chunks }) }}"
+      },
+      "id": "respond-ok",
+      "name": "Respond to Webhook",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [1340, 300]
+      "position": [3760, 460]
+    },
+
+    {
+      "parameters": {
+        "jsCode": "// Normalise error from any upstream failure\nconst item = $input.first();\nconst webhookData = $('Webhook /ingest').first().json;\nconst errMsg = item.json?.error?.message\n  || item.json?.message\n  || 'Ingestion pipeline error';\nreturn [{\n  json: {\n    document_id: webhookData.document_id,\n    error_message: errMsg\n  }\n}];"
+      },
+      "id": "fmt-error",
+      "name": "Format Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 700]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.BACKEND_BASE_URL || 'http://backend:8000' }}/webhooks/n8n/ingestion-status",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"document_id\": \"{{ $json.document_id }}\",\n  \"status\": \"failed\",\n  \"error_message\": \"{{ $json.error_message }}\",\n  \"callback_token\": \"{{ $env.N8N_CALLBACK_TOKEN }}\"\n}",
+        "options": {}
+      },
+      "id": "callback-fail",
+      "name": "Callback: Failed",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1780, 700]
     }
   ],
+
   "connections": {
-    "Webhook /ingest":   { "main": [[{ "node": "Extract + OCR",  "type": "main", "index": 0 }]] },
-    "Extract + OCR":     { "main": [[{ "node": "Chunk (512/50)", "type": "main", "index": 0 }]] },
-    "Chunk (512/50)":    { "main": [[{ "node": "Voyage embed",   "type": "main", "index": 0 }]] },
-    "Voyage embed":      { "main": [[{ "node": "Store + Callback","type": "main", "index": 0 }]] },
-    "Store + Callback":  { "main": [[{ "node": "Respond",         "type": "main", "index": 0 }]] }
+    "Webhook /ingest": {
+      "main": [
+        [{ "node": "Switch: URL vs File", "type": "main", "index": 0 }]
+      ]
+    },
+    "Switch: URL vs File": {
+      "main": [
+        [{ "node": "Fetch URL",          "type": "main", "index": 0 }],
+        [{ "node": "Extract File Text",  "type": "main", "index": 0 }]
+      ]
+    },
+    "Fetch URL": {
+      "main": [
+        [{ "node": "Strip HTML",         "type": "main", "index": 0 }],
+        [{ "node": "Format Error",       "type": "main", "index": 0 }]
+      ]
+    },
+    "Strip HTML": {
+      "main": [
+        [{ "node": "Merge: Text Ready",  "type": "main", "index": 0 }]
+      ]
+    },
+    "Extract File Text": {
+      "main": [
+        [{ "node": "Merge: Text Ready",  "type": "main", "index": 1 }],
+        [{ "node": "Format Error",       "type": "main", "index": 0 }]
+      ]
+    },
+    "Merge: Text Ready": {
+      "main": [
+        [{ "node": "IF: Needs OCR",      "type": "main", "index": 0 }]
+      ]
+    },
+    "IF: Needs OCR": {
+      "main": [
+        [{ "node": "OpenAI Vision OCR",  "type": "main", "index": 0 }],
+        [{ "node": "Merge: Post-OCR",    "type": "main", "index": 1 }]
+      ]
+    },
+    "OpenAI Vision OCR": {
+      "main": [
+        [{ "node": "Parse OCR Response", "type": "main", "index": 0 }],
+        [{ "node": "Format Error",       "type": "main", "index": 0 }]
+      ]
+    },
+    "Parse OCR Response": {
+      "main": [
+        [{ "node": "Merge: Post-OCR",    "type": "main", "index": 0 }]
+      ]
+    },
+    "Merge: Post-OCR": {
+      "main": [
+        [{ "node": "Chunk Text (512/50)","type": "main", "index": 0 }]
+      ]
+    },
+    "Chunk Text (512/50)": {
+      "main": [
+        [{ "node": "Voyage Embed",       "type": "main", "index": 0 }]
+      ]
+    },
+    "Voyage Embed": {
+      "main": [
+        [{ "node": "Zip Chunks + Embeddings", "type": "main", "index": 0 }],
+        [{ "node": "Format Error",            "type": "main", "index": 0 }]
+      ]
+    },
+    "Zip Chunks + Embeddings": {
+      "main": [
+        [{ "node": "Split In Batches",   "type": "main", "index": 0 }]
+      ]
+    },
+    "Split In Batches": {
+      "main": [
+        [{ "node": "Prepare Insert SQL", "type": "main", "index": 0 }],
+        [{ "node": "Callback: Success",  "type": "main", "index": 0 }]
+      ]
+    },
+    "Prepare Insert SQL": {
+      "main": [
+        [{ "node": "Insert Chunk",       "type": "main", "index": 0 }]
+      ]
+    },
+    "Insert Chunk": {
+      "main": [
+        [{ "node": "Split In Batches",   "type": "main", "index": 0 }],
+        [{ "node": "Format Error",       "type": "main", "index": 0 }]
+      ]
+    },
+    "Callback: Success": {
+      "main": [
+        [{ "node": "Respond to Webhook", "type": "main", "index": 0 }]
+      ]
+    },
+    "Format Error": {
+      "main": [
+        [{ "node": "Callback: Failed",   "type": "main", "index": 0 }]
+      ]
+    }
   },
+
   "active": false,
   "settings": { "executionOrder": "v1" },
-  "tags": ["rag-platform", "ingestion"]
+  "tags": ["rag-platform", "ingestion"],
+  "meta": {
+    "notes": "Env vars needed in n8n: VOYAGE_API_KEY, OPENAI_API_KEY, N8N_CALLBACK_TOKEN, BACKEND_BASE_URL. Postgres credential named 'ragplatform-pg' must be created in n8n UI. Set NODE_FUNCTION_ALLOW_EXTERNAL=pdf-parse,mammoth in n8n container env."
+  }
 }
