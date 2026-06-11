@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
-import type { DocumentOut } from '@admin-types';
+import { useState, Fragment } from 'react';
+import { pipelineStateFromDocument, INGESTION_STAGES } from '@admin-types';
+import type { DocumentOut, PipelineState, IngestionStage } from '@admin-types';
 
 // Mock knowledge sources — replaced by GET /admin/documents in Phase 3.
 const MOCK_DOCUMENTS: DocumentOut[] = [
@@ -54,6 +55,111 @@ const MOCK_DOCUMENTS: DocumentOut[] = [
 
 // Mock storage quota — replaced by GET /admin/tenants/:id or quota endpoint in Phase 3.
 const MOCK_QUOTA = { usedMb: 140, totalMb: 500 };
+
+const STAGE_LABELS: Record<IngestionStage, string> = {
+  uploaded: 'Uploaded',
+  validated: 'Validated',
+  parsed_ocr: 'Parsed / OCR',
+  chunked: 'Chunked',
+  embedded: 'Embedded',
+  stored: 'Stored',
+};
+
+type DotState = 'done' | 'running' | 'failed' | 'future';
+
+function getDotState(
+  i: number,
+  state: PipelineState,
+  status: DocumentOut['status'],
+): DotState {
+  if (state.failedIndex !== null) {
+    if (i < state.failedIndex) return 'done';
+    if (i === state.failedIndex) return 'failed';
+    return 'future';
+  }
+  if (status === 'completed') return 'done';
+  if (status === 'processing') {
+    if (i < state.activeIndex) return 'done';
+    if (i === state.activeIndex) return 'running';
+    return 'future';
+  }
+  // pending: stage 0 (uploaded) is complete; rest not yet started
+  if (i <= state.activeIndex) return 'done';
+  return 'future';
+}
+
+function DotIcon({ state }: { state: DotState }) {
+  switch (state) {
+    case 'done':
+      return <span className="flex h-3 w-3 rounded-full bg-emerald-500" />;
+    case 'running':
+      return <span className="h-3 w-3 animate-spin rounded-full border-2 border-blue-200 border-t-blue-600" />;
+    case 'failed':
+      return (
+        <span className="flex h-3 w-3 items-center justify-center rounded-full bg-red-500 text-[7px] font-bold leading-none text-white">
+          ✕
+        </span>
+      );
+    case 'future':
+      return <span className="h-3 w-3 rounded-full border-2 border-slate-200 bg-white" />;
+  }
+}
+
+function PipelineStepper({ doc }: { doc: DocumentOut }) {
+  const state = pipelineStateFromDocument(doc);
+  const failedStage =
+    state.failedIndex !== null ? INGESTION_STAGES[state.failedIndex] : undefined;
+
+  return (
+    <div className="border-t border-slate-100 bg-slate-50 px-4 py-3">
+      <div className="flex items-start">
+        {INGESTION_STAGES.map((stage, i) => {
+          const dotSt = getDotState(i, state, doc.status);
+          return (
+            <Fragment key={stage}>
+              {i > 0 && (
+                <div
+                  className={`mt-1.5 h-px flex-1 ${
+                    getDotState(i - 1, state, doc.status) === 'done'
+                      ? 'bg-emerald-400'
+                      : 'bg-slate-200'
+                  }`}
+                />
+              )}
+              <div className="flex shrink-0 flex-col items-center">
+                <DotIcon state={dotSt} />
+                <span
+                  className={`mt-1 whitespace-nowrap text-[9px] font-medium ${
+                    dotSt === 'failed'
+                      ? 'text-red-500'
+                      : dotSt === 'done'
+                        ? 'text-emerald-600'
+                        : dotSt === 'running'
+                          ? 'text-blue-500'
+                          : 'text-slate-400'
+                  }`}
+                >
+                  {STAGE_LABELS[stage]}
+                </span>
+              </div>
+            </Fragment>
+          );
+        })}
+      </div>
+
+      {failedStage && state.errorMessage && (
+        <p className="mt-2 text-xs text-red-500">
+          Failed at: {STAGE_LABELS[failedStage]} — {state.errorMessage}
+        </p>
+      )}
+      {doc.status === 'completed' && state.chunkCount !== null && state.indexedAt && (
+        <p className="mt-2 text-xs text-emerald-600">
+          {state.chunkCount} chunks · indexed {formatDate(state.indexedAt)}
+        </p>
+      )}
+    </div>
+  );
+}
 
 function barColor(pct: number): string {
   if (pct >= 95) return 'bg-red-500';
@@ -244,24 +350,31 @@ export default function DocumentsPage() {
           </thead>
           <tbody className="divide-y divide-slate-100">
             {MOCK_DOCUMENTS.map((doc) => (
-              <tr key={doc.id} className="hover:bg-slate-50">
-                <td className="max-w-xs truncate px-4 py-3 text-sm font-medium text-slate-800">
-                  {doc.title}
-                </td>
-                <td className="px-4 py-3 text-xs uppercase tracking-wide text-slate-500">
-                  {doc.source_type}
-                </td>
-                <td className="px-4 py-3">
-                  <StatusBadge doc={doc} />
-                </td>
-                <td className="px-4 py-3 text-sm text-slate-600">
-                  {doc.status === 'completed' ? doc.chunk_count : '—'}
-                </td>
-                <td className="px-4 py-3 text-sm text-slate-500">
-                  {formatDate(doc.created_at)}
-                </td>
-                <td className="px-4 py-3 text-sm text-slate-400">—</td>
-              </tr>
+              <Fragment key={doc.id}>
+                <tr className="hover:bg-slate-50">
+                  <td className="max-w-xs truncate px-4 py-3 text-sm font-medium text-slate-800">
+                    {doc.title}
+                  </td>
+                  <td className="px-4 py-3 text-xs uppercase tracking-wide text-slate-500">
+                    {doc.source_type}
+                  </td>
+                  <td className="px-4 py-3">
+                    <StatusBadge doc={doc} />
+                  </td>
+                  <td className="px-4 py-3 text-sm text-slate-600">
+                    {doc.status === 'completed' ? doc.chunk_count : '—'}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-slate-500">
+                    {formatDate(doc.created_at)}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-slate-400">—</td>
+                </tr>
+                <tr>
+                  <td colSpan={6} className="p-0">
+                    <PipelineStepper doc={doc} />
+                  </td>
+                </tr>
+              </Fragment>
             ))}
           </tbody>
         </table>
