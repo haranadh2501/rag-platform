@@ -63,6 +63,10 @@
 - [ ] Invite user: invalid email format → inline validation error; no API call
 
 ## Tenants Page
+
+> **Requires Phase 6 auth wiring.** The current placeholder renders no 403 state — any user
+> can reach the page. These criteria cannot pass until `AuthGuard` and role checks are implemented.
+
 - [ ] `admin` role sees a 403 message, not a blank page or unhandled error
 - [ ] `super_admin` sees the full tenant list
 - [ ] Create Tenant modal → submit → new row appears in table
@@ -70,6 +74,11 @@
 - [ ] Deactivate → confirmation dialog → confirm → tenant marked inactive in table
 
 ## Settings Page
+
+> **Requires Phase 7 backend wiring.** Channel status icons and tenant info fields are
+> currently hardcoded placeholders. These criteria cannot pass until tenant data and channel
+> config are fetched from the backend.
+
 - [ ] Tenant name, slug (read-only), and plan badge render correctly for the logged-in tenant
 - [ ] Channel status icons reflect backend configuration (grey = not configured)
 

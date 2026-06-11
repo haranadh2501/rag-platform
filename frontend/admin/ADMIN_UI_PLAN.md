@@ -44,20 +44,21 @@
 - [ ] Delete → `ConfirmDialog` → `DELETE /admin/documents/{id}` → redirect + success toast
 
 ## Phase 5 — Users Page
-- [ ] `src/app/admin/users/page.tsx`
+- [x] `src/app/admin/users/page.tsx` — placeholder shell: title, description, empty table skeleton (mock; no backend, no auth)
 - [ ] `UserTable` — email, role pill (indigo/blue/slate), active, joined, Deactivate action (hidden for own row)
 - [ ] `InviteUserDrawer` — slide-over: email + role dropdown → `POST /admin/users/invite`; success inserts row + closes drawer
 
 ## Phase 6 — Tenants Page
+- [x] `src/app/admin/tenants/page.tsx` — placeholder shell: title, super_admin badge, amber dev note, empty table skeleton (mock; no backend, no auth)
 - [ ] `src/app/admin/tenants/page.tsx` — renders 403 state for `admin` role; full table for `super_admin`
 - [ ] `TenantTable` — name, slug, plan, active, created, Edit / Deactivate actions
 - [ ] `TenantModal` — create (`POST /admin/tenants`) + edit (`PATCH /admin/tenants/{id}`)
 - [ ] Deactivate → `ConfirmDialog` → `PATCH` with `is_active: false`
 
 ## Phase 7 — Settings Page
-- [ ] `src/app/admin/settings/page.tsx`
-- [ ] Tenant info card: name, slug (read-only), plan badge
-- [ ] Channel status row: Web ✓ · WhatsApp · Slack (grey if not configured)
+- [x] `src/app/admin/settings/page.tsx` — placeholder shell: tenant info card (static placeholders), channel status row (Web/WhatsApp/Slack), rate limit text (mock; no backend)
+- [ ] Tenant info card: name, slug (read-only), plan badge — wired to real tenant data
+- [ ] Channel status row: Web ✓ · WhatsApp · Slack — grey when not configured per backend config
 - [ ] Rate limits info: "20 uploads / hour per tenant"
 
 ## Phase 8 — Polish
