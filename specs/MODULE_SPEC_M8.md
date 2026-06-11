@@ -95,7 +95,7 @@ const statusColors = {
 
 ### Day 3 — Document Upload + List
 7. `app/admin/documents/page.tsx`: drag-drop zone (use `react-dropzone`) → multipart POST /admin/documents/upload → optimistic row insert.
-8. Status badges: pending (gray) / processing (yellow spinner) / completed (green) / failed (red). Poll every 5 sec for pending rows.
+8. Status badges: pending (slate-400) / processing (blue-500 spinner) / completed (emerald-500) / failed (red-500 X). Poll every 5 sec for pending/processing rows.
 9. Add second tab "Add by URL" → JSON POST /admin/documents/url.
 
 ### Day 4 — Users + Tenants Mgmt

@@ -33,7 +33,8 @@
 - [x] Pipeline stepper: uploaded → validated → parsed/OCR → chunked → embedded → stored; always-visible beneath each row (mock; expand/collapse is a future enhancement)
 - [x] Stepper: failed state shows red stage marker + `error_message`; completed state shows chunk count + indexed timestamp (mock)
 - [ ] 5 s polling for rows in `pending` or `processing`; stop when all rows reach a terminal state
-- [ ] Filter bar by status + pagination 20/page
+- [x] Filter bar by status — client-side filter over mock data; indigo active state; empty state row when no matches (mock)
+- [ ] Pagination 20/page (`GET /admin/documents?page=&per_page=20`)
 - [ ] `ConfirmDialog` before delete; empty state when no documents
 
 ## Phase 4 — Document Detail Page

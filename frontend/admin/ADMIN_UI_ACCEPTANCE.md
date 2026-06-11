@@ -2,6 +2,10 @@
 
 > Test against a live stack: `docker compose up -d` + backend (`uvicorn`) + frontend (`npm run dev`).
 > Seed: `python -m app.scripts.seed_admin` creates `admin@example.com / changeme`.
+>
+> **No automated test runner is installed** (`package.json` has no jest/vitest/playwright/cypress).
+> Current verification approach: `npm run typecheck` + `npm run lint` + `npm run build` + screenshot/manual review.
+> End-to-end criteria below require a live stack and are not automatically tested.
 
 ## Auth & Route Guards
 - [ ] `/admin/documents` without token → redirects to `/login?next=/admin/documents`
@@ -35,7 +39,13 @@
 - [ ] No label implies the frontend performs parsing, chunking, embedding, or storage
 
 ## Documents Page — Table Controls
-- [ ] Filter by `failed` → table shows only failed documents; other statuses hidden
+
+> **Mock filter (already verifiable)**: client-side filter over mock data — testable via `npm run dev` without a live stack.
+> **API filter (requires live stack)**: re-fetches `GET /admin/documents?status=` on each selection.
+> Update the filter criteria below to remove the mock note once backend wiring is done.
+
+- [ ] Filter by `failed` (mock: client-side) → table shows only failed documents; other statuses hidden
+- [ ] Filter by `failed` (live stack) → `GET /admin/documents?status=failed` fires; only failed rows returned from backend
 - [ ] Pagination: navigating to page 2 loads the next 20 rows
 - [ ] Delete → confirmation dialog appears → confirm → row removed → success toast
 - [ ] Delete → cancel → row remains; no API call fired

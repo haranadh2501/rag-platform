@@ -2,7 +2,7 @@
 
 import { useState, Fragment } from 'react';
 import { pipelineStateFromDocument, INGESTION_STAGES } from '@admin-types';
-import type { DocumentOut, PipelineState, IngestionStage } from '@admin-types';
+import type { DocumentOut, PipelineState, IngestionStage, DocumentStatus } from '@admin-types';
 
 // Mock knowledge sources — replaced by GET /admin/documents in Phase 3.
 const MOCK_DOCUMENTS: DocumentOut[] = [
@@ -64,6 +64,16 @@ const STAGE_LABELS: Record<IngestionStage, string> = {
   embedded: 'Embedded',
   stored: 'Stored',
 };
+
+type FilterOption = DocumentStatus | 'all';
+
+const FILTER_OPTIONS: { value: FilterOption; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'pending', label: 'Pending' },
+  { value: 'processing', label: 'Processing' },
+  { value: 'completed', label: 'Completed' },
+  { value: 'failed', label: 'Failed' },
+];
 
 type DotState = 'done' | 'running' | 'failed' | 'future';
 
@@ -317,6 +327,12 @@ function UploadSourcePanel() {
 }
 
 export default function DocumentsPage() {
+  const [activeFilter, setActiveFilter] = useState<FilterOption>('all');
+  const filteredDocs =
+    activeFilter === 'all'
+      ? MOCK_DOCUMENTS
+      : MOCK_DOCUMENTS.filter((d) => d.status === activeFilter);
+
   return (
     <main className="p-6">
       <div className="mb-6">
@@ -330,6 +346,24 @@ export default function DocumentsPage() {
 
       {/* Storage quota card */}
       <StorageQuotaCard usedMb={MOCK_QUOTA.usedMb} totalMb={MOCK_QUOTA.totalMb} />
+
+      {/* Filter bar */}
+      <div className="mb-4 flex flex-wrap gap-1">
+        {FILTER_OPTIONS.map(({ value, label }) => (
+          <button
+            key={value}
+            type="button"
+            onClick={() => setActiveFilter(value)}
+            className={
+              activeFilter === value
+                ? 'rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white'
+                : 'rounded-md px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100'
+            }
+          >
+            {label}
+          </button>
+        ))}
+      </div>
 
       {/* Document table */}
       <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
@@ -349,7 +383,13 @@ export default function DocumentsPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {MOCK_DOCUMENTS.map((doc) => (
+            {filteredDocs.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="px-4 py-10 text-center text-sm text-slate-400">
+                  No {activeFilter === 'all' ? '' : `${activeFilter} `}documents.
+                </td>
+              </tr>
+            ) : filteredDocs.map((doc) => (
               <Fragment key={doc.id}>
                 <tr className="hover:bg-slate-50">
                   <td className="max-w-xs truncate px-4 py-3 text-sm font-medium text-slate-800">

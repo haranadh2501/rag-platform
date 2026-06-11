@@ -90,7 +90,9 @@ Amber at 80 %, red at 95 %. Sourced from tenant metadata.
 | 3 | Quick Start | URL | ● Pending | — | just now | — |
 | 4 | Old Policy | TXT | ✕ Failed | — | 1 day ago | Retry · Delete |
 
-- Filter bar: all / pending / processing / completed / failed — calls `GET /admin/documents?status=`.
+- Filter bar: all / pending / processing / completed / failed.
+  - **Current mock**: client-side filter over `MOCK_DOCUMENTS`; no network request fired.
+  - **Live stack**: calls `GET /admin/documents?status=<value>` and re-fetches from backend.
 - Pagination: 20 rows/page (`GET /admin/documents?page=&per_page=20`).
 - "Chunks" column shows `—` while not yet `completed`.
 - Actions column: "Detail" → `/admin/documents/[id]`. "Delete" opens `ConfirmDialog`. "Retry" re-posts the same document to upload endpoint.
