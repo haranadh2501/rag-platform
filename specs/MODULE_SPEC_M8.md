@@ -14,7 +14,7 @@ Next.js admin dashboard: login, document upload, document management, user manag
 | Day | Deliverable | Done? |
 |---|---|---|
 | 1 | Set up Next.js 14 + TailwindCSS + project structure. Branch. | ☐ |
-| 2 | Generate API client from `specs/openapi.yaml` (openapi-typescript-codegen) | ☐ |
+| 2 | API client (`src/lib/apiClient.ts`) — manual fetch wrapper implemented; codegen skipped (see API Client Setup note below) | ☑ |
 | 2 | Login page + JWT auth context (cookie storage) | ☐ |
 | 2 | Admin layout: sidebar (Documents, Users, Tenants) + header | ☐ |
 | 2 | Document upload page: drag-drop + URL input form | ☐ |
@@ -40,7 +40,14 @@ Next.js admin dashboard: login, document upload, document management, user manag
 ```
 
 ## API Client Setup
+
+> **Implemented as a manual fetch wrapper** — codegen was skipped.
+> `src/lib/apiClient.ts` exports `apiRequest<T>()`, `ApiError`, `setAuthToken`, and `getAuthToken`.
+> The codegen command below is the original plan; it can still be run to generate typed stubs from
+> the OpenAPI spec, but the manual client is the active implementation and should not be overwritten.
+
 ```bash
+# Original codegen plan (not executed — manual client used instead):
 npx openapi-typescript-codegen \
   --input ../specs/openapi.yaml \
   --output src/lib/api \
@@ -48,11 +55,18 @@ npx openapi-typescript-codegen \
 ```
 
 ## Auth Context
+
+> **Open question — auth storage mechanism unresolved.** `CLAUDE.md` says "read from httpOnly
+> cookie", but httpOnly cookies are inaccessible to JavaScript; `Authorization: Bearer` requires a
+> JS-readable token. `openapi.yaml` `LoginResponse` returns `access_token` in the JSON body.
+> The `/api/auth/callback` route pattern below is one possible approach but was never agreed on.
+> Confirm with M1/M2 before implementing `authContext.tsx`.
+
 ```typescript
-// src/lib/auth.tsx
-// Store JWT in httpOnly cookie via /api/auth/callback route
-// Provide useAuth() hook: { user, token, login, logout }
-// Redirect to /admin/login if not authenticated
+// src/lib/authContext.tsx  (not yet implemented — pending auth storage decision)
+// Will call setAuthToken(token) from apiClient.ts on login
+// Provide useAuth() hook: { user, role, login, logout }
+// Redirect to /login (path TBD) if not authenticated
 ```
 
 ## Document Status Badge Colors

@@ -8,6 +8,14 @@
 > End-to-end criteria below require a live stack and are not automatically tested.
 
 ## Auth & Route Guards
+
+> **API client exists; auth is not yet wired.** `src/lib/apiClient.ts` provides the request
+> foundation (`apiRequest<T>()`, `ApiError`, `setAuthToken`/`getAuthToken`), but no UI page calls
+> it yet. `AuthGuard`, `authContext.tsx`, and the login page are not implemented. The 401 → redirect
+> behaviour is a TODO in `apiClient.ts`. All criteria below remain unchecked and require Phase 1
+> completion (authContext + AuthGuard). No automated test runner is installed; verification is
+> `npm run typecheck` + `npm run lint` + `npm run build` + screenshot/manual review.
+
 - [ ] `/admin/documents` without token → redirects to `/login?next=/admin/documents`
 - [ ] Login as `admin` role → lands on `/admin/documents`
 - [ ] Login as `user` role → `/admin/*` is inaccessible (redirect or 403)
@@ -30,7 +38,7 @@
 
 - [ ] `pending` → `processing` → `completed` transitions happen without page refresh
 - [ ] `completed` row shows correct chunk count returned by backend (not a hardcoded value)
-- [ ] `failed` row shows red X badge; `error_message` visible in tooltip
+- [ ] `failed` row shows red X badge; `error_message` shown inline under the badge
 - [ ] Polling stops once all visible rows are in a terminal state
 - [ ] Storage quota bar reflects current usage; turns amber at 80 %, red at 95 %
 

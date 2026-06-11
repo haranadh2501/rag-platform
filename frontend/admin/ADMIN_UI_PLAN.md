@@ -11,7 +11,12 @@
 - [x] `npm run lint` — passed (0 warnings, 0 errors)
 - [x] `npm run build` — passed; Next.js 14.2.35; 3 routes compiled (/, /admin, /admin/documents)
 - [ ] Run `npx openapi-typescript ../../specs/openapi.yaml -o src/types/openapi.ts`
-- [ ] Create `src/lib/apiClient.ts` — fetch wrapper: attaches `Authorization: Bearer`, handles `401` → clear token → redirect to `/login?next=`
+- [x] Create `src/lib/apiClient.ts` — `apiRequest<T>()`: base URL from `NEXT_PUBLIC_API_URL`, supports GET/POST/PATCH/DELETE, JSON + FormData bodies, 204 handling, `ApiError` with `status` + `detail` message; `setAuthToken`/`getAuthToken` module-level store; 401 throws `ApiError` with TODO for authContext redirect
+  > **Open question (blocks authContext)**: `CLAUDE.md` says the token is read from an "httpOnly
+  > cookie", but httpOnly cookies are inaccessible to JavaScript — `Authorization: Bearer <token>`
+  > requires a JS-readable token. `openapi.yaml` `LoginResponse` returns `access_token` in the JSON
+  > body (not a `Set-Cookie` header). Confirm with M1/M2: should the frontend store the token in
+  > `localStorage` or a non-httpOnly cookie? Answer determines `authContext.tsx` implementation.
 - [ ] Create `src/lib/authContext.tsx` — `AuthContext` with `user`, `role`, `login()`, `logout()`
 
 ## Phase 2 — Shared Layout

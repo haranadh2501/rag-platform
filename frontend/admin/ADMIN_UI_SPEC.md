@@ -1,7 +1,7 @@
 # ADMIN_UI_SPEC.md — Admin Portal
 
 > Owner: M8 · Files: `frontend/src/app/admin/` · `frontend/src/components/admin/`
-> Stack: Next.js 14 · TypeScript · TailwindCSS · JWT (httpOnly cookie)
+> Stack: Next.js 14 · TypeScript · TailwindCSS · JWT (auth storage: unresolved — see open question in ADMIN_UI_PLAN.md Phase 1)
 > Full platform context: `frontend/UI_SPEC.md`
 
 ---
@@ -221,6 +221,12 @@ Calls `POST /admin/users/invite`. On success: new row inserted at top of table, 
 | Edit tenant | `PATCH /admin/tenants/{id}` |
 
 All requests send `Authorization: Bearer <token>`. 401 → logout + redirect to `/login`. 429 → toast: "Upload limit reached (20/hour). Try again later."
+
+> **API client — current state**: `src/lib/apiClient.ts` provides `apiRequest<T>()`, `ApiError`, and
+> `setAuthToken`/`getAuthToken`. It is **not yet wired into any UI page** — all pages still show
+> mock/placeholder data. The `401 → logout + redirect` behaviour above is the target; the current
+> implementation throws `ApiError(401)` only. Redirect wiring requires `authContext.tsx` (Phase 1
+> completion). No automated test runner is installed; verified via typecheck + screenshot.
 
 ---
 
