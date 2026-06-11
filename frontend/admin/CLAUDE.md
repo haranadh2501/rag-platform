@@ -10,7 +10,7 @@ This module is the Admin Portal only. Do not edit Chat UI, Onboarding, or any ba
 
 - `frontend/src/app/admin/` — Next.js App Router pages
 - `frontend/src/components/admin/` — Admin-specific React components
-- `frontend/src/types/admin.ts` — TypeScript types for this module (source: `frontend/admin/types/admin.ts`)
+- `frontend/admin/types/admin.ts` — canonical TypeScript types for this module; imported via the `@admin-types` path alias
 
 ## Files You Must Not Touch
 

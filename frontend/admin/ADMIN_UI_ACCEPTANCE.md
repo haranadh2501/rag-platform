@@ -24,9 +24,13 @@
 - [ ] Storage quota bar reflects current usage; turns amber at 80 %, red at 95 %
 
 ## Documents Page — Ingestion Pipeline Stepper
-- [ ] Expanding a `processing` row shows the stage stepper with correct active stage spinning
-- [ ] Expanding a `failed` row shows red marker on the failed stage and `error_message` beneath
-- [ ] Expanding a `completed` row shows all stages filled green + chunk count + indexed timestamp
+
+> **Mock state**: stepper is always-visible beneath each row. Expand/collapse toggle is a future phase.
+> Update these criteria to "clicking a row expands the stepper" once the toggle is implemented.
+
+- [ ] `processing` row stepper shows correct active stage spinning; prior stages filled green
+- [ ] `failed` row stepper shows red marker on the failed stage and `error_message` beneath
+- [ ] `completed` row stepper shows all stages filled green + chunk count + indexed timestamp
 - [ ] Stepper labels match exactly: uploaded → validated → parsed/OCR → chunked → embedded → stored
 - [ ] No label implies the frontend performs parsing, chunking, embedding, or storage
 

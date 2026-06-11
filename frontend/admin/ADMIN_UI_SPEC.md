@@ -33,13 +33,14 @@ All routes are protected by `AuthGuard`. Unauthenticated requests redirect to `/
 │ Tenants 🔒│                                              │
 │ Settings │                                              │
 │          │                                              │
-│ [Chat →] │                                              │
+│ Knowledge│                                              │
+│ Base ───►│                                              │
 └──────────┴──────────────────────────────────────────────┘
 ```
 
 - Sidebar width: 240 px. Collapses to hamburger on < 768 px.
 - Active nav item: `indigo-600` left border + background tint.
-- "[Chat →]" at sidebar bottom navigates to `/chat`.
+- Sidebar bottom shows a "Knowledge Base" descriptor footer (static text — no Chat nav link).
 
 ---
 
@@ -101,7 +102,11 @@ Amber at 80 %, red at 95 %. Sourced from tenant metadata.
 
 n8n executes all backend processing (parse, OCR, chunk, embed, store). The frontend **only displays** status reported by the backend — it must never imply it performs any of these steps itself.
 
-Each document row expands to a stage stepper derived from `DocumentOut.status`, `error_message`, and `chunk_count`:
+Each document row shows a stage stepper derived from `DocumentOut.status`, `error_message`, and `chunk_count`.
+
+> **Current mock state**: the stepper is always-visible beneath each row (no expand/collapse toggle). Expand/collapse interaction is a future phase enhancement.
+
+
 
 ```
 uploaded → validated → parsed/OCR → chunked → embedded → stored

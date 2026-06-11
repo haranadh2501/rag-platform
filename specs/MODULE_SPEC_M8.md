@@ -2,6 +2,11 @@
 
 **Owner**: Member 8 | **Track**: Frontend | **Branch**: `feat/admin-ui`
 
+> **Implementation source of truth**: `frontend/admin/ADMIN_UI_SPEC.md`.
+> This spec file gives the high-level overview; all page layouts, component contracts,
+> API call shapes, and acceptance criteria live in `frontend/admin/ADMIN_UI_SPEC.md`.
+> When this file and `ADMIN_UI_SPEC.md` conflict, `ADMIN_UI_SPEC.md` wins.
+
 ## Role
 Next.js admin dashboard: login, document upload, document management, user management, tenant settings.
 
@@ -53,10 +58,10 @@ npx openapi-typescript-codegen \
 ## Document Status Badge Colors
 ```typescript
 const statusColors = {
-  pending: 'yellow',
-  processing: 'blue',
-  completed: 'green',
-  failed: 'red'
+  pending: 'slate',      // slate-400 — filled dot
+  processing: 'blue',    // blue-500 — spinning circle
+  completed: 'emerald',  // emerald-500 — filled dot
+  failed: 'red',         // red-500 — X mark + error_message
 }
 ```
 

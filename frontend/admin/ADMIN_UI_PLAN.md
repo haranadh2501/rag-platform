@@ -15,21 +15,23 @@
 - [ ] Create `src/lib/authContext.tsx` — `AuthContext` with `user`, `role`, `login()`, `logout()`
 
 ## Phase 2 — Shared Layout
-- [x] `src/app/admin/layout.tsx` — bare shell placeholder; Phase 2 replaces with AuthGuard + sidebar
-- [x] `src/app/admin/documents/page.tsx` — placeholder with upload, quota, and table stubs
-- [ ] `src/components/admin/AdminLayout.tsx` — 240 px sidebar (Documents, Users, Tenants🔒, Settings, Chat→) + header (tenant name, user menu, logout)
-- [ ] Sidebar collapses to hamburger on < 768 px
-- [ ] Active nav item: `indigo-600` left border + background tint
+- [x] `src/app/admin/layout.tsx` — full sidebar + header shell (Documents, Users, Tenants🔒, Settings; Knowledge Base footer)
+- [x] `src/app/admin/documents/page.tsx` — mock UI with upload panel, quota card, document table, and pipeline stepper
+- [x] Sidebar collapses to hamburger on < 768 px
+- [x] Active nav item: `indigo-600` left border + background tint
+- [ ] `AuthGuard` HOC — redirect to `/login?next=<path>` when no JWT cookie
+- [ ] Header: real tenant name + user menu + logout action (currently static "Acme Corp" / "A" avatar)
 
 ## Phase 3 — Documents Page
-- [ ] `src/app/admin/documents/page.tsx`
-- [ ] `DocumentUploadPanel` — tabbed: file drag-drop with XHR progress bar + URL ingest form
+- [ ] `src/app/admin/documents/page.tsx` — wire to real backend (`GET /admin/documents`, `POST /admin/documents/upload`, `POST /admin/documents/url`)
+- [x] `UploadSourcePanel` — tabbed: file drag-drop tab + URL ingest tab (mock; upload disabled, MOCK_N8N notice shown)
 - [ ] Client-side MIME + size (> 25 MB) validation before any network request
-- [ ] `StorageQuotaBar` — reads tenant storage metadata; amber at 80 %, red at 95 %
-- [ ] `DocumentTable` — columns: Title, Type, Status, Chunks, Uploaded, Actions
-- [ ] `StatusBadge` — pending (slate) / processing (blue spinner) / completed (emerald) / failed (red X + tooltip)
-- [ ] Row-expand stage stepper: uploaded → validated → parsed/OCR → chunked → embedded → stored
-- [ ] Stepper: failed state shows red stage marker + `error_message`; completed state shows chunk count + indexed timestamp
+- [ ] XHR progress bar during file upload
+- [x] `StorageQuotaBar` — mock quota values; amber at 80 %, red at 95 % (mock)
+- [x] `DocumentTable` — columns: Title, Type, Status, Chunks, Uploaded, Actions (mock data)
+- [x] `StatusBadge` — pending (slate) / processing (blue spinner) / completed (emerald) / failed (red X + error message) (mock)
+- [x] Pipeline stepper: uploaded → validated → parsed/OCR → chunked → embedded → stored; always-visible beneath each row (mock; expand/collapse is a future enhancement)
+- [x] Stepper: failed state shows red stage marker + `error_message`; completed state shows chunk count + indexed timestamp (mock)
 - [ ] 5 s polling for rows in `pending` or `processing`; stop when all rows reach a terminal state
 - [ ] Filter bar by status + pagination 20/page
 - [ ] `ConfirmDialog` before delete; empty state when no documents
