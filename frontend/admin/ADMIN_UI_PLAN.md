@@ -30,6 +30,7 @@
 - [x] `StorageQuotaBar` — mock quota values; amber at 80 %, red at 95 % (mock)
 - [x] `DocumentTable` — columns: Title, Type, Status, Chunks, Uploaded, Actions (mock data)
 - [x] `StatusBadge` — pending (slate) / processing (blue spinner) / completed (emerald) / failed (red X + error message) (mock)
+- [x] `StatusBadge` extracted to `src/components/admin/StatusBadge.tsx`; replaces inline logic in both `documents/page.tsx` and `documents/[id]/page.tsx`
 - [x] Pipeline stepper: uploaded → validated → parsed/OCR → chunked → embedded → stored; always-visible beneath each row (mock; expand/collapse is a future enhancement)
 - [x] Stepper: failed state shows red stage marker + `error_message`; completed state shows chunk count + indexed timestamp (mock)
 - [ ] 5 s polling for rows in `pending` or `processing`; stop when all rows reach a terminal state

@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import type { DocumentOut } from '@admin-types';
+import StatusBadge from '../../../../components/admin/StatusBadge';
 
 // Placeholder mock — replaced by GET /admin/documents/{id} in Phase 4.
 const MOCK_DETAIL: DocumentOut = {
@@ -23,22 +24,12 @@ function formatDate(iso: string): string {
   });
 }
 
-function statusDisplay(status: DocumentOut['status']): { text: string; className: string } {
-  switch (status) {
-    case 'pending':    return { text: '● Pending',     className: 'text-slate-400' };
-    case 'processing': return { text: '⟳ Processing…', className: 'text-blue-500' };
-    case 'completed':  return { text: '● Completed',   className: 'text-emerald-500' };
-    case 'failed':     return { text: '✕ Failed',      className: 'text-red-500' };
-  }
-}
-
 export default function DocumentDetailPage({
   params,
 }: {
   params: { id: string };
 }) {
   const doc = MOCK_DETAIL;
-  const status = statusDisplay(doc.status);
 
   return (
     <main className="p-6">
@@ -75,7 +66,7 @@ export default function DocumentDetailPage({
         </div>
         <div className="flex gap-6 px-4 py-3">
           <dt className="w-24 shrink-0 font-medium text-slate-500">Status</dt>
-          <dd className={status.className}>{status.text}</dd>
+          <dd><StatusBadge status={doc.status} /></dd>
         </div>
         <div className="flex gap-6 px-4 py-3">
           <dt className="w-24 shrink-0 font-medium text-slate-500">Chunks</dt>

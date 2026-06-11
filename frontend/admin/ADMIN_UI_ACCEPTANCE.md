@@ -21,6 +21,13 @@
 - [ ] "Add by URL" tab → submits to `POST /admin/documents/url`; new `pending` row appears
 
 ## Documents Page — Status & Polling
+
+> **StatusBadge — shared component (UI only)**: `StatusBadge` is now a shared presentation component at
+> `src/components/admin/StatusBadge.tsx`. This was a UI extraction only — no API integration occurred.
+> Both the list page (`documents/page.tsx`) and the detail page (`documents/[id]/page.tsx`) still
+> render hardcoded mock data. Verified via `npm run typecheck` + screenshot; no automated test runner
+> is installed. All criteria below remain unchecked and require Phase 3 live-stack wiring.
+
 - [ ] `pending` → `processing` → `completed` transitions happen without page refresh
 - [ ] `completed` row shows correct chunk count returned by backend (not a hardcoded value)
 - [ ] `failed` row shows red X badge; `error_message` visible in tooltip

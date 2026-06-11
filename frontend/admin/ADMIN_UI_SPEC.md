@@ -51,7 +51,7 @@ All routes are protected by `AuthGuard`. Unauthenticated requests redirect to `/
 | `pending` | `slate-400` | Filled dot |
 | `processing` | `blue-500` | Spinning circle |
 | `completed` | `emerald-500` | Filled dot |
-| `failed` | `red-500` | X mark + tooltip with `error_message` |
+| `failed` | `red-500` | X mark + `error_message` shown inline under the badge (list/table); dedicated red alert block above delete button (detail page) |
 
 Poll `GET /admin/documents` every 5 s for rows in `pending` or `processing` state. Stop polling when all rows reach a terminal state.
 
@@ -229,7 +229,7 @@ All requests send `Authorization: Bearer <token>`. 401 → logout + redirect to 
 | Scenario | Treatment |
 |---|---|
 | No documents yet | Empty state illustration + "Upload your first document" CTA |
-| `status: failed` in table | Red badge, `error_message` in tooltip, "Retry" action |
+| `status: failed` in table | Red badge, `error_message` shown inline under the badge, "Retry" action |
 | `status: failed` on detail page | Red alert box with `error_message` above delete button |
 | Storage at 95 %+ | Quota bar turns red; upload button shows warning tooltip |
 | 403 on Tenants page | Full-page "Access restricted — super_admin only" message |

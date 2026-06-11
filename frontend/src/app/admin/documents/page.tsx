@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useState, Fragment } from 'react';
+import StatusBadge from '../../../components/admin/StatusBadge';
 import { pipelineStateFromDocument, INGESTION_STAGES } from '@admin-types';
 import type { DocumentOut, PipelineState, IngestionStage, DocumentStatus } from '@admin-types';
 
@@ -214,31 +215,6 @@ function formatDate(iso: string): string {
   });
 }
 
-function StatusBadge({ doc }: { doc: DocumentOut }) {
-  switch (doc.status) {
-    case 'pending':
-      return <span className="text-sm text-slate-400">● Pending</span>;
-    case 'processing':
-      return (
-        <span className="inline-flex items-center gap-1.5 text-sm text-blue-500">
-          <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-blue-200 border-t-blue-600" />
-          Processing…
-        </span>
-      );
-    case 'completed':
-      return <span className="text-sm text-emerald-500">● Completed</span>;
-    case 'failed':
-      return (
-        <div>
-          <span className="text-sm text-red-500">✕ Failed</span>
-          {doc.error_message && (
-            <p className="mt-0.5 text-xs text-red-400">{doc.error_message}</p>
-          )}
-        </div>
-      );
-  }
-}
-
 type UploadTab = 'file' | 'url';
 
 function UploadSourcePanel() {
@@ -400,7 +376,7 @@ export default function DocumentsPage() {
                     {doc.source_type}
                   </td>
                   <td className="px-4 py-3">
-                    <StatusBadge doc={doc} />
+                    <StatusBadge status={doc.status} errorMessage={doc.error_message} />
                   </td>
                   <td className="px-4 py-3 text-sm text-slate-600">
                     {doc.status === 'completed' ? doc.chunk_count : '—'}
