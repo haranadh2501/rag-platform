@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useState, Fragment } from 'react';
 import { pipelineStateFromDocument, INGESTION_STAGES } from '@admin-types';
 import type { DocumentOut, PipelineState, IngestionStage, DocumentStatus } from '@admin-types';
@@ -407,7 +408,18 @@ export default function DocumentsPage() {
                   <td className="px-4 py-3 text-sm text-slate-500">
                     {formatDate(doc.created_at)}
                   </td>
-                  <td className="px-4 py-3 text-sm text-slate-400">—</td>
+                  <td className="px-4 py-3 text-sm">
+                    {doc.status === 'completed' || doc.status === 'failed' ? (
+                      <Link
+                        href={`/admin/documents/${doc.id}`}
+                        className="text-indigo-600 hover:text-indigo-800"
+                      >
+                        Detail
+                      </Link>
+                    ) : (
+                      <span className="text-slate-400">—</span>
+                    )}
+                  </td>
                 </tr>
                 <tr>
                   <td colSpan={6} className="p-0">

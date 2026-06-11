@@ -35,6 +35,7 @@
 - [ ] 5 s polling for rows in `pending` or `processing`; stop when all rows reach a terminal state
 - [x] Filter bar by status — client-side filter over mock data; indigo active state; empty state row when no matches (mock)
 - [ ] Pagination 20/page (`GET /admin/documents?page=&per_page=20`)
+- [x] Actions column: "Detail" link → `/admin/documents/[doc.id]` for `completed` and `failed` rows; `pending` and `processing` rows show "—" (mock; Delete and Retry not yet wired)
 - [ ] `ConfirmDialog` before delete; empty state when no documents
 
 ## Phase 4 — Document Detail Page

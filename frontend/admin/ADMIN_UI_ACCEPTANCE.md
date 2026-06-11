@@ -43,6 +43,10 @@
 > **Mock filter (already verifiable)**: client-side filter over mock data — testable via `npm run dev` without a live stack.
 > **API filter (requires live stack)**: re-fetches `GET /admin/documents?status=` on each selection.
 > Update the filter criteria below to remove the mock note once backend wiring is done.
+>
+> **Actions column — current mock state**: "Detail" link is navigable (routes to the placeholder
+> detail page) but always shows hardcoded mock data regardless of which row was clicked.
+> "Delete" and "Retry" are not yet implemented; completed/failed rows show only `Detail`, while pending/processing rows show `—`.
 
 - [ ] Filter by `failed` (mock: client-side) → table shows only failed documents; other statuses hidden
 - [ ] Filter by `failed` (live stack) → `GET /admin/documents?status=failed` fires; only failed rows returned from backend
@@ -53,9 +57,10 @@
 
 ## Document Detail Page
 
-> **Placeholder state**: `/admin/documents/[id]` currently renders hardcoded mock data
-> (always a `failed` document). The red failed-state alert is always visible in the placeholder
-> — this does **not** count as passing the failed-state criterion.
+> **Placeholder state**: The "Detail" link in the table now navigates to `/admin/documents/[id]`,
+> but the detail page always renders hardcoded mock data (a `failed` document) regardless of which
+> row was clicked — `params.id` from the URL is displayed in the amber notice only.
+> The red failed-state alert is always visible — this does **not** count as passing that criterion.
 > The Delete button is disabled. All criteria below require Phase 4 backend wiring
 > (`GET /admin/documents/{id}`, `DELETE /admin/documents/{id}`) and `ConfirmDialog` implementation.
 
