@@ -52,9 +52,16 @@
 - [ ] Empty state renders when no documents exist
 
 ## Document Detail Page
-- [ ] Title, type, status badge, chunk count, upload timestamp, and source path all render
-- [ ] `failed` status: red alert box with `error_message` is visible above the delete button
-- [ ] Delete → confirmation → `DELETE /admin/documents/{id}` fires → redirect to `/admin/documents` → success toast
+
+> **Placeholder state**: `/admin/documents/[id]` currently renders hardcoded mock data
+> (always a `failed` document). The red failed-state alert is always visible in the placeholder
+> — this does **not** count as passing the failed-state criterion.
+> The Delete button is disabled. All criteria below require Phase 4 backend wiring
+> (`GET /admin/documents/{id}`, `DELETE /admin/documents/{id}`) and `ConfirmDialog` implementation.
+
+- [ ] Title, type, status badge, chunk count, upload timestamp, and source path all render (live data from `GET /admin/documents/{id}`)
+- [ ] `failed` status: red alert box with `error_message` is visible above the delete button (live data)
+- [ ] Delete → confirmation dialog → `DELETE /admin/documents/{id}` fires → redirect to `/admin/documents` → success toast
 
 ## Users Page
 - [ ] All users in the tenant are listed with correct role pill colors (indigo/blue/slate)

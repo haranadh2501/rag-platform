@@ -111,6 +111,10 @@ const statusColors = {
 15. Push to `main` → Vercel auto-deploys (M7 set this up).
 16. Cypress or Playwright smoke test: login → upload → see document in list.
 
+> **Current state — no test runner installed.** `package.json` has no jest/vitest/playwright/cypress.
+> Verification is `npm run typecheck` + `npm run lint` + `npm run build` + screenshot/manual review.
+> Install a test runner before implementing step 16.
+
 ## Learning Resources
 - Next.js App Router: https://nextjs.org/docs/app
 - TailwindCSS: https://tailwindcss.com/docs/installation

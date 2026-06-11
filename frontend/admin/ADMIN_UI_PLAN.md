@@ -38,10 +38,10 @@
 - [ ] `ConfirmDialog` before delete; empty state when no documents
 
 ## Phase 4 — Document Detail Page
-- [ ] `src/app/admin/documents/[id]/page.tsx` — fetches `GET /admin/documents/{id}`
-- [ ] Renders title, type, status badge, chunk count, upload time, source path
-- [ ] `status === 'failed'`: red alert box with `error_message` above delete button
-- [ ] Delete → `ConfirmDialog` → `DELETE /admin/documents/{id}` → redirect + success toast
+- [x] `src/app/admin/documents/[id]/page.tsx` — placeholder shell: back link, amber dev notice, mock title / type / status / chunks / uploaded / source, failed-state red alert, disabled Delete button (mock; no backend, no ConfirmDialog)
+- [ ] `src/app/admin/documents/[id]/page.tsx` — wire to `GET /admin/documents/{id}`; replace mock with real fetched document
+- [ ] `status === 'failed'`: red alert box with `error_message` above delete button (live data)
+- [ ] Delete → `ConfirmDialog` → `DELETE /admin/documents/{id}` → redirect to `/admin/documents` + success toast
 
 ## Phase 5 — Users Page
 - [x] `src/app/admin/users/page.tsx` — placeholder shell: title, description, empty table skeleton (mock; no backend, no auth)
