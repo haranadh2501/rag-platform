@@ -175,6 +175,7 @@ def _case(
 ) -> dict[str, Any]:
     return {
         "id": case_id,
+        "application": "bug_reporting",
         "question": question,
         "ground_truth": ground_truth,
         "reference_contexts": [source["text"] for source in sources],

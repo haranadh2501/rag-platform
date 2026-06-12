@@ -10,10 +10,25 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parent
-DEFAULT_DATASET = ROOT / "qa_dataset.jsonl"
-DEFAULT_SOURCE_DIR = ROOT / "sample-data" / "bug-reporting"
+DEFAULT_DATASET = ROOT / "application_suite.jsonl"
+DEFAULT_SOURCE_DIR = ROOT / "sample-data"
+EXPECTED_APPLICATIONS = {
+    "bug_reporting",
+    "it_helpdesk",
+    "customer_support",
+    "employee_onboarding",
+    "developer_documentation",
+    "incident_response",
+    "compliance_policy",
+    "education_assistant",
+    "healthcare_administration",
+    "legal_document_navigation",
+    "equipment_maintenance",
+    "sales_enablement",
+}
 REQUIRED_FIELDS = {
     "id",
+    "application",
     "question",
     "ground_truth",
     "reference_contexts",
@@ -102,6 +117,7 @@ def validate_dataset(
     source_dir: Path = DEFAULT_SOURCE_DIR,
     *,
     strict_synthetic_profile: bool = False,
+    suite_profile: bool = False,
 ) -> ValidationReport:
     cases, issues = load_jsonl(dataset_path)
     ids: set[str] = set()
@@ -142,6 +158,8 @@ def validate_dataset(
 
         if not isinstance(case["category"], str) or not case["category"].strip():
             issues.append(ValidationIssue("error", "category must be a non-empty string", case_id))
+        if not isinstance(case["application"], str) or not case["application"].strip():
+            issues.append(ValidationIssue("error", "application must be a non-empty string", case_id))
         if not isinstance(case["answerable"], bool):
             issues.append(ValidationIssue("error", "answerable must be boolean", case_id))
             continue
@@ -237,6 +255,43 @@ def validate_dataset(
             if not categories[required]:
                 issues.append(ValidationIssue("error", f"Missing category: {required}"))
 
+    if suite_profile:
+        applications = Counter(case.get("application") for case in cases)
+        if len(cases) != 118:
+            issues.append(ValidationIssue("error", f"Expected 118 suite cases, found {len(cases)}"))
+        missing_applications = EXPECTED_APPLICATIONS - set(applications)
+        unexpected_applications = set(applications) - EXPECTED_APPLICATIONS
+        if missing_applications:
+            issues.append(
+                ValidationIssue(
+                    "error",
+                    f"Missing applications: {', '.join(sorted(missing_applications))}",
+                )
+            )
+        if unexpected_applications:
+            issues.append(
+                ValidationIssue(
+                    "error",
+                    f"Unexpected applications: {', '.join(sorted(unexpected_applications))}",
+                )
+            )
+        for application in EXPECTED_APPLICATIONS:
+            if applications[application] < 8:
+                issues.append(
+                    ValidationIssue(
+                        "error",
+                        f"Application {application} has fewer than 8 cases",
+                    )
+                )
+            app_cases = [case for case in cases if case.get("application") == application]
+            if not any(case.get("answerable") is False for case in app_cases):
+                issues.append(
+                    ValidationIssue(
+                        "error",
+                        f"Application {application} has no unanswerable case",
+                    )
+                )
+
     if not cases:
         issues.append(ValidationIssue("error", "Dataset contains no cases"))
     return ValidationReport(cases=cases, issues=issues)
@@ -247,12 +302,18 @@ def main() -> None:
     parser.add_argument("--dataset", type=Path, default=DEFAULT_DATASET)
     parser.add_argument("--source-dir", type=Path, default=DEFAULT_SOURCE_DIR)
     parser.add_argument("--strict", action="store_true", help="Enforce the bundled 30-case profile")
+    parser.add_argument(
+        "--suite",
+        action="store_true",
+        help="Enforce the complete 118-case, 12-application profile",
+    )
     args = parser.parse_args()
 
     report = validate_dataset(
         args.dataset,
         args.source_dir,
         strict_synthetic_profile=args.strict,
+        suite_profile=args.suite,
     )
     for issue in report.issues:
         print(issue.format())

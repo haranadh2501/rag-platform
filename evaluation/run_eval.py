@@ -1,16 +1,14 @@
-"""Run the bug-reporting evaluation against the live /chat/query endpoint."""
+"""Run the multi-application evaluation against the live /chat/query endpoint."""
 from __future__ import annotations
 
 import argparse
 import asyncio
-import csv
 import json
 import logging
 import math
 import os
 import statistics
 import time
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -22,8 +20,10 @@ try:
         DEFAULT_SOURCE_DIR,
         validate_dataset,
     )
+    from evaluation.reporting import write_evaluation_bundle
 except ModuleNotFoundError:
     from validate_dataset import DEFAULT_DATASET, DEFAULT_SOURCE_DIR, validate_dataset
+    from reporting import write_evaluation_bundle
 
 
 LOGGER = logging.getLogger("rag_evaluation")
@@ -261,6 +261,35 @@ def build_summary(
     }
 
 
+def build_application_summaries(
+    outputs: list[dict[str, Any]],
+    scored_rows: list[dict[str, Any]] | None,
+) -> dict[str, dict[str, Any]]:
+    scored_by_id = {row["id"]: row for row in scored_rows or []}
+    applications = sorted({row["application"] for row in outputs})
+    summaries: dict[str, dict[str, Any]] = {}
+    for application in applications:
+        app_outputs = [row for row in outputs if row["application"] == application]
+        app_scores = [
+            scored_by_id[row["id"]]
+            for row in app_outputs
+            if row["id"] in scored_by_id
+        ]
+        ragas_summary: dict[str, float] | None = None
+        if app_scores:
+            ragas_summary = {}
+            for metric in METRIC_NAMES:
+                values = [
+                    row[metric]
+                    for row in app_scores
+                    if row.get(metric) is not None
+                ]
+                if values:
+                    ragas_summary[metric] = statistics.fmean(values)
+        summaries[application] = build_summary(app_outputs, ragas_summary)
+    return summaries
+
+
 def build_quality_gate(
     ragas_summary: dict[str, float] | None,
     thresholds: dict[str, float],
@@ -288,49 +317,20 @@ def build_quality_gate(
     }
 
 
-def write_results(
-    results_dir: Path,
+def build_report(
     outputs: list[dict[str, Any]],
     scored_rows: list[dict[str, Any]] | None,
     summary: dict[str, Any],
-) -> tuple[Path, Path]:
-    results_dir.mkdir(parents=True, exist_ok=True)
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    json_path = results_dir / f"bug_eval_{stamp}.json"
-    csv_path = results_dir / f"bug_eval_{stamp}.csv"
+) -> dict[str, Any]:
     scored_by_id = {row["id"]: row for row in scored_rows or []}
     combined = [scored_by_id.get(row["id"], row) for row in outputs]
+    from datetime import datetime, timezone
 
-    json_path.write_text(
-        json.dumps(
-            {
-                "generated_at": datetime.now(timezone.utc).isoformat(),
-                "summary": summary,
-                "cases": combined,
-            },
-            indent=2,
-            ensure_ascii=True,
-        )
-        + "\n",
-        encoding="utf-8",
-    )
-
-    fields = [
-        "id",
-        "category",
-        "answerable",
-        "question",
-        "ground_truth",
-        "answer",
-        "latency_ms",
-        "system_faithfulness",
-        *METRIC_NAMES,
-    ]
-    with csv_path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fields, extrasaction="ignore")
-        writer.writeheader()
-        writer.writerows(combined)
-    return json_path, csv_path
+    return {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "summary": summary,
+        "cases": combined,
+    }
 
 
 async def async_main(args: argparse.Namespace) -> int:
@@ -338,13 +338,24 @@ async def async_main(args: argparse.Namespace) -> int:
         args.dataset,
         args.source_dir,
         strict_synthetic_profile=args.strict_dataset,
+        suite_profile=args.suite_dataset,
     )
     if not validation.is_valid:
         for issue in validation.errors:
             LOGGER.error(issue.format())
         return 2
 
-    cases = validation.cases[: args.max_cases] if args.max_cases else validation.cases
+    cases = validation.cases
+    if args.application:
+        requested = set(args.application)
+        available = {case["application"] for case in cases}
+        missing = requested - available
+        if missing:
+            LOGGER.error("Unknown applications: %s", ", ".join(sorted(missing)))
+            return 2
+        cases = [case for case in cases if case["application"] in requested]
+    if args.max_cases:
+        cases = cases[: args.max_cases]
     outputs = await collect_system_outputs(
         cases,
         base_url=args.base_url,
@@ -368,15 +379,16 @@ async def async_main(args: argparse.Namespace) -> int:
         "context_recall": args.min_context_recall,
     }
     summary["quality_gate"] = build_quality_gate(ragas_summary, thresholds)
-    json_path, csv_path = write_results(
+    summary["applications"] = build_application_summaries(outputs, scored_rows)
+    report = build_report(outputs, scored_rows, summary)
+    paths = write_evaluation_bundle(
         args.results_dir,
-        outputs,
-        scored_rows,
-        summary,
+        report,
+        prefix="application_suite_eval",
     )
     print(json.dumps(summary, indent=2))
-    print(f"JSON report: {json_path}")
-    print(f"CSV report:  {csv_path}")
+    for kind, path in paths.items():
+        print(f"{kind.title()} report: {path}")
     if args.enforce_thresholds and summary["quality_gate"]["passed"] is not True:
         return 3
     return 0
@@ -399,6 +411,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--skip-ragas", action="store_true")
     parser.add_argument("--allow-mock", action="store_true")
     parser.add_argument("--strict-dataset", action="store_true")
+    parser.add_argument("--suite-dataset", action="store_true")
+    parser.add_argument(
+        "--application",
+        action="append",
+        help="Run only one application. Repeat this option for multiple applications.",
+    )
     parser.add_argument("--enforce-thresholds", action="store_true")
     parser.add_argument(
         "--min-faithfulness",

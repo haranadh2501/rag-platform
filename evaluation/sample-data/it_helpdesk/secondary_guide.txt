@@ -1,0 +1,10 @@
+IT Helpdesk Software Guide
+
+Section: Software installation
+Standard software is installed from Company Portal without administrator rights. Restricted software requires a manager-approved request and security review.
+
+Section: Laptop encryption
+All company laptops must use full-disk encryption. A missing encryption status or recovery-key prompt must be reported as priority P2 and the laptop disconnected from sensitive systems.
+
+Section: Ticket evidence
+Helpdesk tickets should include the asset tag, operating system, exact error text, timestamp, network location, and troubleshooting already attempted. Passwords and recovery codes must never be attached.

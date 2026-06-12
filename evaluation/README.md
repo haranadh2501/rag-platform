@@ -1,87 +1,74 @@
-# Bug-Reporting RAG Evaluation
+# Multi-Application RAG Evaluation
 
-This folder contains a deterministic synthetic corpus, 30 evaluation questions,
-dataset validation, live API collection, and RAGAS scoring for:
+This module provides synthetic knowledge bases, test cases, validation,
+live-system execution, RAGAS scoring, quality gates, and automatic reports.
+
+The combined suite contains **118 cases across 12 applications**:
+
+| Application | Purpose | Cases |
+|---|---|---:|
+| `bug_reporting` | Triage, known issues, severity, evidence | 30 |
+| `it_helpdesk` | Password, VPN, MFA, devices, software | 8 |
+| `customer_support` | Warranty, returns, troubleshooting | 8 |
+| `employee_onboarding` | First-day, training, leave, information handling | 8 |
+| `developer_documentation` | API, SDK, errors, webhooks | 8 |
+| `incident_response` | Declaration, recovery, evidence, review | 8 |
+| `compliance_policy` | Classification, retention, vendors, breaches | 8 |
+| `education_assistant` | Assessment, labs, projects, integrity | 8 |
+| `healthcare_administration` | Scheduling, records, billing, privacy | 8 |
+| `legal_document_navigation` | Synthetic clause location and summary | 8 |
+| `equipment_maintenance` | Inspection, lockout, temperature, service | 8 |
+| `sales_enablement` | Plans, trials, discounts, approved claims | 8 |
+
+Healthcare cases are administrative only. Legal cases use a fully synthetic
+agreement and test clause navigation rather than legal advice.
+
+## Metrics
+
+The live runner calculates:
 
 - Faithfulness
 - Answer relevancy
 - Context precision
 - Context recall
 
-The API's Gemini self-check is recorded as `system_faithfulness`. RAGAS
-faithfulness is computed separately and must be treated as the evaluation score.
+It also reports citation coverage, negative-case abstention, mean/p95 latency,
+the system-provided faithfulness score, aggregate quality gates, and
+per-application metrics.
 
-## Dataset
+## Quick Preflight
 
-The generated corpus contains:
-
-- Bug triage and severity rules
-- Mobile known issues
-- API and webhook known issues
-- Factoid, procedural, reasoning, multi-hop, safety, and unanswerable questions
-
-Regenerate it:
+This command regenerates all synthetic data, validates every reference context,
+runs the evaluation unit tests, and writes JSON and Markdown readiness reports:
 
 ```powershell
-python -m evaluation.generate_bug_dataset
+python -m evaluation.run_test_suite
 ```
 
-Validate structure and verify every reference context exists verbatim in its
-declared source document:
+Reports are written to `artifacts/evaluation_results/`, including stable
+`evaluation_preflight_latest.json` and `evaluation_preflight_latest.md` files.
 
-```powershell
-python -m evaluation.validate_dataset --strict
-```
+## Live Evaluation
 
-## Prepare the system
-
-1. Ingest all files from `evaluation/sample-data/bug-reporting/` into one
-   evaluation tenant.
-2. Start the backend with `MOCK_N8N=false`.
-3. Set either `EVAL_BEARER_TOKEN`, or `EVAL_EMAIL` and `EVAL_PASSWORD`.
-4. Install dependencies:
-
-```powershell
-pip install -r backend/requirements.txt
-pip install -r evaluation/requirements.txt
-```
-
-RAGAS 0.1.10 uses an evaluator LLM and embeddings. Set `OPENAI_API_KEY` for the
-independent evaluator. This is separate from the model response and from the
-system-provided Gemini faithfulness score.
-
-## Run
-
-Collect responses and run all four RAGAS metrics:
+After the source documents are ingested and `MOCK_N8N=false`:
 
 ```powershell
 $env:EVAL_BASE_URL = "http://localhost:8000"
 $env:EVAL_EMAIL = "admin@iisc-demo.com"
 $env:EVAL_PASSWORD = "your-password"
-$env:OPENAI_API_KEY = "your-evaluator-key"
-python -m evaluation.run_eval --strict-dataset
+$env:OPENAI_API_KEY = "independent-evaluator-key"
+
+python -m evaluation.run_eval --suite-dataset --enforce-thresholds
 ```
 
-Enforce the project quality targets and return a non-zero exit code when any
-metric fails:
+Each run automatically writes timestamped and `latest` versions of:
 
-```powershell
-python -m evaluation.run_eval --strict-dataset --enforce-thresholds
-```
+- JSON: complete machine-readable results
+- CSV: one row per case
+- Markdown: review-friendly summary
+- HTML: browser-friendly report
 
-Default gates are faithfulness `0.85`, answer relevancy `0.80`, context
-precision `0.75`, and context recall `0.80`. Each can be overridden with the
-corresponding `--min-*` argument.
+Use `--application it_helpdesk` to test one application. Repeat the argument to
+select several applications.
 
-For a plumbing-only run without RAGAS:
-
-```powershell
-python -m evaluation.run_eval --skip-ragas --max-cases 3
-```
-
-The runner rejects fixed mock responses unless `--allow-mock` is explicitly
-provided. Reports are written to `artifacts/evaluation_results/` as JSON and CSV.
-
-Unanswerable cases are excluded from the four RAGAS averages because context
-precision and recall are not meaningful without a reference context. They are
-reported separately through `negative_abstention_rate`.
+See [TESTING_GUIDE.md](TESTING_GUIDE.md) for the complete workflow.

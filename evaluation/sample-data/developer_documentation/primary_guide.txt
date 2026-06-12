@@ -1,0 +1,10 @@
+Payments API Guide
+
+Section: Authentication
+API requests use a Bearer service token. Tokens are environment-specific and must not be embedded in mobile or browser code.
+
+Section: Create payment
+POST /v1/payments creates a payment. The idempotency-key header is required and may be reused for 24 hours to safely retry the same request.
+
+Section: Errors
+HTTP 400 indicates invalid input, 401 invalid credentials, 409 an idempotency conflict, and 429 rate limiting. Retry 429 responses using exponential backoff.
