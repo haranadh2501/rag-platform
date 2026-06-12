@@ -15,7 +15,7 @@ Next.js admin dashboard: login, document upload, document management, user manag
 |---|---|---|
 | 1 | Set up Next.js 14 + TailwindCSS + project structure. Branch. | ☐ |
 | 2 | API client (`src/lib/apiClient.ts`) — manual fetch wrapper implemented; codegen skipped (see API Client Setup note below) | ☑ |
-| 2 | Login page + JWT auth context (cookie storage) | ☐ |
+| 2 | Login page (`/login`) + authContext: stores `access_token` in `localStorage`; hydrates on mount; logout removes token | ☐ |
 | 2 | Admin layout: sidebar (Documents, Users, Tenants) + header | ☐ |
 | 2 | Document upload page: drag-drop + URL input form | ☐ |
 | 3 | Document list page: table with status badges (pending/processing/completed/failed) | ☐ |
@@ -31,7 +31,7 @@ Next.js admin dashboard: login, document upload, document management, user manag
 
 ## Key Pages
 ```
-/admin/login          → login form
+/login                → login form (shared route — not under /admin)
 /admin/documents      → document list with upload button
 /admin/documents/[id] → document detail
 /admin/users          → user list + invite
@@ -56,17 +56,19 @@ npx openapi-typescript-codegen \
 
 ## Auth Context
 
-> **Open question — auth storage mechanism unresolved.** `CLAUDE.md` says "read from httpOnly
-> cookie", but httpOnly cookies are inaccessible to JavaScript; `Authorization: Bearer` requires a
-> JS-readable token. `openapi.yaml` `LoginResponse` returns `access_token` in the JSON body.
-> The `/api/auth/callback` route pattern below is one possible approach but was never agreed on.
-> Confirm with M1/M2 before implementing `authContext.tsx`.
+> **Auth strategy resolved**: stateless `Authorization: Bearer` on every request.
+> `POST /auth/login` returns `access_token` in the JSON body; `authContext` stores it in
+> `localStorage` (key: `access_token`) and calls `setAuthToken()` from `src/lib/apiClient.ts`.
+> On app load `authContext` reads `localStorage` and hydrates the token. No httpOnly cookie
+> or Next.js `/api/auth/callback` proxy needed.
 
 ```typescript
-// src/lib/authContext.tsx  (not yet implemented — pending auth storage decision)
-// Will call setAuthToken(token) from apiClient.ts on login
+// src/lib/authContext.tsx  (not yet implemented)
+// On login: POST /auth/login → localStorage.setItem('access_token', token) → setAuthToken(token)
+// On mount: localStorage.getItem('access_token') → setAuthToken(token) if present
 // Provide useAuth() hook: { user, role, login, logout }
-// Redirect to /login (path TBD) if not authenticated
+// On logout: localStorage.removeItem('access_token') → setAuthToken(null) → redirect to /login
+// On 401: apiClient throws ApiError(401); authContext/AuthGuard handles redirect to /login
 ```
 
 ## Document Status Badge Colors
@@ -104,7 +106,7 @@ const statusColors = {
 4. Create `src/lib/api.ts`: `fetch` wrapper that auto-attaches `Bearer `.
 
 ### Day 2 — Auth Pages
-5. `app/login/page.tsx`: email+password form → POST /auth/login → store token → redirect /admin.
+5. `app/login/page.tsx`: email+password form → POST /auth/login → store `access_token` in `localStorage` → call `setAuthToken(token)` → redirect to `/admin`.
 6. `app/admin/layout.tsx`: sidebar (Documents, Users, Tenants, Settings) + AuthGuard HOC redirecting to /login if no token.
 
 ### Day 3 — Document Upload + List

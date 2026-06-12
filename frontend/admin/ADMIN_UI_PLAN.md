@@ -12,19 +12,18 @@
 - [x] `npm run build` — passed; Next.js 14.2.35; 3 routes compiled (/, /admin, /admin/documents)
 - [ ] Run `npx openapi-typescript ../../specs/openapi.yaml -o src/types/openapi.ts`
 - [x] Create `src/lib/apiClient.ts` — `apiRequest<T>()`: base URL from `NEXT_PUBLIC_API_URL`, supports GET/POST/PATCH/DELETE, JSON + FormData bodies, 204 handling, `ApiError` with `status` + `detail` message; `setAuthToken`/`getAuthToken` module-level store; 401 throws `ApiError` with TODO for authContext redirect
-  > **Open question (blocks authContext)**: `CLAUDE.md` says the token is read from an "httpOnly
-  > cookie", but httpOnly cookies are inaccessible to JavaScript — `Authorization: Bearer <token>`
-  > requires a JS-readable token. `openapi.yaml` `LoginResponse` returns `access_token` in the JSON
-  > body (not a `Set-Cookie` header). Confirm with M1/M2: should the frontend store the token in
-  > `localStorage` or a non-httpOnly cookie? Answer determines `authContext.tsx` implementation.
-- [ ] Create `src/lib/authContext.tsx` — `AuthContext` with `user`, `role`, `login()`, `logout()`
+  > **Auth strategy resolved**: stateless `Authorization: Bearer` on every request. `POST /auth/login`
+  > returns `access_token` in JSON body; `authContext` stores it in `localStorage` (key: `access_token`)
+  > and calls `setAuthToken(token)`. On app load `authContext` hydrates from `localStorage`.
+  > Login route is `/login` (shared — not `/admin/login`). `authContext.tsx` is now unblocked — see item below.
+- [ ] Create `src/lib/authContext.tsx` — `AuthContext` with `user`, `role`, `login()`, `logout()`; stores `access_token` in `localStorage`; hydrates on mount; logout removes from `localStorage` + calls `setAuthToken(null)`
 
 ## Phase 2 — Shared Layout
 - [x] `src/app/admin/layout.tsx` — full sidebar + header shell (Documents, Users, Tenants🔒, Settings; Knowledge Base footer)
 - [x] `src/app/admin/documents/page.tsx` — mock UI with upload panel, quota card, document table, and pipeline stepper
 - [x] Sidebar collapses to hamburger on < 768 px
 - [x] Active nav item: `indigo-600` left border + background tint
-- [ ] `AuthGuard` HOC — redirect to `/login?next=<path>` when no JWT cookie
+- [ ] `AuthGuard` HOC — redirect to `/login?next=<path>` when token absent from `localStorage`
 - [ ] Header: real tenant name + user menu + logout action (currently static "Acme Corp" / "A" avatar)
 
 ## Phase 3 — Documents Page

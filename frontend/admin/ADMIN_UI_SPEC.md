@@ -1,7 +1,7 @@
 # ADMIN_UI_SPEC.md — Admin Portal
 
 > Owner: M8 · Files: `frontend/src/app/admin/` · `frontend/src/components/admin/`
-> Stack: Next.js 14 · TypeScript · TailwindCSS · JWT (auth storage: unresolved — see open question in ADMIN_UI_PLAN.md Phase 1)
+> Stack: Next.js 14 · TypeScript · TailwindCSS · JWT (stateless Bearer token; `access_token` returned by `POST /auth/login`; stored in `localStorage` by `authContext`; hydrated on app load)
 > Full platform context: `frontend/UI_SPEC.md`
 
 ---

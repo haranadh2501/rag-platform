@@ -29,8 +29,8 @@ This module is the Admin Portal only. Do not edit Chat UI, Onboarding, or any ba
 
 ## Key Rules
 
-- All API calls attach `Authorization: Bearer <token>` read from the httpOnly cookie.
-- A `401` response clears the token and redirects to `/login?next=<current-path>`.
+- All API calls attach `Authorization: Bearer <token>`. `POST /auth/login` returns `access_token` in the JSON body; `authContext` stores it in `localStorage` (key: `access_token`) and calls `setAuthToken()` from `src/lib/apiClient.ts`. On app load `authContext` hydrates the token from `localStorage` and calls `setAuthToken(token)`.
+- A `401` response clears the token (remove from `localStorage`, call `setAuthToken(null)`) and redirects to `/login?next=<current-path>`. (Redirect wiring is a TODO in `apiClient.ts` until `authContext` is built.)
 - Parse, chunk, embed, and store are executed by n8n — never call, simulate, or imply these from the frontend.
 - Ingestion progress is displayed from `DocumentOut.status`, `error_message`, and `chunk_count` polled via `GET /admin/documents` every 5 s. Stop polling when all visible rows reach `completed` or `failed`.
 - Every destructive action (delete document, deactivate tenant or user) requires a `ConfirmDialog` before the API call fires.
