@@ -1,0 +1,13 @@
+Mobile Application Known Issues
+
+Section: BUG-MOB-101 Android login loop
+BUG-MOB-101 affects Android 14 devices running mobile app versions 5.4.0 through 5.4.2. After successful authentication, the app may return to the login screen when battery optimization is enabled. The temporary workaround is to disable battery optimization for the app and sign in again. The permanent fix is included in version 5.4.3.
+
+Section: BUG-MOB-102 Attachment crash
+BUG-MOB-102 affects Android and iOS app version 5.5.0. Adding a video attachment larger than 50 MB to a bug report can close the app before the draft is saved. Users should compress the video below 50 MB or upload it through the web portal. A fix is planned for version 5.5.1.
+
+Section: BUG-MOB-103 Missing iOS notifications
+BUG-MOB-103 affects iOS 17 users on app version 5.3.1 when notification permission was denied during first launch and enabled later from system settings. Reinstalling the app refreshes the notification token. The issue is fixed in version 5.3.2.
+
+Section: Mobile evidence collection
+For mobile crashes, collect the app version, operating system version, device model, timestamp with timezone, reproduction steps, and the diagnostic bundle from Settings > Help > Export diagnostics. Screen recordings are useful but must not display passwords, tokens, or personal customer data.
