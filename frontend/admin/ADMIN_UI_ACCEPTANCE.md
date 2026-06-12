@@ -9,11 +9,12 @@
 
 ## Auth & Route Guards
 
-> **AuthContext exists; route protection is not yet enforced.**
-> `src/lib/authContext.tsx` provides `AuthProvider` and `useAuth()` (`token`, `isAuthenticated`,
-> `isHydrated`, `login`, `logout`). It hydrates `access_token` from `localStorage` on mount and
-> calls `setAuthToken()`. `AdminShellLayout` is wrapped with `AuthProvider`. However, `AuthGuard`
-> and the `/login` page are not yet implemented — any user can reach `/admin/*` without a token.
+> **`/login` placeholder exists; route protection is not yet enforced.**
+> `src/app/login/page.tsx` renders email/password inputs and a disabled button — it is a visual
+> placeholder only; it does **not** call `POST /auth/login` or `authContext.login()` and does not
+> redirect. `src/lib/authContext.tsx` provides `AuthProvider`/`useAuth()` and wraps
+> `AdminShellLayout`. However, `AuthGuard` is not yet implemented — any user can reach `/admin/*`
+> without a token. `apiClient` and `authContext` exist but are not enforcing authentication.
 > The 401 → redirect behaviour remains a TODO in `apiClient.ts`. No automated test runner is
 > installed; verification is `npm run typecheck` + `npm run lint` + `npm run build` + screenshot.
 
@@ -21,6 +22,17 @@
 - [ ] Login as `admin` role → lands on `/admin/documents`
 - [ ] Login as `user` role → `/admin/*` is inaccessible (redirect or 403)
 - [ ] `/admin/tenants` as `admin` role → shows 403 state, not blank page or JS error
+
+## Login Page (`/login`)
+
+> **Placeholder state**: `src/app/login/page.tsx` is a visual shell only. The "Sign in" button is
+> disabled. No API call fires, `authContext.login()` is not called, and no redirect occurs.
+> All criteria below require `POST /auth/login` wiring and AuthGuard (Phase 2 completion).
+> No automated test runner is installed; verification is typecheck + lint + build + screenshot.
+
+- [ ] Valid credentials → `POST /auth/login` → `access_token` stored in `localStorage` → redirect to `/admin/documents`
+- [ ] Invalid credentials → error message shown inline; no redirect; no token stored
+- [ ] Submitting empty form → inline validation; no API call fires
 
 ## Documents Page — Upload
 - [ ] Upload a PDF ≤ 25 MB → row appears immediately with `pending` badge (no page refresh)

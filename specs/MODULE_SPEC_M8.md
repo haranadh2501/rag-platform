@@ -15,7 +15,9 @@ Next.js admin dashboard: login, document upload, document management, user manag
 |---|---|---|
 | 1 | Set up Next.js 14 + TailwindCSS + project structure. Branch. | ☐ |
 | 2 | API client (`src/lib/apiClient.ts`) — manual fetch wrapper implemented; codegen skipped (see API Client Setup note below) | ☑ |
-| 2 | Login page (`/login`) + authContext: stores `access_token` in `localStorage`; hydrates on mount; logout removes token | ☐ |
+| 2 | `authContext.tsx` done — localStorage hydration, login/logout, AuthProvider wraps layout | ☑ |
+| 2 | Login page (`/login`) placeholder — inputs + disabled button; `POST /auth/login` wiring pending | ☑ |
+| 2 | Wire login page to `POST /auth/login` → `authContext.login(token)` → redirect `/admin` | ☐ |
 | 2 | Admin layout: sidebar (Documents, Users, Tenants) + header | ☐ |
 | 2 | Document upload page: drag-drop + URL input form | ☐ |
 | 3 | Document list page: table with status badges (pending/processing/completed/failed) | ☐ |
@@ -106,7 +108,8 @@ const statusColors = {
 4. Create `src/lib/api.ts`: `fetch` wrapper that auto-attaches `Bearer `.
 
 ### Day 2 — Auth Pages
-5. `app/login/page.tsx`: email+password form → POST /auth/login → store `access_token` in `localStorage` → call `setAuthToken(token)` → redirect to `/admin`.
+5. `app/login/page.tsx`: placeholder created (inputs + disabled button). Full wiring pending:
+   POST /auth/login → `authContext.login(token)` (stores in `localStorage` + calls `setAuthToken`) → redirect to `/admin/documents`.
 6. `app/admin/layout.tsx`: sidebar (Documents, Users, Tenants, Settings) + AuthGuard HOC redirecting to /login if no token.
 
 ### Day 3 — Document Upload + List
