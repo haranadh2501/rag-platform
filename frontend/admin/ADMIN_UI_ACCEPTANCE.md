@@ -9,12 +9,13 @@
 
 ## Auth & Route Guards
 
-> **API client exists; auth is not yet wired.** `src/lib/apiClient.ts` provides the request
-> foundation (`apiRequest<T>()`, `ApiError`, `setAuthToken`/`getAuthToken`), but no UI page calls
-> it yet. `AuthGuard`, `authContext.tsx`, and the login page are not implemented. The 401 → redirect
-> behaviour is a TODO in `apiClient.ts`. All criteria below remain unchecked and require Phase 1
-> completion (authContext + AuthGuard). No automated test runner is installed; verification is
-> `npm run typecheck` + `npm run lint` + `npm run build` + screenshot/manual review.
+> **AuthContext exists; route protection is not yet enforced.**
+> `src/lib/authContext.tsx` provides `AuthProvider` and `useAuth()` (`token`, `isAuthenticated`,
+> `isHydrated`, `login`, `logout`). It hydrates `access_token` from `localStorage` on mount and
+> calls `setAuthToken()`. `AdminShellLayout` is wrapped with `AuthProvider`. However, `AuthGuard`
+> and the `/login` page are not yet implemented — any user can reach `/admin/*` without a token.
+> The 401 → redirect behaviour remains a TODO in `apiClient.ts`. No automated test runner is
+> installed; verification is `npm run typecheck` + `npm run lint` + `npm run build` + screenshot.
 
 - [ ] `/admin/documents` without token → redirects to `/login?next=/admin/documents`
 - [ ] Login as `admin` role → lands on `/admin/documents`

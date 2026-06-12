@@ -16,7 +16,7 @@
   > returns `access_token` in JSON body; `authContext` stores it in `localStorage` (key: `access_token`)
   > and calls `setAuthToken(token)`. On app load `authContext` hydrates from `localStorage`.
   > Login route is `/login` (shared — not `/admin/login`). `authContext.tsx` is now unblocked — see item below.
-- [ ] Create `src/lib/authContext.tsx` — `AuthContext` with `user`, `role`, `login()`, `logout()`; stores `access_token` in `localStorage`; hydrates on mount; logout removes from `localStorage` + calls `setAuthToken(null)`
+- [x] Create `src/lib/authContext.tsx` — `AuthProvider` + `useAuth()`; exposes `token`, `isAuthenticated`, `isHydrated`, `login(token)`, `logout()`; stores `access_token` in `localStorage`; hydrates on mount via `useEffect`; logout removes from `localStorage` + calls `setAuthToken(null)`; `AdminShellLayout` wrapped with `AuthProvider` (no JWT decode; no AuthGuard; no redirect)
 
 ## Phase 2 — Shared Layout
 - [x] `src/app/admin/layout.tsx` — full sidebar + header shell (Documents, Users, Tenants🔒, Settings; Knowledge Base footer)
