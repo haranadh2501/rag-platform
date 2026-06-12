@@ -9,14 +9,13 @@
 
 ## Auth & Route Guards
 
-> **`/login` placeholder exists; route protection is not yet enforced.**
-> `src/app/login/page.tsx` renders email/password inputs and a disabled button — it is a visual
-> placeholder only; it does **not** call `POST /auth/login` or `authContext.login()` and does not
-> redirect. `src/lib/authContext.tsx` provides `AuthProvider`/`useAuth()` and wraps
-> `AdminShellLayout`. However, `AuthGuard` is not yet implemented — any user can reach `/admin/*`
-> without a token. `apiClient` and `authContext` exist but are not enforcing authentication.
-> The 401 → redirect behaviour remains a TODO in `apiClient.ts`. No automated test runner is
-> installed; verification is `npm run typecheck` + `npm run lint` + `npm run build` + screenshot.
+> **AuthGuard shell active — redirects on missing localStorage token; login page is still placeholder.**
+> `src/components/admin/AuthGuard.tsx` wraps `/admin/*` page content. Visiting `/admin/*` without
+> an `access_token` in `localStorage` triggers a redirect to `/login?next=<path>`. Token presence
+> is checked locally only — it is **not verified against the backend**. The `/login` page remains a
+> placeholder; `POST /auth/login` is not wired, so no legitimate token can be created yet.
+> Role checks and the Tenants 403 state are not implemented. The 401 → redirect in `apiClient.ts`
+> remains a TODO. No automated test runner installed; verification is typecheck + lint + build + screenshot.
 
 - [ ] `/admin/documents` without token → redirects to `/login?next=/admin/documents`
 - [ ] Login as `admin` role → lands on `/admin/documents`

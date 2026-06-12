@@ -18,6 +18,7 @@ Next.js admin dashboard: login, document upload, document management, user manag
 | 2 | `authContext.tsx` done — localStorage hydration, login/logout, AuthProvider wraps layout | ☑ |
 | 2 | Login page (`/login`) placeholder — inputs + disabled button; `POST /auth/login` wiring pending | ☑ |
 | 2 | Wire login page to `POST /auth/login` → `authContext.login(token)` → redirect `/admin` | ☐ |
+| 2 | `AuthGuard` shell — redirects to `/login?next=<path>` when no localStorage token; localStorage-only check; no role checks | ☑ |
 | 2 | Admin layout: sidebar (Documents, Users, Tenants) + header | ☐ |
 | 2 | Document upload page: drag-drop + URL input form | ☐ |
 | 3 | Document list page: table with status badges (pending/processing/completed/failed) | ☐ |

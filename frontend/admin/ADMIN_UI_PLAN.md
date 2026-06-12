@@ -25,7 +25,7 @@
 - [x] `src/app/admin/documents/page.tsx` — mock UI with upload panel, quota card, document table, and pipeline stepper
 - [x] Sidebar collapses to hamburger on < 768 px
 - [x] Active nav item: `indigo-600` left border + background tint
-- [ ] `AuthGuard` HOC — redirect to `/login?next=<path>` when token absent from `localStorage`
+- [x] `AuthGuard` shell (`src/components/admin/AuthGuard.tsx`) — client component; redirects to `/login?next=<path>` when `localStorage` token absent; loading spinner while `isHydrated=false`; wraps `{children}` inside `AdminShellLayout`; localStorage-only check — no backend token verification; no role checks
 - [ ] Header: real tenant name + user menu + logout action (currently static "Acme Corp" / "A" avatar)
 
 ## Phase 3 — Documents Page

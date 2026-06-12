@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import { AuthProvider } from '../../lib/authContext';
+import AuthGuard from '../../components/admin/AuthGuard';
 
 interface NavItem {
   label: string;
@@ -191,9 +192,9 @@ export default function AdminShellLayout({
           </div>
         </header>
 
-        {/* Page content */}
+        {/* Page content — AuthGuard redirects to /login when no localStorage token */}
         <main className="flex-1 overflow-y-auto">
-          {children}
+          <AuthGuard>{children}</AuthGuard>
         </main>
       </div>
     </div>
