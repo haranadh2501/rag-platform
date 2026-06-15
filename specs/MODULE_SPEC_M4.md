@@ -1,127 +1,327 @@
-﻿# MODULE_SPEC_M4 — Backend: Webhooks (WhatsApp + Slack)
+﻿# MODULE_SPEC_M4 — Backend: Slack Adapter & Unified Messaging Integration
 
-**Owner**: Member 4 | **Track**: Backend | **Branch**: `feat/webhooks`
+**Owner**: Tushar Srivastava | **Track**: Backend | **Branch**: `feature/M4_webhook`
 
 ## Role
-FastAPI webhook routes for WhatsApp (Twilio TwiML), Slack Events API, and n8n callbacks.
+
+Implement and maintain Slack integration and support the Unified Messaging architecture.
+
+This module is responsible for:
+
+* Receiving Slack Events API requests
+* Verifying Slack requests
+* Deduplicating Slack events
+* Building a normalized MessageContext
+* Resolving tenant information
+* Routing conversations through the shared Conversation Router
+* Invoking the Unified Message Handler
+* Delivering responses back to Slack
+
+This module is **not responsible for retrieval, RAG orchestration, history loading, prompt generation, or LLM interaction**.
+
+ 
+
+## Scope
+
+### In Scope (Current Sprint)
+
+* Slack Events API
+* Web channel request handling
+* WhatsApp webhook receipt (payload parsing + validation only — delivery owned by M12)
+* Slack request validation
+* MessageContext generation (5 required fields: `source`, `user_id`, `input_message`, `new_chat`, `message_id`)
+* Request validation with appropriate error responses
+* Event deduplication via `message_id`
+* Conversation Router integration
+* Unified Message Handler integration (identical for all sources)
+* BackgroundTask processing
+* Slack message delivery
+
+### Out of Scope (Future Phases)
+
+* MCP integration
+* Teams integration
+* Telegram integration
+
+ 
 
 ## Day-by-Day Deliverables
-| Day | Deliverable | Done? |
-|---|---|---|
-| 1 | Study Twilio WhatsApp + Slack Events API docs. Scaffold 3 POST routes. | ☐ |
-| 2 | `POST /webhooks/whatsapp` — parse Twilio, call M3's mock `/chat/query`, return TwiML | ☐ |
-| 2 | `POST /webhooks/slack/events` — handle challenge + `app_mention` | ☐ |
-| 3 | Wire WhatsApp → real n8n retrieval (when M6 is ready) | ☐ |
-| 4 | Slack: post thread reply after RAG response | ☐ |
-| 5 | Twilio signature validation + Slack HMAC verification | ☐ |
-| 6 | Bug fixes, load test webhook endpoints | ☐ |
+
+| Day | Deliverable                                  | Done? |
+| --- | -------------------------------------------- | ----- |
+| 1   | Study Slack Events API and Slack Web API     | ☐     |
+| 1   | Scaffold Slack webhook routes                | ☐     |
+| 2   | Implement Slack event ingestion              | ☐     |
+| 2   | Implement URL verification challenge handler | ☐     |
+| 3   | Implement MessageContext creation            | ☐     |
+| 3   | Integrate Conversation Router                | ☐     |
+| 4   | Add event deduplication support              | ☐     |
+| 4   | Integrate Unified Message Handler            | ☐     |
+| 5   | Implement Slack HMAC verification            | ☐     |
+| 5   | Implement Slack response delivery            | ☐     |
+| 6   | Load testing, bug fixes, cleanup             | ☐     |
+
+---
 
 ## Files Owned
-- `backend/app/api/webhooks.py`
-- `backend/app/bots/slack.py`
 
-## WhatsApp Webhook Implementation
-```python
-@router.post("/whatsapp")
-async def whatsapp_webhook(request: Request):
-    # 1. Validate Twilio signature (Day 5 — skip on Day 2)
-    # 2. Parse form data: Body, From, To
-    form = await request.form()
-    message_body = form.get("Body")
-    from_number = form.get("From")   # e.g. "whatsapp:+91xxxxxxxxxx"
+### Existing
 
-    # 3. Lookup tenant from phone number (M12's tenant_map)
-    tenant_id = await get_tenant_for_phone(from_number)
+* `backend/app/api/webhooks.py`
+* `backend/app/bots/slack.py`
 
-    # 4. Call chat query (mock or real)
-    response = await chat_query_internal(message_body, tenant_id)
+### New Integration Files
 
-    # 5. Return TwiML
-    answer = response["answer"]
-    sources = response.get("sources", [])[:2]  # truncate for WA
-    twiml = f"""<?xml version="1.0"?><Response><Message>{answer}</Message></Response>"""
-    return Response(content=twiml, media_type="application/xml")
+* `backend/app/services/context_builder.py`
+* `backend/app/services/conversation_router.py`
+* `backend/app/services/message_handler.py`
+
+ 
+
+# Architecture Responsibilities
+
+## Slack Adapter
+
+Endpoint:
+
+```http
+POST /webhooks/slack/events
 ```
 
-## Slack Event Handler
+Responsibilities:
+
+* Verify Slack signatures
+* Handle URL verification
+* Parse Slack events
+* Create MessageContext
+* Resolve tenant
+* Resolve conversation
+* Trigger background processing
+* Return HTTP 200 immediately
+
+Must NOT:
+
+* Call LLMs
+* Perform retrieval
+* Load history
+* Manage conversation state directly
+
+ 
+
+## MessageContext Creation
+
+All incoming requests — regardless of channel — are normalized into:
+
 ```python
-# Handle URL verification challenge
-# Handle app_mention events
-# Call n8n retrieval → post reply in thread using Slack Web API
+@dataclass
+class MessageContext:
+    source: str          # WEB | SLACK | WHATSAPP
+    user_id: str         # channel-native identity (JWT sub / Slack user ID / phone number)
+    input_message: str   # the text of the query
+    new_chat: bool       # True = user wants a fresh conversation
+    message_id: str      # unique ID per message (Slack event_id / Twilio MessageSid / generated UUID for Web)
 ```
 
-## n8n Callback Handler
+Example:
+
 ```python
-@router.post("/n8n/ingestion-status")
-async def n8n_ingestion_callback(payload: IngestionStatusPayload, db: AsyncSession = Depends(get_db)):
-    # Update documents.status = payload.status
-    # Update documents.chunk_count = payload.chunk_count
+ctx = await build_context(slack_payload)
 ```
+
+Supported source values:
+
+```python
+WEB
+SLACK
+WHATSAPP
+```
+
+> MCP is excluded from the current sprint.
+
+ 
+
+## Request Validation
+
+All 5 fields in `MessageContext` are mandatory. Validation runs immediately after parsing the payload, before any processing.
+
+| Field | Valid when | Error response if invalid |
+|---|---|---|
+| `source` | Non-empty string, one of `WEB`, `SLACK`, `WHATSAPP` | `400 {"error": "source is required or invalid"}` |
+| `user_id` | Non-empty string | `400 {"error": "user_id is required"}` |
+| `input_message` | Non-empty string | `400 {"error": "input_message is required"}` |
+| `new_chat` | Boolean | `400 {"error": "new_chat is required"}` |
+| `message_id` | Non-empty string | `400 {"error": "message_id is required"}` |
+
+**On valid fields:** return HTTP 200 immediately and hand off to the Unified Message Handler.
+
+**On missing or invalid fields:** return the appropriate error response above and stop — nothing downstream runs.
+
+> **Webhook channels (Slack, WhatsApp):** Returning a non-200 to Slack or Twilio triggers a retry. If validation fails for a webhook request, return `200` to prevent retries AND send an error message back to the user via the channel API (e.g. `chat.postMessage` for Slack). Web callers receive the standard `400` directly.
+
+Example:
+
+```python
+ctx = await build_context(payload)
+if not validate_context(ctx):
+    if ctx.source in ("SLACK", "WHATSAPP"):
+        await deliver_error(ctx, "Missing required fields.")
+        return Response(status_code=200)
+    raise HTTPException(status_code=400, detail="Missing required fields.")
+```
+
+ 
+
+## Event Deduplication
+
+Slack retries events if acknowledgements are delayed. Deduplication uses `message_id` from the `MessageContext` and must run before any DB or handler work.
+
+Example:
+
+```python
+if await is_duplicate(ctx.message_id):
+    return Response(status_code=200)
+```
+
+Source of `message_id` per channel:
+
+| Channel | Source of `message_id` |
+|---|---|
+| Slack | `event.event_id` from the Slack payload |
+| WhatsApp | Twilio `MessageSid` header |
+| Web | UUID generated by the adapter on receipt |
+
+ 
+
+## Conversation Router Integration
+
+Slack handlers must not contain conversation lifecycle logic.
+
+Example:
+
+```python
+ctx.conversation_id = (
+    await find_or_create_conversation(ctx)
+)
+```
+
+Supported actions:
+
+* Existing conversation lookup
+* New conversation creation
+* `/new`
+* `/restart`
+* `/clear`
+
+ 
+
+## Unified Message Handler Integration
+
+Business processing is delegated to:
+
+```python
+services/message_handler.py
+```
+
+The handler is **identical for all sources** — no channel-specific branching inside it. The channel adapter (Slack, Web, WhatsApp) is responsible for building the `MessageContext`; after that the handler takes over uniformly.
+
+```python
+async def handle_message(ctx: MessageContext) -> None:
+    # 1. If new_chat, create a fresh conversation and reply confirmation
+    # 2. Load conversation history for existing conversation
+    # 3. Call n8n with input_message + history
+    # 4. Save user message + assistant response (one transaction)
+    # 5. Deliver reply via channel-specific delivery function
+```
+
+Each adapter invokes it the same way:
+
+```python
+background_tasks.add_task(handle_message, ctx)
+```
+
+ 
+
+## Slack Event Handler Example
+
+```python
+@router.post("/slack/events")
+async def slack_events(
+    request: Request,
+    background_tasks: BackgroundTasks
+):
+    # Read raw bytes once; verify HMAC against bytes before parsing
+    body = await request.body()
+    verify_slack_signature(request.headers, body)
+
+    payload = json.loads(body)
+
+    if payload["type"] == "url_verification":
+        return {"challenge": payload["challenge"]}
+
+    # Build and validate MessageContext — all 5 fields required
+    ctx = await build_context(payload)
+    if not validate_context(ctx):
+        await deliver_error(ctx, "Missing required fields.")
+        return Response(status_code=200)   # prevent Slack retry
+
+    # Dedup on message_id before any processing
+    if await is_duplicate(ctx.message_id):
+        return Response(status_code=200)
+
+    # ACK immediately; process in background
+    background_tasks.add_task(handle_message, ctx)
+    return Response(status_code=200)
+```
+
+ 
+
+## Slack Response Delivery
+
+Responses are sent through:
+
+```python
+chat.postMessage
+```
+
+Requirements:
+
+* Reply in thread
+* Preserve conversation context
+* Handle Slack API failures gracefully
+* Log delivery errors
+
+ 
 
 ## Acceptance Criteria
-- [ ] `POST /webhooks/whatsapp` returns valid TwiML with answer
-- [ ] `POST /webhooks/slack/events` handles URL challenge and `app_mention`
-- [ ] `POST /webhooks/n8n/ingestion-status` updates document status in DB
-- [ ] Twilio signature validated (Day 5)
-- [ ] Slack request verified with HMAC-SHA256 (Day 5)
 
----
+* [ ] Slack webhook validates HMAC signatures against raw request body bytes
+* [ ] URL verification challenge succeeds
+* [ ] All 5 required fields (`source`, `user_id`, `input_message`, `new_chat`, `message_id`) are present → HTTP 200 returned immediately
+* [ ] Any missing or invalid field → webhook channels return 200 + error message to user; Web returns 400 with field-level detail
+* [ ] Slack events generate valid `MessageContext` objects
+* [ ] Duplicate events (same `message_id`) are ignored safely — no double processing
+* [ ] Deduplication check runs after validation, before any handler or DB work
+* [ ] `new_chat=True` creates a fresh conversation and returns confirmation without calling n8n
+* [ ] `new_chat=False` loads existing conversation history before calling n8n
+* [ ] Unified Message Handler is called identically for all sources (no per-channel branching inside the handler)
+* [ ] Slack responses are delivered via `chat.postMessage` in thread
+* [ ] BackgroundTasks execute successfully and log failures with fallback reply to user
+* [ ] Slack webhook returns HTTP 200 within Slack's 3-second window
+* [ ] Webhook endpoint passes load testing
 
-## [LOCKED] Locked Scope Update (M1 / 29-May)
+ 
 
-**MCP server**: A new `backend/app/mcp/` module exposes platform retrieval as MCP tools (`query_knowledge_base`, `list_documents`). M4 co-owns it with M3.
-- Endpoints: `GET /mcp/info`, `POST /mcp/rpc`
-- Auth: `X-MCP-API-Key` header
-- See `backend/app/mcp/server.py` + `tools.py` for scaffolds committed by M1.
-- Demo: Claude Desktop config in `docs/DEMO.md`.
+## Future Expansion
 
-**WhatsApp ephemeral upload**: When Twilio webhook receives a `MediaUrl0` payload:
-1. Download media (respect `MAX_WHATSAPP_UPLOAD_BYTES = 10 MB`)
-2. Validate via `services/file_validator.py`
-3. Save to `/tmp/wa-<uuid>`
-4. POST to `N8N_EPHEMERAL_INGEST_WEBHOOK_URL` with `{conversation_id, tenant_id, file_path, source_name, ttl_seconds: 3600}`
-5. Acknowledge to user via TwiML, then process the follow-up question against ephemeral + persistent retrieval.
+The architecture should support future channel adapters with minimal changes:
 
-**Slack moved to stretch**: only attempt after WhatsApp + MCP are demo-stable.
+* WhatsApp
+* MCP
 
+Future channels should reuse:
 
----
-<!-- AUTO-APPENDED:SKILLS-V1 -->
-## Skills Required
-- **Must-have:** FastAPI, Twilio Programmable Messaging API, TwiML, HMAC signature validation, Slack Events API + Bolt SDK, ngrok for local webhook testing.
-- **Nice-to-have:** Async background tasks, retry/backoff patterns.
+* MessageContext
+* Conversation Router
+* Unified Message Handler
 
-## Detailed Step-by-Step Plan
-### Day 1 — Setup
-1. Branch `feat/webhooks`.
-2. Create Twilio account, activate WhatsApp Sandbox (https://console.twilio.com → Messaging → Try it out → WhatsApp), join sandbox from your phone (`join <code>` to the sandbox number).
-3. Install ngrok: `choco install ngrok`; `ngrok http 8000` → copy https URL.
-4. In Twilio console set sandbox `When a message comes in` to `https://<ngrok>.ngrok-free.app/webhooks/whatsapp`.
-
-### Day 2 — WhatsApp Webhook (text only)
-5. Implement `POST /webhooks/whatsapp` to accept `application/x-www-form-urlencoded` (Twilio sends `From`, `Body`, `MediaUrl0`, etc.).
-6. Validate Twilio signature using `twilio.request_validator.RequestValidator` and `settings.TWILIO_AUTH_TOKEN` (skip if `settings.DEBUG`).
-7. Look up tenant by `From` phone in `whatsapp_tenant_map` table; reject with TwiML error if not mapped.
-8. Call `services/n8n_client.retrieve(Body, tenant_id, history=[])` → wrap answer in TwiML `<Message>` and return.
-9. Test: send WhatsApp message → see mock answer reply.
-
-### Day 3 — WhatsApp Ephemeral Upload
-10. When `MediaUrl0` is present, download with `httpx` (use Twilio basic-auth: account_sid + auth_token).
-11. Run `services/file_validator.validate_upload(content, mime)` against 10 MB cap and MIME allowlist.
-12. Save to `/tmp/<uuid>.<ext>`.
-13. POST to `settings.N8N_EPHEMERAL_INGEST_WEBHOOK_URL` with `{tenant_id, conversation_id, file_path, ttl_minutes: 60}`.
-14. Reply with TwiML: `"Got it — I've indexed your file. Ask me anything about it for the next hour."`
-
-### Day 4 — Ingestion Callback
-15. Implement `POST /webhooks/ingestion-status` (co-owned with M3) — same handler; verify `X-Callback-Token`.
-
-### Day 5 — Slack (Stretch)
-16. `app/bots/slack.py`: implement `POST /webhooks/slack/events`; verify `X-Slack-Signature`; handle `app_mention` event → call retrieve → `chat.postMessage` reply.
-
-### Day 6 — Tests
-17. `tests/test_webhooks.py`: mock Twilio request, assert TwiML response shape; test signature rejection (403).
-
-## Learning Resources
-- Twilio WhatsApp Quickstart: https://www.twilio.com/docs/whatsapp/quickstart/python
-- Twilio request validation: https://www.twilio.com/docs/usage/webhooks/webhooks-security
-- Slack Bolt for Python: https://slack.dev/bolt-python/concepts
+without introducing channel-specific business logic.
