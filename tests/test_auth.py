@@ -17,8 +17,10 @@ If the database can't be reached the whole module is skipped (keeps CI green
 until a Postgres service is wired into the workflow).
 """
 import os
+import random
 import sys
 import uuid
+from datetime import timedelta
 
 import pytest
 import pytest_asyncio
@@ -32,7 +34,7 @@ from httpx import ASGITransport, AsyncClient  # noqa: E402
 from sqlalchemy import text  # noqa: E402
 
 from app.core.database import AsyncSessionLocal, engine  # noqa: E402
-from app.core.security import get_password_hash  # noqa: E402
+from app.core.security import create_access_token, get_password_hash  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models.models import Tenant, User  # noqa: E402
 
@@ -88,10 +90,16 @@ async def admin_user():
         await db.commit()
 
 
+def _transport(ip: str) -> ASGITransport:
+    # Pin the ASGI scope's client IP so slowapi's per-IP login limiter buckets
+    # each test independently (otherwise tests would share one IP and throttle).
+    return ASGITransport(app=app, client=(ip, 12345))
+
+
 @pytest_asyncio.fixture
 async def client():
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+    ip = f"10.{random.randint(0, 255)}.{random.randint(0, 255)}.{random.randint(1, 254)}"
+    async with AsyncClient(transport=_transport(ip), base_url="http://test") as ac:
         yield ac
 
 
@@ -154,3 +162,47 @@ async def test_register_as_admin_creates_user(client, admin_user):
     assert r.status_code == 201, r.text
     assert r.json()["email"] == new_email
     assert r.json()["role"] == "user"
+
+
+async def test_register_cross_tenant_forbidden_403(client, admin_user):
+    # A tenant admin may not create users in a DIFFERENT tenant.
+    login = await client.post("/auth/login", json={"email": admin_user["email"], "password": admin_user["password"]})
+    token = login.json()["access_token"]
+    other_tenant = str(uuid.uuid4())  # != admin's tenant
+    assert other_tenant != admin_user["tenant_id"]
+    r = await client.post(
+        "/auth/register",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "email": f"x-{uuid.uuid4().hex[:8]}@example.com",
+            "password": "password123",
+            "tenant_id": other_tenant,
+            "role": "user",
+        },
+    )
+    assert r.status_code == 403, r.text
+
+
+async def test_me_expired_token_401(client):
+    # A token whose exp is in the past must be rejected (decode fails -> 401).
+    expired = create_access_token({"sub": str(uuid.uuid4())}, expires_delta=timedelta(seconds=-1))
+    r = await client.get("/auth/me", headers={"Authorization": f"Bearer {expired}"})
+    assert r.status_code == 401
+
+
+async def test_logout_with_token(client, admin_user):
+    login = await client.post("/auth/login", json={"email": admin_user["email"], "password": admin_user["password"]})
+    token = login.json()["access_token"]
+    r = await client.post("/auth/logout", headers={"Authorization": f"Bearer {token}"})
+    assert r.status_code == 200, r.text
+    assert r.json() == {"message": "Logged out"}
+
+
+async def test_login_rate_limited_429(admin_user):
+    # 6 rapid logins from one IP: first 5 pass (5/minute), the 6th is throttled.
+    # Dedicated fixed IP so this test owns its limiter bucket.
+    creds = {"email": admin_user["email"], "password": admin_user["password"]}
+    async with AsyncClient(transport=_transport("203.0.113.7"), base_url="http://test") as ac:
+        codes = [(await ac.post("/auth/login", json=creds)).status_code for _ in range(6)]
+    assert codes[:5] == [200, 200, 200, 200, 200], codes
+    assert codes[5] == 429, codes
