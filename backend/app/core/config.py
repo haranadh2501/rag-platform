@@ -23,6 +23,10 @@ class Settings(BaseSettings):
     # ── Mock mode ────────────────────────────────────────────────────
     MOCK_N8N: bool = True
 
+    # ── Rate limiting (in-process slowapi) ───────────────────────────
+    RATE_LIMIT_ENABLED: bool = True
+    LOGIN_RATE_LIMIT: str = "5/minute"   # per client IP on POST /auth/login
+
     # ── Database ─────────────────────────────────────────────────────
     DATABASE_URL: str = "postgresql+asyncpg://raguser:changeme@localhost:5432/ragplatform"
 
