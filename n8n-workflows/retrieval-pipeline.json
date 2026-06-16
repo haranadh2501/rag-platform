@@ -1,139 +1,363 @@
 {
-  "name": "Agentic Retrieval Pipeline",
+  "name": "M6 Retrieval Pipeline",
   "nodes": [
     {
       "parameters": {
-        "httpMethod": "POST",
-        "path": "retrieve",
-        "responseMode": "responseNode",
+        "operation": "executeQuery",
+        "query": "SELECT id, content, metadata\nFROM document_chunks\nORDER BY embedding <=> ('[' || '{{ $('Embed HTTP Request').item.json.data[0].embedding.join(',') }}' || ']')::vector\nLIMIT 10;",
         "options": {}
       },
-      "id": "wh-retrieve",
-      "name": "Webhook /retrieve",
-      "type": "n8n-nodes-base.webhook",
-      "typeVersion": 1.1,
-      "position": [200, 300]
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        416,
+        0
+      ],
+      "id": "0235db65-11a1-4b05-82a0-fa83a8659afb",
+      "name": "Execute a SQL query",
+      "credentials": {
+        "postgres": {
+          "id": "gKyDrIX2zBtF4h61",
+          "name": "Postgres account"
+        }
+      }
     },
     {
       "parameters": {
-        "agent": "openAiFunctionsAgent",
-        "options": {
-          "systemMessage": "You are a grounded customer-onboarding assistant. ALWAYS cite sources. If unsure, call ask_clarifying_question. Available tools: search_knowledge_base, search_ephemeral, web_lookup, ask_clarifying_question."
-        },
-        "text": "={{ $json.query }}"
-      },
-      "id": "agent",
-      "name": "AI Agent (DeepSeek V4 Flash)",
-      "type": "@n8n/n8n-nodes-langchain.agent",
-      "typeVersion": 1.7,
-      "position": [440, 300],
-      "notes": "M6: configure ChatModel = DeepSeek (OpenAI-compatible) base_url=https://api.deepseek.com, model=deepseek-v4-flash. Wire 4 tool sub-nodes below."
-    },
-    {
-      "parameters": {
+        "method": "POST",
         "url": "https://api.voyageai.com/v1/embeddings",
-        "method": "POST",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
-        "bodyContentType": "json",
-        "jsonBody": "={\n  \"model\": \"voyage-4-large\",\n  \"input\": [$json.query],\n  \"input_type\": \"query\"\n}"
+        "contentType": "=json",
+        "specifyBody": "json",
+        "bodyParameters": {
+          "parameters": [
+            {}
+          ]
+        },
+        "jsonBody": "={\n  \"input\": [\"{{ $('Execute Workflow Trigger') }}\"],\n  \"model\": \"voyage-4-large\"\n}",
+        "options": {}
       },
-      "id": "embed-q",
-      "name": "Embed query",
       "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [440, 500],
-      "notes": "Tool: search_knowledge_base step 1"
+      "typeVersion": 4.4,
+      "position": [
+        208,
+        0
+      ],
+      "id": "812f992c-5409-4a71-b46f-9dfc58dc0ba1",
+      "name": "Embed HTTP Request",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "gzpoAEqkCy5p3O8N",
+          "name": "Voyage API"
+        }
+      }
     },
     {
       "parameters": {
-        "functionCode": "// Tool: search_knowledge_base step 2 — pgvector kNN on document_chunks\n// SELECT ... WHERE tenant_id=$1 ORDER BY embedding <=> $2 LIMIT 20\nreturn [{ json: { candidates: [] } }];"
-      },
-      "id": "kb-search",
-      "name": "pgvector kNN (top 20)",
-      "type": "n8n-nodes-base.function",
-      "typeVersion": 1,
-      "position": [660, 500]
-    },
-    {
-      "parameters": {
+        "method": "POST",
         "url": "https://api.voyageai.com/v1/rerank",
-        "method": "POST",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {}
+          ]
+        },
         "sendBody": true,
-        "bodyContentType": "json",
-        "jsonBody": "={\n  \"model\": \"rerank-2.5\",\n  \"query\": $json.query,\n  \"documents\": $json.candidates.map(c => c.content),\n  \"top_k\": 5\n}"
+        "contentType": "=json",
+        "specifyBody": "json",
+        "bodyParameters": {
+          "parameters": [
+            {}
+          ]
+        },
+        "jsonBody": "={\n  \"query\": \"{{ $('Execute Workflow Trigger').item.json.Query }}\",\n  \"documents\": {{ JSON.stringify($('Execute a SQL query').all().map(item => item.json.content)) }},\n  \"model\": \"rerank-2.5\",\n  \"top_k\": 3\n}",
+        "options": {}
       },
-      "id": "rerank",
-      "name": "Voyage rerank → top 5",
       "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [880, 500]
+      "typeVersion": 4.4,
+      "position": [
+        624,
+        0
+      ],
+      "id": "6bcc1e14-1205-4dde-9f79-faa81fbb06f6",
+      "name": "Rerank HTTP Request",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "gzpoAEqkCy5p3O8N",
+          "name": "Voyage API"
+        }
+      }
     },
     {
       "parameters": {
-        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent",
-        "method": "POST",
-        "sendBody": true,
-        "bodyContentType": "json",
-        "jsonBody": "={\n  \"contents\": [{ \"parts\": [{ \"text\": \"Score how faithful this answer is to the sources (0-1):\\nANSWER:\\n\" + $json.answer + \"\\nSOURCES:\\n\" + JSON.stringify($json.sources) }] }]\n}"
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "Query"
+            }
+          ]
+        }
       },
-      "id": "selfcheck",
-      "name": "Gemini self-check",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "bdd308d7-48c9-4a24-8d1e-567298de7d13",
+      "name": "Execute Workflow Trigger"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.deepseek.com/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {}
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"deepseek-chat\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are a helpful assistant. Answer the question using only the provided context. Be concise and accurate.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"={{ 'Context: ' + $('Execute a SQL query').all().map(item => item.json.content).join(' | ') + ' Question: ' + $('Execute Workflow Trigger').item.json.Query }}\"\n    }\n  ]\n}",
+        "options": {}
+      },
       "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [1100, 300]
+      "typeVersion": 4.4,
+      "position": [
+        832,
+        0
+      ],
+      "id": "eb8fd790-10af-4a75-b1fb-d1d1dc4d57cd",
+      "name": "DeepSeek API",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "LUwJyp28ZD7PAtVX",
+          "name": "DeepSeek API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"contents\": [\n    {\n      \"parts\": [\n        {\n          \"text\": \"={{ 'You are a fact-checker. Given this context and answer, reply with only PASS or FAIL. Context: ' + $('Execute a SQL query').all()[0].json.content + ' Question: ' + $('Execute Workflow Trigger').item.json.Query + ' Answer: ' + $('DeepSeek API').item.json.choices[0].message.content }}\"\n        }\n      ]\n    }\n  ]\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1040,
+        0
+      ],
+      "id": "7050733c-a40b-42bb-9cce-4ef615a51653",
+      "name": "Gemini Self-Check",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "vGFeL8kHQs8F0oPV",
+          "name": "Gemini API"
+        }
+      }
     },
     {
       "parameters": {
         "conditions": {
-          "number": [
-            { "value1": "={{ $json.faithfulness }}", "operation": "smaller", "value2": 0.7 }
-          ]
-        }
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "e8d370d5-bb43-47e5-8f8d-9cfce0310f9c",
+              "leftValue": "={{ $json.candidates[0].content.parts[0].text }}",
+              "rightValue": "PASS",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
       },
-      "id": "if-low",
-      "name": "IF faithfulness < 0.7",
       "type": "n8n-nodes-base.if",
-      "typeVersion": 2,
-      "position": [1320, 300]
+      "typeVersion": 2.3,
+      "position": [
+        1248,
+        0
+      ],
+      "id": "52190391-216c-4f58-80f5-11b6aff05b8f",
+      "name": "Self-Check Pass?"
     },
     {
       "parameters": {
-        "url": "https://api.deepseek.com/v1/chat/completions",
-        "method": "POST",
-        "sendBody": true,
-        "bodyContentType": "json",
-        "jsonBody": "={\n  \"model\": \"deepseek-v4-pro\",\n  \"messages\": [{ \"role\": \"user\", \"content\": $json.query + \"\\nGrounded only in:\\n\" + JSON.stringify($json.sources) }]\n}"
+        "assignments": {
+          "assignments": [
+            {
+              "id": "dd864967-1f95-4c4f-a26b-69b9c42930e3",
+              "name": "answer",
+              "value": "=={{ $('DeepSeek API').item.json.choices[0].message.content }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
       },
-      "id": "retry-pro",
-      "name": "Retry with DeepSeek V4 Pro",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [1540, 200]
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1456,
+        -32
+      ],
+      "id": "dad33e4e-66a1-466d-932f-28c2f0014e8e",
+      "name": "Return Answer"
     },
     {
-      "parameters": { "respondWith": "json", "responseBody": "={{ $json }}" },
-      "id": "respond",
-      "name": "Respond",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1,
-      "position": [1760, 300]
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"gpt-4o\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are a helpful assistant. Answer the question using only the provided context. Be concise and accurate.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"={{ 'Context: ' + $('Execute a SQL query').all().map(item => item.json.content).join(' | ') + ' Question: ' + $('Execute Workflow Trigger').item.json.Query }}\"\n    }\n  ]\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1456,
+        96
+      ],
+      "id": "9b880925-3369-48cf-9966-3285da391af2",
+      "name": "OpenAI Fallback",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "gg8ZzCskKH0lJ2yG",
+          "name": "OpenAI API"
+        }
+      }
     }
   ],
+  "pinData": {
+    "Execute Workflow Trigger": [
+      {
+        "json": {
+          "Query": "What is the refund policy?"
+        }
+      }
+    ]
+  },
   "connections": {
-    "Webhook /retrieve": { "main": [[{ "node": "AI Agent (DeepSeek V4 Flash)", "type": "main", "index": 0 }]] },
-    "AI Agent (DeepSeek V4 Flash)": { "main": [[{ "node": "Gemini self-check", "type": "main", "index": 0 }]] },
-    "Embed query": { "main": [[{ "node": "pgvector kNN (top 20)", "type": "main", "index": 0 }]] },
-    "pgvector kNN (top 20)": { "main": [[{ "node": "Voyage rerank → top 5", "type": "main", "index": 0 }]] },
-    "Gemini self-check": { "main": [[{ "node": "IF faithfulness < 0.7", "type": "main", "index": 0 }]] },
-    "IF faithfulness < 0.7": {
+    "Execute a SQL query": {
       "main": [
-        [{ "node": "Retry with DeepSeek V4 Pro", "type": "main", "index": 0 }],
-        [{ "node": "Respond", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Rerank HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
-    "Retry with DeepSeek V4 Pro": { "main": [[{ "node": "Respond", "type": "main", "index": 0 }]] }
+    "Embed HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rerank HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "DeepSeek API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Embed HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DeepSeek API": {
+      "main": [
+        [
+          {
+            "node": "Gemini Self-Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Self-Check": {
+      "main": [
+        [
+          {
+            "node": "Self-Check Pass?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Self-Check Pass?": {
+      "main": [
+        [
+          {
+            "node": "Return Answer",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "OpenAI Fallback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
   "active": false,
-  "settings": { "executionOrder": "v1" },
-  "tags": ["rag-platform", "retrieval", "agentic"]
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "087074f3-74c3-4eee-bb86-662ededd8495",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "feef0b6ee87dcd39ec5fcc0e79b366a9f7ff3edd17efc049d248155895cb4e3f"
+  },
+  "nodeGroups": [],
+  "id": "QZGerbPBfnBcjzZm",
+  "tags": []
 }
