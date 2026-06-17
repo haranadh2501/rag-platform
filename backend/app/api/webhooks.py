@@ -1,11 +1,117 @@
+"""Webhook routes — WhatsApp (Twilio), Slack Events, n8n callbacks.
+Owner: M4.
 """
-Webhook routes — WhatsApp (Twilio), Slack Events, n8n callbacks.
-Owner: M4 — implement route bodies.
-"""
-from fastapi import APIRouter, Request, Response, HTTPException
+import hashlib
+import hmac
+import json
+import logging
+import time
+
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, Response
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+from app.core.config import settings
+from app.core.database import AsyncSessionLocal
+from app.models.models import ProcessedRequest
+from app.services.context_builder import build_slack_context
+from app.services.conversation_router import reset_conversation
+from app.services.message_handler import handle_message
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
+
+# ── helpers ──────────────────────────────────────────────────────────────────
+
+def _verify_slack_signature(headers: dict, body: bytes) -> None:
+    """Raise HTTPException 403 if Slack HMAC does not match or timestamp is stale."""
+    timestamp = headers.get("x-slack-request-timestamp", "")
+    signature = headers.get("x-slack-signature", "")
+
+    try:
+        ts_int = int(timestamp)
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=403, detail="Missing or invalid timestamp header")
+
+    # Reject replays older than 5 minutes
+    if abs(time.time() - ts_int) > 300:
+        raise HTTPException(status_code=403, detail="Request timestamp too old")
+
+    sig_base = f"v0:{timestamp}:".encode() + body
+    expected = "v0=" + hmac.new(
+        settings.SLACK_SIGNING_SECRET.encode(),
+        sig_base,
+        hashlib.sha256,
+    ).hexdigest()
+
+    if not hmac.compare_digest(expected, signature):
+        raise HTTPException(status_code=403, detail="Invalid Slack signature")
+
+
+# ── Slack Events ─────────────────────────────────────────────────────────────
+
+@router.post("/slack/events", summary="Slack Events API webhook")
+async def slack_events(request: Request, background_tasks: BackgroundTasks):
+    # Must read raw bytes BEFORE any other body access — body is a one-shot stream
+    body = await request.body()
+
+    # Step 1 — HMAC verification (fast; raises 403 if invalid)
+    _verify_slack_signature(dict(request.headers), body)
+
+    payload = json.loads(body)
+
+    # URL verification handshake (one-time, during Slack app setup)
+    if payload.get("type") == "url_verification":
+        return {"challenge": payload["challenge"]}
+
+    event = payload.get("event", {})
+
+    # Ignore events from bots to prevent reply loops
+    if event.get("bot_id"):
+        return Response(status_code=200)
+
+    event_id = payload.get("event_id", "")
+
+    # Step 2 — Dedup: insert-on-conflict; rowcount 0 means already processed
+    async with AsyncSessionLocal() as db:
+        stmt = (
+            pg_insert(ProcessedRequest)
+            .values(request_id=event_id)
+            .on_conflict_do_nothing()
+        )
+        result = await db.execute(stmt)
+        await db.commit()
+
+    if result.rowcount == 0:
+        return Response(status_code=200)   # duplicate event_id — already handled
+
+    # Step 3 — Build MessageContext (resolve workspace + user)
+    try:
+        async with AsyncSessionLocal() as db:
+            ctx = await build_slack_context(payload, db)
+    except (ValueError, LookupError) as exc:
+        logger.warning("Slack context build failed: %s", exc)
+        return Response(status_code=200)   # ACK Slack; do not trigger a retry
+
+    # Step 4 — Reset command short-circuit (never touches n8n)
+    if ctx.reset_requested:
+        async with AsyncSessionLocal() as db:
+            async with db.begin():
+                await reset_conversation(ctx, db)
+        from app.bots.slack import post_text
+        await post_text(
+            channel   = event.get("channel", ""),
+            thread_ts = event.get("ts", ""),
+            text      = "New conversation started ✓",
+        )
+        return Response(status_code=200)
+
+    # Step 5 — ACK immediately; conversation lookup + n8n + delivery run in background
+    background_tasks.add_task(handle_message, ctx)
+    return Response(status_code=200)
+
+
+# ── WhatsApp (Twilio) ─────────────────────────────────────────────────────────
 
 @router.post("/whatsapp", summary="Twilio WhatsApp incoming message")
 async def whatsapp_webhook(request: Request):
@@ -21,25 +127,15 @@ async def whatsapp_webhook(request: Request):
     message_body = form.get("Body", "")
     from_number = form.get("From", "")
     # M4: implement real logic
-    twiml = f'<?xml version="1.0"?><Response><Message>M4: implement WhatsApp handler. Received: {message_body[:50]}</Message></Response>'
+    twiml = (
+        f'<?xml version="1.0"?><Response>'
+        f'<Message>M4: implement WhatsApp handler. Received: {message_body[:50]}</Message>'
+        f'</Response>'
+    )
     return Response(content=twiml, media_type="application/xml")
 
 
-@router.post("/slack/events", summary="Slack Events API webhook")
-async def slack_events(request: Request):
-    """
-    M4: Implement:
-    1. Handle URL verification challenge
-    2. Verify Slack signature (Day 5)
-    3. Handle app_mention events → call RAG → post reply in thread
-    """
-    body = await request.json()
-    # Handle Slack URL verification challenge
-    if body.get("type") == "url_verification":
-        return {"challenge": body.get("challenge")}
-    # M4: implement app_mention handler
-    return {"ok": True}
-
+# ── n8n ingestion callback ────────────────────────────────────────────────────
 
 @router.post("/n8n/ingestion-status", summary="n8n ingestion pipeline callback")
 async def n8n_ingestion_callback(request: Request):

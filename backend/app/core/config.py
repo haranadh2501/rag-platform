@@ -32,9 +32,21 @@ class Settings(BaseSettings):
 
     @property
     def SYNC_DATABASE_URL(self) -> str:
-        """Sync (psycopg2) DSN derived from DATABASE_URL — used by Alembic, which
-        runs migrations synchronously."""
-        return self.DATABASE_URL.replace("+asyncpg", "+psycopg2")
+        """Sync (psycopg2) DSN for Alembic. Derived from DATABASE_URL with three fixes:
+        1. driver: +asyncpg → +psycopg2
+        2. SSL param: ssl=require → sslmode=require  (psycopg2 spelling)
+        3. Strip options=endpoint%3D... — Neon SNI workaround for asyncpg only;
+           psycopg2 sends SNI natively so the param is unnecessary AND its %3D
+           encoding breaks configparser interpolation in alembic.ini."""
+        import re
+        url = (
+            self.DATABASE_URL
+            .replace("+asyncpg", "+psycopg2")
+            .replace("ssl=require", "sslmode=require")
+        )
+        # Remove &options=endpoint... or ?options=endpoint... (asyncpg-only Neon hint)
+        url = re.sub(r"[&?]options=endpoint[^&]*", "", url)
+        return url
 
     # ── n8n ──────────────────────────────────────────────────────────
     N8N_BASE_URL: str = "http://localhost:5678"
