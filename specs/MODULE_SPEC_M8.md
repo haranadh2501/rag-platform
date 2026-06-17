@@ -23,7 +23,8 @@ Next.js admin dashboard: login, document upload, document management, user manag
 | 2 | Document upload page: drag-drop + URL input form | ☐ |
 | 3 | Document list page: table with status badges (pending/processing/completed/failed) | ☐ |
 | 3 | Document detail page: metadata, chunk count, delete button | ☐ |
-| 4 | Wire to real backend: login flow + protected routes + real data | ☐ |
+| 4 | Wire login flow: `POST /auth/login` via `authApi.ts` → `localStorage` + `setAuthToken()` → redirect (Auth.json contract; login page only) | ☑ |
+| 4 | Wire document pages to real backend (`GET /admin/documents`, upload, detail, delete) — separate from login wiring | ☐ |
 | 5 | User management page: list users, invite form | ☐ |
 | 5 | Polish: loading states, error handling, toast notifications | ☐ |
 | 6 | Responsive design, final UI review | ☐ |
@@ -111,7 +112,8 @@ const statusColors = {
 ### Day 2 — Auth Pages
 5. `app/login/page.tsx`: placeholder created (inputs + disabled button). Full wiring pending:
    POST /auth/login → `authContext.login(token)` (stores in `localStorage` + calls `setAuthToken`) → redirect to `/admin/documents`.
-6. `app/admin/layout.tsx`: sidebar (Documents, Users, Tenants, Settings) + AuthGuard HOC redirecting to /login if no token.
+6. `app/admin/layout.tsx`: sidebar done. `AuthGuard` shell done — redirects to `/login?next=<path>`
+   when no localStorage token; no role checks yet. Role-based guards require `GET /auth/me` (see step 5 above).
 
 ### Day 3 — Document Upload + List
 7. `app/admin/documents/page.tsx`: drag-drop zone (use `react-dropzone`) → multipart POST /admin/documents/upload → optimistic row insert.

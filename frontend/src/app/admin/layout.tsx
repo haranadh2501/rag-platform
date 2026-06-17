@@ -3,7 +3,6 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
-import { AuthProvider } from '../../lib/authContext';
 import AuthGuard from '../../components/admin/AuthGuard';
 
 interface NavItem {
@@ -66,7 +65,6 @@ export default function AdminShellLayout({
     NAV_ITEMS.find((item) => pathname.startsWith(item.href))?.label ?? 'Admin';
 
   return (
-    <AuthProvider>
     <div className="flex h-screen overflow-hidden bg-slate-50">
       {/* ── Mobile overlay ─────────────────────────────────── */}
       {sidebarOpen && (
@@ -198,6 +196,5 @@ export default function AdminShellLayout({
         </main>
       </div>
     </div>
-    </AuthProvider>
   );
 }

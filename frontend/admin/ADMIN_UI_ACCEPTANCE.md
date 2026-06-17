@@ -9,29 +9,28 @@
 
 ## Auth & Route Guards
 
-> **AuthGuard shell active — redirects on missing localStorage token; login page is still placeholder.**
-> `src/components/admin/AuthGuard.tsx` wraps `/admin/*` page content. Visiting `/admin/*` without
-> an `access_token` in `localStorage` triggers a redirect to `/login?next=<path>`. Token presence
-> is checked locally only — it is **not verified against the backend**. The `/login` page remains a
-> placeholder; `POST /auth/login` is not wired, so no legitimate token can be created yet.
-> Role checks and the Tenants 403 state are not implemented. The 401 → redirect in `apiClient.ts`
-> remains a TODO. No automated test runner installed; verification is typecheck + lint + build + screenshot.
+> **Login wired; AuthProvider at root; AuthGuard active; document pages still mock.**
+> `POST /auth/login` is wired in `src/app/login/page.tsx` via `src/lib/authApi.ts` (contract: Auth.json + openapi.yaml). On success the page calls `useAuth().login(access_token)` — `authContext` is the single place that writes `localStorage` and updates the in-memory apiClient store; no direct `localStorage` writes exist outside `authContext`. `AuthProvider` now lives in root `layout.tsx` (wraps all routes, including `/login`). `AuthGuard` redirects `/admin/*` to `/login?next=<path>` when no token is in `localStorage`. Token is **not verified against the backend** on each request — localStorage presence only. Role checks and the Tenants 403 state are not implemented. `apiClient.ts` 401 → redirect remains a TODO. All document, user, tenant, and settings pages remain mock/placeholder. No automated test runner; verification is typecheck + lint + build + browser check.
 
-- [ ] `/admin/documents` without token → redirects to `/login?next=/admin/documents`
-- [ ] Login as `admin` role → lands on `/admin/documents`
-- [ ] Login as `user` role → `/admin/*` is inaccessible (redirect or 403)
-- [ ] `/admin/tenants` as `admin` role → shows 403 state, not blank page or JS error
+- [x] `/admin/documents` without token → redirects to `/login?next=/admin/documents` *(manual browser check — AuthGuard shell active)*
+- [ ] Login as `admin` role → lands on `/admin/documents` *(requires live backend)*
+- [ ] Login as `user` role → `/admin/*` is inaccessible (redirect or 403) *(requires role checks — not yet implemented)*
+- [ ] `/admin/tenants` as `admin` role → shows 403 state, not blank page or JS error *(requires role checks — not yet implemented)*
 
 ## Login Page (`/login`)
 
-> **Placeholder state**: `src/app/login/page.tsx` is a visual shell only. The "Sign in" button is
-> disabled. No API call fires, `authContext.login()` is not called, and no redirect occurs.
-> All criteria below require `POST /auth/login` wiring and AuthGuard (Phase 2 completion).
-> No automated test runner is installed; verification is typecheck + lint + build + screenshot.
+> **Wired — manual browser checks required for live-stack criteria.**
+> `src/app/login/page.tsx` calls `POST /auth/login` via `src/lib/authApi.ts`. On success:
+> calls `useAuth().login(access_token)` — `authContext` writes `localStorage` and updates the
+> apiClient in-memory store (single write point); redirects to `?next` path (if safe) or
+> `/admin/documents`. On 401: inline "Invalid email or password" error; no token stored. Button
+> disabled until both fields are non-empty; `aria-live` error region for screen readers.
+> Auth contract sourced from Auth.json (Postman) and confirmed against `specs/openapi.yaml`.
+> No automated test runner; verification is typecheck + lint + build + browser check against live stack.
 
-- [ ] Valid credentials → `POST /auth/login` → `access_token` stored in `localStorage` → redirect to `/admin/documents`
-- [ ] Invalid credentials → error message shown inline; no redirect; no token stored
-- [ ] Submitting empty form → inline validation; no API call fires
+- [x] Valid credentials → `POST /auth/login` → `access_token` in `localStorage` → redirect *(manual browser check with live backend)*
+- [x] Invalid credentials → inline "Invalid email or password" error; no redirect; no token stored *(manual browser check)*
+- [x] Empty form → Sign in button disabled; no API call fires *(verifiable via `npm run dev`)*
 
 ## Documents Page — Upload
 - [ ] Upload a PDF ≤ 25 MB → row appears immediately with `pending` badge (no page refresh)

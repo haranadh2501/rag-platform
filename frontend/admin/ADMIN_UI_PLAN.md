@@ -15,10 +15,14 @@
   > **Auth strategy resolved**: stateless `Authorization: Bearer` on every request. `POST /auth/login`
   > returns `access_token` in JSON body; `authContext` stores it in `localStorage` (key: `access_token`)
   > and calls `setAuthToken(token)`. On app load `authContext` hydrates from `localStorage`.
-  > Login route is `/login` (shared — not `/admin/login`). `authContext.tsx` is now unblocked — see item below.
-- [x] Create `src/lib/authContext.tsx` — `AuthProvider` + `useAuth()`; exposes `token`, `isAuthenticated`, `isHydrated`, `login(token)`, `logout()`; stores `access_token` in `localStorage`; hydrates on mount via `useEffect`; logout removes from `localStorage` + calls `setAuthToken(null)`; `AdminShellLayout` wrapped with `AuthProvider` (no JWT decode; no AuthGuard; no redirect)
+  > Login route is `/login` (shared — not `/admin/login`). `authContext.tsx` is done — see item below.
+- [x] Create `src/lib/authContext.tsx` — `AuthProvider` + `useAuth()`; exposes `token`, `isAuthenticated`, `isHydrated`, `login(token)`, `logout()`; stores `access_token` in `localStorage`; hydrates on mount via `useEffect`; logout removes from `localStorage` + calls `setAuthToken(null)`; `AuthProvider` wraps all routes from root layout (no JWT decode; no AuthGuard; no redirect)
+- [x] Move `AuthProvider` to root `src/app/layout.tsx`; removed from admin layout; login page calls `useAuth().login(token)` — `authContext` is the single write point for `access_token` (localStorage + apiClient in-memory store); no direct `localStorage` writes outside `authContext`
 - [x] Create `src/app/login/page.tsx` — placeholder shell: email input, password input, disabled "Sign in" button, amber notice (`POST /auth/login` wiring in a later phase); server component; no submit logic; no redirect; shared route `/login`
-- [ ] Wire `src/app/login/page.tsx` — `POST /auth/login` → `authContext.login(token)` → redirect to `/admin/documents`
+- [x] Wire `src/app/login/page.tsx` — `POST /auth/login` (via `src/lib/authApi.ts`) → `useAuth().login(access_token)` → `router.replace(next || '/admin/documents')`
+  > **Contract source**: Auth.json (Postman collection, IISc RAG — Auth M2) confirmed against `specs/openapi.yaml`. No conflict. Request: `{ email, password }`; response: `{ access_token, token_type, user }`. Rate-limited to 5/min per IP.
+  > **Auth boundary**: `AuthProvider` is in root `layout.tsx` (available to all routes including `/login`). Login page calls `useAuth().login(token)` — `authContext` is the single place that writes `localStorage` and updates the in-memory `apiClient` store. No direct `localStorage` writes in the login page.
+  > **Integration scope**: this is the only Auth API integration in this phase. Document page wiring (`GET /admin/documents`, upload, URL ingest, detail, delete) is Phase 3 — separate from login. All document pages remain mock/placeholder.
 
 ## Phase 2 — Shared Layout
 - [x] `src/app/admin/layout.tsx` — full sidebar + header shell (Documents, Users, Tenants🔒, Settings; Knowledge Base footer)
@@ -27,6 +31,7 @@
 - [x] Active nav item: `indigo-600` left border + background tint
 - [x] `AuthGuard` shell (`src/components/admin/AuthGuard.tsx`) — client component; redirects to `/login?next=<path>` when `localStorage` token absent; loading spinner while `isHydrated=false`; wraps `{children}` inside `AdminShellLayout`; localStorage-only check — no backend token verification; no role checks
 - [ ] Header: real tenant name + user menu + logout action (currently static "Acme Corp" / "A" avatar)
+- [ ] Call `GET /auth/me` after login to get `email` + `role`; expose via `authContext`; unblocks header real user display and role-based guards (Tenants 403)
 
 ## Phase 3 — Documents Page
 - [ ] `src/app/admin/documents/page.tsx` — wire to real backend (`GET /admin/documents`, `POST /admin/documents/upload`, `POST /admin/documents/url`)

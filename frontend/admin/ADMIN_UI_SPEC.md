@@ -193,6 +193,7 @@ Calls `POST /admin/users/invite`. On success: new row inserted at top of table, 
 | Component | Responsibility |
 |---|---|
 | `AdminLayout` | Sidebar + header shell, `AuthGuard` wrapper |
+| `AuthGuard` | Redirects to `/login?next=<path>` when no localStorage token; spinner while hydrating |
 | `StatusBadge` | Renders all four ingestion states with correct color and icon |
 | `DocumentTable` | Paginated list with filter bar and 5 s polling |
 | `DocumentUploadPanel` | Tabbed drag-drop / URL form with progress bar |
@@ -209,24 +210,34 @@ Calls `POST /admin/users/invite`. On success: new row inserted at top of table, 
 
 | Action | Method + Endpoint |
 |---|---|
+| **Auth** | |
+| Login | `POST /auth/login` → `{ access_token, token_type, user }` |
+| Current user + role | `GET /auth/me` → `UserOut` (needed for role-based guards + header) |
+| Logout | `POST /auth/logout` (blacklists JWT server-side) |
+| **Documents** | |
 | List documents | `GET /admin/documents?status=&page=&per_page=` |
 | Upload file | `POST /admin/documents/upload` (multipart) |
 | Ingest URL | `POST /admin/documents/url` |
 | Document detail | `GET /admin/documents/{id}` |
 | Delete document | `DELETE /admin/documents/{id}` |
+| **Users** | |
 | List users | `GET /admin/users` |
 | Invite user | `POST /admin/users/invite` |
+| **Tenants** | |
 | List tenants | `GET /admin/tenants` |
 | Create tenant | `POST /admin/tenants` |
 | Edit tenant | `PATCH /admin/tenants/{id}` |
 
 All requests send `Authorization: Bearer <token>`. 401 → logout + redirect to `/login`. 429 → toast: "Upload limit reached (20/hour). Try again later."
 
-> **API client — current state**: `src/lib/apiClient.ts` provides `apiRequest<T>()`, `ApiError`, and
-> `setAuthToken`/`getAuthToken`. It is **not yet wired into any UI page** — all pages still show
-> mock/placeholder data. The `401 → logout + redirect` behaviour above is the target; the current
-> implementation throws `ApiError(401)` only. Redirect wiring requires `authContext.tsx` (Phase 1
-> completion). No automated test runner is installed; verified via typecheck + screenshot.
+> **Auth wired; document pages still mock.**
+> `POST /auth/login` is now wired in `src/app/login/page.tsx` via `src/lib/authApi.ts`.
+> Contract sourced from Auth.json (Postman, IISc RAG — Auth M2) and confirmed against `openapi.yaml`.
+> `AuthGuard` protects `/admin/*` by localStorage token presence (no backend verification).
+> All document, user, tenant, and settings pages remain mock/placeholder — `apiClient` is not yet
+> called by any of them. Document page wiring (Phase 3) is a separate step. The
+> `401 → logout + redirect` behaviour in `apiClient.ts` remains a TODO. No automated test runner;
+> verified via typecheck + browser check.
 
 ---
 
