@@ -1,97 +1,6 @@
 {
-  "name": "M6 Retrieval Pipeline",
+  "name": "M6 Retrieval Pipeline v2",
   "nodes": [
-    {
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "SELECT id, content, metadata\nFROM document_chunks\nORDER BY embedding <=> ('[' || '{{ $('Embed HTTP Request').item.json.data[0].embedding.join(',') }}' || ']')::vector\nLIMIT 10;",
-        "options": {}
-      },
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.6,
-      "position": [
-        416,
-        0
-      ],
-      "id": "0235db65-11a1-4b05-82a0-fa83a8659afb",
-      "name": "Execute a SQL query",
-      "credentials": {
-        "postgres": {
-          "id": "gKyDrIX2zBtF4h61",
-          "name": "Postgres account"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "https://api.voyageai.com/v1/embeddings",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "sendBody": true,
-        "contentType": "=json",
-        "specifyBody": "json",
-        "bodyParameters": {
-          "parameters": [
-            {}
-          ]
-        },
-        "jsonBody": "={\n  \"input\": [\"{{ $('Execute Workflow Trigger') }}\"],\n  \"model\": \"voyage-4-large\"\n}",
-        "options": {}
-      },
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.4,
-      "position": [
-        208,
-        0
-      ],
-      "id": "812f992c-5409-4a71-b46f-9dfc58dc0ba1",
-      "name": "Embed HTTP Request",
-      "credentials": {
-        "httpHeaderAuth": {
-          "id": "gzpoAEqkCy5p3O8N",
-          "name": "Voyage API"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "https://api.voyageai.com/v1/rerank",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {}
-          ]
-        },
-        "sendBody": true,
-        "contentType": "=json",
-        "specifyBody": "json",
-        "bodyParameters": {
-          "parameters": [
-            {}
-          ]
-        },
-        "jsonBody": "={\n  \"query\": \"{{ $('Execute Workflow Trigger').item.json.Query }}\",\n  \"documents\": {{ JSON.stringify($('Execute a SQL query').all().map(item => item.json.content)) }},\n  \"model\": \"rerank-2.5\",\n  \"top_k\": 3\n}",
-        "options": {}
-      },
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.4,
-      "position": [
-        624,
-        0
-      ],
-      "id": "6bcc1e14-1205-4dde-9f79-faa81fbb06f6",
-      "name": "Rerank HTTP Request",
-      "credentials": {
-        "httpHeaderAuth": {
-          "id": "gzpoAEqkCy5p3O8N",
-          "name": "Voyage API"
-        }
-      }
-    },
     {
       "parameters": {
         "workflowInputs": {
@@ -103,13 +12,87 @@
         }
       },
       "type": "n8n-nodes-base.executeWorkflowTrigger",
-      "typeVersion": 1.1,
+      "typeVersion": 1.2,
       "position": [
         0,
-        0
+        160
       ],
-      "id": "bdd308d7-48c9-4a24-8d1e-567298de7d13",
+      "id": "50ccd3ad-e4f8-4364-bcb5-118035774e05",
       "name": "Execute Workflow Trigger"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.voyageai.com/v1/embeddings",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"input\": [\"={{ $('Execute Workflow Trigger').item.json.Query }}\"],\n  \"model\": \"voyage-4-large\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        224,
+        160
+      ],
+      "id": "f1778051-148a-40d7-a4e0-e677b3bfa64b",
+      "name": "Embed Query",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "gzpoAEqkCy5p3O8N",
+          "name": "Voyage API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id, content, metadata\nFROM document_chunks\nORDER BY embedding <=> ('[' || '{{ $('Embed Query').item.json.data[0].embedding.join(',') }}' || ']')::vector\nLIMIT 10;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        448,
+        160
+      ],
+      "id": "2f8a3c46-e434-4f94-9273-a134688d0950",
+      "name": "Vector Search",
+      "retryOnFail": true,
+      "credentials": {
+        "postgres": {
+          "id": "gKyDrIX2zBtF4h61",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.voyageai.com/v1/rerank",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"query\": \"={{ $('Execute Workflow Trigger').item.json.Query }}\",\n  \"documents\": {{ JSON.stringify($('Vector Search').all().map(item => item.json.content)) }},\n  \"model\": \"rerank-2.5\",\n  \"top_k\": 3\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        672,
+        160
+      ],
+      "id": "f371fd76-aa07-440e-b612-7fbf4983d546",
+      "name": "Rerank Results",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "gzpoAEqkCy5p3O8N",
+          "name": "Voyage API"
+        }
+      }
     },
     {
       "parameters": {
@@ -117,57 +100,55 @@
         "url": "https://api.deepseek.com/v1/chat/completions",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {}
-          ]
-        },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"model\": \"deepseek-chat\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are a helpful assistant. Answer the question using only the provided context. Be concise and accurate.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"={{ 'Context: ' + $('Execute a SQL query').all().map(item => item.json.content).join(' | ') + ' Question: ' + $('Execute Workflow Trigger').item.json.Query }}\"\n    }\n  ]\n}",
+        "jsonBody": "={\n  \"model\": \"deepseek-chat\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are a precise document assistant. Answer ONLY using the provided context. If the answer is not in the context, say 'I don't have enough information to answer this.' Never make up information. Be concise and accurate.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"={{ 'Context: ' + $('Vector Search').all().map(item => item.json.content).join(' | ') + ' Question: ' + $('Execute Workflow Trigger').item.json.Query }}\"\n    }\n  ]\n}",
         "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        832,
-        0
+        896,
+        160
       ],
-      "id": "eb8fd790-10af-4a75-b1fb-d1d1dc4d57cd",
-      "name": "DeepSeek API",
+      "id": "835550f4-aed2-42a2-a74b-e5f8570a5e95",
+      "name": "DeepSeek Generate",
+      "retryOnFail": true,
       "credentials": {
         "httpHeaderAuth": {
           "id": "LUwJyp28ZD7PAtVX",
           "name": "DeepSeek API"
         }
-      }
+      },
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent%22",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"contents\": [\n    {\n      \"parts\": [\n        {\n          \"text\": \"={{ 'You are a fact-checker. Given this context and answer, reply with only PASS or FAIL. Context: ' + $('Execute a SQL query').all()[0].json.content + ' Question: ' + $('Execute Workflow Trigger').item.json.Query + ' Answer: ' + $('DeepSeek API').item.json.choices[0].message.content }}\"\n        }\n      ]\n    }\n  ]\n}",
+        "jsonBody": "={\n  \"contents\": [\n    {\n      \"parts\": [\n        {\n          \"text\": \"={{ 'You are a fact-checker. Given this context and answer, reply with only PASS or FAIL. Context: ' + $('Vector Search').all()[0].json.content + ' Question: ' + $('Execute Workflow Trigger').item.json.Query + ' Answer: ' + $('DeepSeek Generate').item.json.choices[0].message.content }}\"\n        }\n      ]\n    }\n  ]\n}",
         "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        1040,
-        0
+        1120,
+        -144
       ],
-      "id": "7050733c-a40b-42bb-9cce-4ef615a51653",
+      "id": "8d61d4e3-cddd-419e-b0d8-1191f8092f79",
       "name": "Gemini Self-Check",
+      "retryOnFail": true,
       "credentials": {
         "httpHeaderAuth": {
           "id": "vGFeL8kHQs8F0oPV",
           "name": "Gemini API"
         }
-      }
+      },
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -180,8 +161,8 @@
           },
           "conditions": [
             {
-              "id": "e8d370d5-bb43-47e5-8f8d-9cfce0310f9c",
-              "leftValue": "={{ $json.candidates[0].content.parts[0].text }}",
+              "id": "c1eddf19-2c3f-46cf-9a65-ea8c9fcc713c",
+              "leftValue": "=={{ $json.candidates[0].content.parts[0].text }}",
               "rightValue": "PASS",
               "operator": {
                 "type": "string",
@@ -196,20 +177,26 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        1248,
-        0
+        1344,
+        -224
       ],
-      "id": "52190391-216c-4f58-80f5-11b6aff05b8f",
-      "name": "Self-Check Pass?"
+      "id": "fd765536-dccc-4976-9d62-5f07c78586e0",
+      "name": "Gemini Says PASS?"
     },
     {
       "parameters": {
         "assignments": {
           "assignments": [
             {
-              "id": "dd864967-1f95-4c4f-a26b-69b9c42930e3",
+              "id": "5f0a7b78-1946-4bf0-8a29-3ca7514f1474",
               "name": "answer",
-              "value": "=={{ $('DeepSeek API').item.json.choices[0].message.content }}",
+              "value": "=={{ $('DeepSeek Generate').item.json.choices[0].message.content }}",
+              "type": "string"
+            },
+            {
+              "id": "9c336788-905f-491f-b397-a3238d31ae4b",
+              "name": "model_used",
+              "value": "deepseek",
               "type": "string"
             }
           ]
@@ -219,11 +206,11 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        1456,
-        -32
+        1568,
+        -272
       ],
-      "id": "dad33e4e-66a1-466d-932f-28c2f0014e8e",
-      "name": "Return Answer"
+      "id": "d707c968-873e-4b0b-8e50-752235126bd3",
+      "name": "Return DeepSeek Answer"
     },
     {
       "parameters": {
@@ -233,84 +220,357 @@
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"model\": \"gpt-4o\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are a helpful assistant. Answer the question using only the provided context. Be concise and accurate.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"={{ 'Context: ' + $('Execute a SQL query').all().map(item => item.json.content).join(' | ') + ' Question: ' + $('Execute Workflow Trigger').item.json.Query }}\"\n    }\n  ]\n}",
+        "jsonBody": "={\n  \"model\": \"gpt-4o\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are a precise document assistant. Answer ONLY using the provided context. If the answer is not in the context, say 'I don't have enough information to answer this.' Never make up information. Be concise and accurate.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"={{ 'Context: ' + $('Vector Search').all().map(item => item.json.content).join(' | ') + ' Question: ' + $('Execute Workflow Trigger').item.json.Query }}\"\n    }\n  ]\n}",
         "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        1456,
-        96
+        1568,
+        -48
       ],
-      "id": "9b880925-3369-48cf-9966-3285da391af2",
-      "name": "OpenAI Fallback",
+      "id": "091c7e6d-47cb-4296-87a7-91f92437768d",
+      "name": "OpenAI Final Answer",
+      "retryOnFail": true,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "gg8ZzCskKH0lJ2yG",
+          "name": "OpenAI API"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "6e5ba77d-2109-4f00-97d4-44cb89735980",
+              "name": "answer",
+              "value": "=={{ $('OpenAI Final Answer').item.json.choices[0].message.content }}",
+              "type": "string"
+            },
+            {
+              "id": "6e880f9b-b290-43b5-9b41-0ee3b1670a8e",
+              "name": "model_used",
+              "value": "openai",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1792,
+        -144
+      ],
+      "id": "01ce7aa5-d854-4f2d-8c86-4c3f290650d0",
+      "name": "Return OpenAI Answer"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "369af02d-2863-497c-8f39-773af819c888",
+              "name": "answer",
+              "value": "All AI models are currently unavailable. Please try again later.",
+              "type": "string"
+            },
+            {
+              "id": "fecb1a0d-829b-47ba-a4cc-f7c13200d00b",
+              "name": "model_used",
+              "value": "none",
+              "type": "string"
+            },
+            {
+              "id": "e0d1b40b-8e0b-4842-b2cf-5049c83438ec",
+              "name": "error",
+              "value": "true",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1792,
+        48
+      ],
+      "id": "56250a79-2eb0-4ccc-a4ec-2c8553c0e841",
+      "name": "All Models Failed"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent%22",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"contents\": [\n    {\n      \"parts\": [\n        {\n          \"text\": \"={{ 'You are a precise document assistant. Answer ONLY using the provided context. If the answer is not in the context, say I do not have enough information to answer this. Context: ' + $('Vector Search').all().map(item => item.json.content).join(' | ') + ' Question: ' + $('Execute Workflow Trigger').item.json.Query }}\"\n        }\n      ]\n    }\n  ]\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1120,
+        432
+      ],
+      "id": "cd624dba-323a-439f-9b3e-8623b089c907",
+      "name": "Gemini Fallback Answer",
+      "retryOnFail": true,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "vGFeL8kHQs8F0oPV",
+          "name": "Gemini API"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"gpt-4o\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are a fact-checker. Given this context and answer, reply with only PASS or FAIL.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"={{ 'Context: ' + $('Vector Search').all()[0].json.content + ' Question: ' + $('Execute Workflow Trigger').item.json.Query + ' Answer: ' + $('Gemini Fallback Answer').item.json.candidates[0].content.parts[0].text }}\"\n    }\n  ]\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1344,
+        496
+      ],
+      "id": "7fab1bbf-76db-4bc7-ab4c-1de07ca9778f",
+      "name": "OpenAI Validates Gemini",
       "credentials": {
         "httpHeaderAuth": {
           "id": "gg8ZzCskKH0lJ2yG",
           "name": "OpenAI API"
         }
       }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "975d6bcf-3e18-4b22-8c30-5a9d4fbd0f0d",
+              "leftValue": "=={{ $json.choices[0].message.content }}",
+              "rightValue": "PASS",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1568,
+        496
+      ],
+      "id": "6185b2aa-1ab1-44be-b3ba-2ec69b445b0f",
+      "name": "OpenAI Says PASS?"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "51271ddd-5bbe-4212-9367-be113ff57f6a",
+              "name": "answer",
+              "value": "=={{ $('Gemini Fallback Answer').item.json.candidates[0].content.parts[0].text }}",
+              "type": "string"
+            },
+            {
+              "id": "b63f3f00-8f9e-45e3-8719-27538abf41eb",
+              "name": "model_used",
+              "value": "gemini",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1792,
+        592
+      ],
+      "id": "e8f7ac66-53e3-4b0c-bc70-8a838931d0be",
+      "name": "Return Gemini Answer"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"gpt-4o\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are a precise document assistant. Answer ONLY using the provided context. If the answer is not in the context, say 'I don't have enough information to answer this.' Never make up information. Be concise and accurate.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"={{ 'Context: ' + $('Vector Search').all().map(item => item.json.content).join(' | ') + ' Question: ' + $('Execute Workflow Trigger').item.json.Query }}\"\n    }\n  ]\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1792,
+        400
+      ],
+      "id": "a7d38838-00a2-4f8c-98c2-90bb3503da70",
+      "name": "OpenAI Direct Answer",
+      "retryOnFail": true,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "gg8ZzCskKH0lJ2yG",
+          "name": "OpenAI API"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "b51ebe94-c017-4b07-b9c5-ba6fcb611c72",
+              "name": "answer",
+              "value": "=={{ $('OpenAI Direct Answer').item.json.choices[0].message.content }}",
+              "type": "string"
+            },
+            {
+              "id": "41fc63e1-e024-4a36-a3c1-a0a1bd9dfdf1",
+              "name": "model_used",
+              "value": "openai-direct",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2016,
+        448
+      ],
+      "id": "fba1b210-db11-442e-8c97-06a66fa9807f",
+      "name": "Return OpenAI Direct Answer"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "2efb94a4-879e-45a3-aae9-a7c6b04897ab",
+              "name": "answer",
+              "value": "All AI models are currently unavailable. Please try again later.",
+              "type": "string"
+            },
+            {
+              "id": "413fb5bd-504e-4a06-bcc2-94da55de7c4b",
+              "name": "model_used",
+              "value": "none",
+              "type": "string"
+            },
+            {
+              "id": "2c1685b6-5084-46c7-afba-1747262894d0",
+              "name": "error",
+              "value": "true",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2016,
+        240
+      ],
+      "id": "04489699-bca8-49fe-b239-bdcd3c511fae",
+      "name": "All Models Failed 2"
     }
   ],
-  "pinData": {
-    "Execute Workflow Trigger": [
-      {
-        "json": {
-          "Query": "What is the refund policy?"
-        }
-      }
-    ]
-  },
+  "pinData": {},
   "connections": {
-    "Execute a SQL query": {
-      "main": [
-        [
-          {
-            "node": "Rerank HTTP Request",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Embed HTTP Request": {
-      "main": [
-        [
-          {
-            "node": "Execute a SQL query",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Rerank HTTP Request": {
-      "main": [
-        [
-          {
-            "node": "DeepSeek API",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Execute Workflow Trigger": {
       "main": [
         [
           {
-            "node": "Embed HTTP Request",
+            "node": "Embed Query",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "DeepSeek API": {
+    "Embed Query": {
+      "main": [
+        [
+          {
+            "node": "Vector Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Vector Search": {
+      "main": [
+        [
+          {
+            "node": "Rerank Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rerank Results": {
+      "main": [
+        [
+          {
+            "node": "DeepSeek Generate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DeepSeek Generate": {
       "main": [
         [
           {
             "node": "Gemini Self-Check",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Gemini Fallback Answer",
             "type": "main",
             "index": 0
           }
@@ -321,25 +581,115 @@
       "main": [
         [
           {
-            "node": "Self-Check Pass?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Self-Check Pass?": {
-      "main": [
-        [
-          {
-            "node": "Return Answer",
+            "node": "Gemini Says PASS?",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "OpenAI Fallback",
+            "node": "OpenAI Final Answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Says PASS?": {
+      "main": [
+        [
+          {
+            "node": "Return DeepSeek Answer",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "OpenAI Final Answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Final Answer": {
+      "main": [
+        [
+          {
+            "node": "Return OpenAI Answer",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "All Models Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Fallback Answer": {
+      "main": [
+        [
+          {
+            "node": "OpenAI Validates Gemini",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "All Models Failed 2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Validates Gemini": {
+      "main": [
+        [
+          {
+            "node": "OpenAI Says PASS?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Says PASS?": {
+      "main": [
+        [
+          {
+            "node": "Return Gemini Answer",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "OpenAI Direct Answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Direct Answer": {
+      "main": [
+        [
+          {
+            "node": "Return OpenAI Direct Answer",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "All Models Failed 2",
             "type": "main",
             "index": 0
           }
@@ -350,14 +700,15 @@
   "active": false,
   "settings": {
     "executionOrder": "v1",
-    "binaryMode": "separate"
+    "binaryMode": "separate",
+    "availableInMCP": false
   },
-  "versionId": "087074f3-74c3-4eee-bb86-662ededd8495",
+  "versionId": "44fcc3ed-e8e2-41e5-8ddc-b2102b1329f5",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "feef0b6ee87dcd39ec5fcc0e79b366a9f7ff3edd17efc049d248155895cb4e3f"
   },
   "nodeGroups": [],
-  "id": "QZGerbPBfnBcjzZm",
+  "id": "TZksvEKH9Tq6FeK1",
   "tags": []
 }
