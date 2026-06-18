@@ -12,7 +12,16 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 _POST_MESSAGE_URL = "https://slack.com/api/chat.postMessage"
+_LOOKUP_EMAIL_URL = "https://slack.com/api/users.lookupByEmail"
 _MAX_SOURCES = 3
+
+
+class SlackUserNotFoundError(Exception):
+    """Raised when the email is not in the Slack workspace."""
+
+
+class SlackAPIError(Exception):
+    """Raised when the Slack API returns ok=false for a non-lookup reason."""
 
 
 async def post_text(channel: str, thread_ts: str | None, text: str) -> None:
@@ -39,6 +48,29 @@ async def post_reply(
         "text": answer,        # fallback for notifications / clients without blocks
         "blocks": blocks,
     })
+
+
+async def lookup_user_by_email(email: str) -> str:
+    """Return the Slack member ID for *email*.
+
+    Raises SlackUserNotFoundError if the email is not in the workspace.
+    Raises SlackAPIError for any other Slack error or transport failure.
+    """
+    headers = {"Authorization": f"Bearer {settings.SLACK_BOT_TOKEN}"}
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(_LOOKUP_EMAIL_URL, params={"email": email}, headers=headers)
+        data = resp.json()
+    except httpx.HTTPError as exc:
+        raise SlackAPIError(f"Transport error: {exc}") from exc
+
+    if not data.get("ok"):
+        error = data.get("error", "unknown_error")
+        if error == "users_not_found":
+            raise SlackUserNotFoundError(email)
+        raise SlackAPIError(error)
+
+    return data["user"]["id"]
 
 
 async def _post(payload: dict) -> None:

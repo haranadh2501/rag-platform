@@ -19,8 +19,12 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bots import slack
+from app.bots.slack import SlackAPIError, SlackUserNotFoundError
 from app.core.config import settings
 from app.core.database import AsyncSessionLocal, get_db
+from app.core.dependencies import require_role
+from app.models.models import User
+from app.schemas.webhook import SlackOnboardRequest, SlackOnboardResponse
 from app.services import message_service, pipeline_client
 from app.services.types import MessageContext
 
@@ -169,6 +173,46 @@ _MOCK_PIPELINE_RESPONSE = {
 async def mock_pipeline(_request: Request):
     """Canned success response so the message flow can be exercised without n8n."""
     return _MOCK_PIPELINE_RESPONSE
+
+
+@router.post("/slack/onboard", response_model=SlackOnboardResponse, summary="Link a platform user to their Slack identity")
+async def slack_onboard(
+    body: SlackOnboardRequest,
+    current_user: User = Depends(require_role("admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Look up *email* in the Slack workspace and write the member ID to the user row.
+
+    - 404 if the email is not a workspace member.
+    - 409 if the user already has a slack_user_id set.
+    - 503 if the Slack API is unreachable.
+    """
+    # Fetch member ID from Slack first — fails fast before any DB writes.
+    try:
+        slack_user_id = await slack.lookup_user_by_email(body.email)
+    except SlackUserNotFoundError:
+        raise HTTPException(status_code=404, detail="Email not found in Slack workspace")
+    except SlackAPIError as exc:
+        logger.error("Slack API error during onboard: %s", exc)
+        raise HTTPException(status_code=503, detail="Slack API unavailable")
+
+    # Find the platform user scoped to the admin's tenant.
+    result = await db.execute(
+        text("SELECT id, slack_user_id FROM users WHERE email = :email AND tenant_id = :tid"),
+        {"email": body.email, "tid": current_user.tenant_id},
+    )
+    row = result.mappings().first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="User not found in this tenant")
+    if row["slack_user_id"] is not None:
+        raise HTTPException(status_code=409, detail="User already has a Slack identity linked")
+
+    await db.execute(
+        text("UPDATE users SET slack_user_id = :sid WHERE id = :uid"),
+        {"sid": slack_user_id, "uid": row["id"]},
+    )
+    await db.commit()
+    return SlackOnboardResponse(slack_user_id=slack_user_id, email=body.email)
 
 
 @router.post("/n8n/ingestion-status", summary="n8n ingestion pipeline callback")

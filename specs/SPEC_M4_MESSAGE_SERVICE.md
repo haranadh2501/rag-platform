@@ -15,6 +15,7 @@
 - Conversation lifecycle: auto-find/create for (user_id, source), reset via `/new` `/reset` `/clear`
 - History: last 10 messages passed to pipeline as context
 - Mock pipeline endpoint for development (real n8n URL plugged in later via env var)
+- Slack user onboarding: look up user by email in workspace, return Slack member ID; error if not found
 
 **Out of scope:** WhatsApp, MCP, streaming, file uploads in chat, rolling summaries
 
@@ -232,6 +233,39 @@ class MessageContext:
 Accepts any valid pipeline payload, always returns a canned success response.
 Used during development. Replaced by real n8n URL in production via `PIPELINE_URL` env var.
 
+### Slack Onboard — `POST /webhooks/slack/onboard`
+
+Looks up a user by email in the connected Slack workspace and returns their Slack member ID.
+Intended for admin use to link a platform user to their Slack identity before they interact via bot.
+
+**Headers:** `Authorization: Bearer <JWT>` (admin only)
+
+**Request:**
+```json
+{ "email": "user@example.com" }
+```
+
+**200 Response:**
+```json
+{
+  "slack_user_id": "U0123456789",
+  "email": "user@example.com"
+}
+```
+
+**Errors:**
+- `401` — invalid/expired JWT
+- `403` — caller is not an admin
+- `404` — email not found in the Slack workspace (user must accept a Slack invite first)
+- `409` — user already has a `slack_user_id` set in the platform users table
+- `503` — Slack API unreachable or returned an unexpected error
+
+**Implementation notes:**
+- Calls `users.lookupByEmail` Slack API with `SLACK_BOT_TOKEN`
+- On success, `UPDATE users SET slack_user_id = ? WHERE email = ? AND tenant_id = ?`
+- The tenant is derived from the admin's JWT (`tenant_id` claim)
+- Do NOT create a new user row — only link an existing platform user to their Slack identity
+
 ---
 
 ## 6. Database
@@ -299,7 +333,7 @@ Constraint: `UNIQUE(user_id, channel)` — enforces one conversation per user pe
 | `backend/app/schemas/chat.py` | Keep | `ChatQueryRequest` — no changes |
 | `backend/app/models/models.py` | Keep | No changes |
 | `backend/app/main.py` | Modify | Register mock_pipeline router |
-
+| `backend/app/api/webhooks.py` | Modify | Add `POST /webhooks/slack/onboard` — Slack email lookup via `users.lookupByEmail`, update `users.slack_user_id` |
 ### Files to remove (replaced by `message_service.py`)
 
 | File | Reason |
@@ -361,3 +395,7 @@ Constraint: `UNIQUE(user_id, channel)` — enforces one conversation per user pe
 11. History → pipeline receives last 10 messages as context
 12. Mock pipeline → `POST /mock/pipeline` returns valid sample response
 13. Invalid/expired JWT on web → `401`, nothing downstream runs
+14. Slack onboard known email → `200` with `slack_user_id` returned; `users.slack_user_id` updated in DB
+15. Slack onboard unknown email → `404`, nothing written to DB
+16. Slack onboard duplicate (user already has `slack_user_id`) → `409`, no update performed
+17. Slack onboard non-admin caller → `403`
