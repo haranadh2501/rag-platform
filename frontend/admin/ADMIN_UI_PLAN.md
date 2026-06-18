@@ -1,0 +1,83 @@
+# ADMIN_UI_PLAN.md — Admin Portal Implementation Plan
+
+> Owner: M8. Check off tasks as you complete them. One PR per phase; title: `feat(admin-ui): <phase-name>`.
+
+## Phase 1 — Scaffold
+- [x] Next.js 14 project created: package.json, tsconfig.json, next.config.mjs, tailwind.config.ts, postcss.config.js, .eslintrc.json
+- [x] `@admin-types` path alias wired in tsconfig.json → `./admin/types/admin`
+- [x] `next-env.d.ts` committed so `tsc --noEmit` runs without a prior build
+- [x] Run `npm install` — package-lock.json generated (node v24.16.0 / npm 11.13.0)
+- [x] `npm run typecheck` — passed (0 errors)
+- [x] `npm run lint` — passed (0 warnings, 0 errors)
+- [x] `npm run build` — passed; Next.js 14.2.35; 3 routes compiled (/, /admin, /admin/documents)
+- [ ] Run `npx openapi-typescript ../../specs/openapi.yaml -o src/types/openapi.ts`
+- [x] Create `src/lib/apiClient.ts` — `apiRequest<T>()`: base URL from `NEXT_PUBLIC_API_URL`, supports GET/POST/PATCH/DELETE, JSON + FormData bodies, 204 handling, `ApiError` with `status` + `detail` message; `setAuthToken`/`getAuthToken` module-level store; 401 throws `ApiError` with TODO for authContext redirect
+  > **Auth strategy resolved**: stateless `Authorization: Bearer` on every request. `POST /auth/login`
+  > returns `access_token` in JSON body; `authContext` stores it in `localStorage` (key: `access_token`)
+  > and calls `setAuthToken(token)`. On app load `authContext` hydrates from `localStorage`.
+  > Login route is `/login` (shared — not `/admin/login`). `authContext.tsx` is done — see item below.
+- [x] Create `src/lib/authContext.tsx` — `AuthProvider` + `useAuth()`; exposes `token`, `isAuthenticated`, `isHydrated`, `login(token)`, `logout()`; stores `access_token` in `localStorage`; hydrates on mount via `useEffect`; logout removes from `localStorage` + calls `setAuthToken(null)`; `AuthProvider` wraps all routes from root layout (no JWT decode; no AuthGuard; no redirect)
+- [x] Move `AuthProvider` to root `src/app/layout.tsx`; removed from admin layout; login page calls `useAuth().login(token)` — `authContext` is the single write point for `access_token` (localStorage + apiClient in-memory store); no direct `localStorage` writes outside `authContext`
+- [x] Create `src/app/login/page.tsx` — placeholder shell: email input, password input, disabled "Sign in" button, amber notice (`POST /auth/login` wiring in a later phase); server component; no submit logic; no redirect; shared route `/login`
+- [x] Wire `src/app/login/page.tsx` — `POST /auth/login` (via `src/lib/authApi.ts`) → `useAuth().login(access_token)` → `router.replace(next || '/admin/documents')`
+  > **Contract source**: Auth.json (Postman collection, IISc RAG — Auth M2) confirmed against `specs/openapi.yaml`. No conflict. Request: `{ email, password }`; response: `{ access_token, token_type, user }`. Rate-limited to 5/min per IP.
+  > **Auth boundary**: `AuthProvider` is in root `layout.tsx` (available to all routes including `/login`). Login page calls `useAuth().login(token)` — `authContext` is the single place that writes `localStorage` and updates the in-memory `apiClient` store. No direct `localStorage` writes in the login page.
+  > **Integration scope**: this is the only Auth API integration in this phase. Document page wiring (`GET /admin/documents`, upload, URL ingest, detail, delete) is Phase 3 — separate from login. All document pages remain mock/placeholder.
+
+## Phase 2 — Shared Layout
+- [x] `src/app/admin/layout.tsx` — full sidebar + header shell (Documents, Users, Tenants🔒, Settings; Knowledge Base footer)
+- [x] `src/app/admin/documents/page.tsx` — mock UI with upload panel, quota card, document table, and pipeline stepper
+- [x] Sidebar collapses to hamburger on < 768 px
+- [x] Active nav item: `indigo-600` left border + background tint
+- [x] `AuthGuard` shell (`src/components/admin/AuthGuard.tsx`) — client component; redirects to `/login?next=<path>` when `localStorage` token absent; loading spinner while `isHydrated=false`; wraps `{children}` inside `AdminShellLayout`; localStorage-only check — no backend token verification; no role checks
+- [ ] Header: real tenant name + user menu + logout action (currently static "Acme Corp" / "A" avatar)
+- [ ] Call `GET /auth/me` after login to get `email` + `role`; expose via `authContext`; unblocks header real user display and role-based guards (Tenants 403)
+
+## Phase 3 — Documents Page
+- [ ] `src/app/admin/documents/page.tsx` — wire to real backend (`GET /admin/documents`, `POST /admin/documents/upload`, `POST /admin/documents/url`)
+- [x] `UploadSourcePanel` — tabbed: file drag-drop tab + URL ingest tab (mock; upload disabled, MOCK_N8N notice shown)
+- [ ] Client-side MIME + size (> 25 MB) validation before any network request
+- [ ] XHR progress bar during file upload
+- [x] `StorageQuotaBar` — mock quota values; amber at 80 %, red at 95 % (mock)
+- [x] `DocumentTable` — columns: Title, Type, Status, Chunks, Uploaded, Actions (mock data)
+- [x] `StatusBadge` — pending (slate) / processing (blue spinner) / completed (emerald) / failed (red X + error message) (mock)
+- [x] `StatusBadge` extracted to `src/components/admin/StatusBadge.tsx`; replaces inline logic in both `documents/page.tsx` and `documents/[id]/page.tsx`
+- [x] Pipeline stepper: uploaded → validated → parsed/OCR → chunked → embedded → stored; always-visible beneath each row (mock; expand/collapse is a future enhancement)
+- [x] Stepper: failed state shows red stage marker + `error_message`; completed state shows chunk count + indexed timestamp (mock)
+- [ ] 5 s polling for rows in `pending` or `processing`; stop when all rows reach a terminal state
+- [x] Filter bar by status — client-side filter over mock data; indigo active state; empty state row when no matches (mock)
+- [ ] Pagination 20/page (`GET /admin/documents?page=&per_page=20`)
+- [x] Actions column: "Detail" link → `/admin/documents/[doc.id]` for `completed` and `failed` rows; `pending` and `processing` rows show "—" (mock; Delete and Retry not yet wired)
+- [ ] `ConfirmDialog` before delete; empty state when no documents
+
+## Phase 4 — Document Detail Page
+- [x] `src/app/admin/documents/[id]/page.tsx` — placeholder shell: back link, amber dev notice, mock title / type / status / chunks / uploaded / source, failed-state red alert, disabled Delete button (mock; no backend, no ConfirmDialog)
+- [ ] `src/app/admin/documents/[id]/page.tsx` — wire to `GET /admin/documents/{id}`; replace mock with real fetched document
+- [ ] `status === 'failed'`: red alert box with `error_message` above delete button (live data)
+- [ ] Delete → `ConfirmDialog` → `DELETE /admin/documents/{id}` → redirect to `/admin/documents` + success toast
+
+## Phase 5 — Users Page
+- [x] `src/app/admin/users/page.tsx` — placeholder shell: title, description, empty table skeleton (mock; no backend, no auth)
+- [ ] `UserTable` — email, role pill (indigo/blue/slate), active, joined, Deactivate action (hidden for own row)
+- [ ] `InviteUserDrawer` — slide-over: email + role dropdown → `POST /admin/users/invite`; success inserts row + closes drawer
+
+## Phase 6 — Tenants Page
+- [x] `src/app/admin/tenants/page.tsx` — placeholder shell: title, super_admin badge, amber dev note, empty table skeleton (mock; no backend, no auth)
+- [ ] `src/app/admin/tenants/page.tsx` — renders 403 state for `admin` role; full table for `super_admin`
+- [ ] `TenantTable` — name, slug, plan, active, created, Edit / Deactivate actions
+- [ ] `TenantModal` — create (`POST /admin/tenants`) + edit (`PATCH /admin/tenants/{id}`)
+- [ ] Deactivate → `ConfirmDialog` → `PATCH` with `is_active: false`
+
+## Phase 7 — Settings Page
+- [x] `src/app/admin/settings/page.tsx` — placeholder shell: tenant info card (static placeholders), channel status row (Web/WhatsApp/Slack), rate limit text (mock; no backend)
+- [ ] Tenant info card: name, slug (read-only), plan badge — wired to real tenant data
+- [ ] Channel status row: Web ✓ · WhatsApp · Slack — grey when not configured per backend config
+- [ ] Rate limits info: "20 uploads / hour per tenant"
+
+## Phase 8 — Polish
+- [ ] Dark mode toggle (`next-themes`); all components use `dark:` variants; persists across navigation
+- [ ] Loading skeletons on initial page fetch (not just spinners)
+- [ ] Error toasts on API failure — display `response.detail`
+- [ ] 429 toast: "Upload limit reached (20/hour). Try again later."
+- [ ] Responsive review at 375 px, 768 px, 1280 px
+- [ ] All interactive elements keyboard-navigable with `focus-visible:ring-2 ring-indigo-500`
