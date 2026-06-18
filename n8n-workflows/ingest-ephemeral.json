@@ -12,58 +12,439 @@
       "name": "Webhook /ingest-ephemeral",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1.1,
-      "position": [240, 300]
+      "position": [
+        240,
+        380
+      ]
     },
     {
       "parameters": {
-        "functionCode": "// Same extract+chunk logic as ingestion-pipeline but smaller cap (10 MB).\n// Validate size; reject if oversized.\nreturn [{ json: { chunks: [], ...$json } }];"
+        "functionCode": "// n8n Function node: \"Validate\"\n// Fail-closed gateway for ephemeral ingestion. Runs before any extract/embed/INSERT.\nconst fs = require('fs');\nconst path = require('path');\n\n// n8n varies: payload may be at $json or $json.body\nconst src = ($json && $json.body) ? $json.body : $json;\n\nconst conversation_id = src.conversation_id;\nconst tenant_id       = src.tenant_id;\nconst file_path       = src.file_path;\nconst source_name     = src.source_name;\nconst rawTtl          = src.ttl_seconds;\n\n// 1. Required fields (tenant_id is the isolation gate -- never proceed without it)\nconst required = { conversation_id, tenant_id, file_path, source_name };\nfor (const [key, val] of Object.entries(required)) {\n  if (val === undefined || val === null || (typeof val === 'string' && val.trim() === '')) {\n    throw new Error(`Missing required field: ${key}`);\n  }\n}\n\n// 2. Path-traversal guard -- resolved path must live under /tmp or /uploads\nconst resolved = path.resolve(String(file_path));\nconst allowedRoots = ['/tmp/', '/uploads/'];\nconst underAllowedRoot = allowedRoots.some(root => resolved.startsWith(root));\nif (!underAllowedRoot) {\n  throw new Error(`file_path outside allowed roots (/tmp, /uploads): ${resolved}`);\n}\n\n// 3. Size cap -- 10 MB (MAX_WHATSAPP_UPLOAD_BYTES). statSync also surfaces missing files.\nconst MAX_BYTES = 10 * 1024 * 1024; // 10485760\nlet stat;\ntry {\n  stat = fs.statSync(resolved);\n} catch (e) {\n  throw new Error(`Cannot stat file_path: ${resolved} (${e.message})`);\n}\nif (!stat.isFile()) {\n  throw new Error(`file_path is not a regular file: ${resolved}`);\n}\nif (stat.size > MAX_BYTES) {\n  throw new Error(`File exceeds 10 MB limit: ${stat.size} bytes`);\n}\n\n// 4. TTL bounds -- default 3600; if provided must be an integer in [60, 86400]\nlet ttl_seconds = 3600;\nif (rawTtl !== undefined && rawTtl !== null && rawTtl !== '') {\n  const n = Number(rawTtl);\n  if (!Number.isFinite(n) || !Number.isInteger(n)) {\n    throw new Error(`ttl_seconds must be an integer: ${rawTtl}`);\n  }\n  if (n < 60 || n > 86400) {\n    throw new Error(`ttl_seconds out of range [60, 86400]: ${n}`);\n  }\n  ttl_seconds = n;\n}\n\nreturn [{\n  json: {\n    conversation_id: String(conversation_id),\n    tenant_id: String(tenant_id),\n    file_path: resolved,\n    source_name: String(source_name),\n    ttl_seconds,\n  },\n}];"
       },
-      "id": "extract-chunk",
-      "name": "Extract + Chunk",
+      "id": "validate",
+      "name": "Validate",
       "type": "n8n-nodes-base.function",
       "typeVersion": 1,
-      "position": [460, 300]
+      "position": [
+        440,
+        380
+      ],
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
-        "url": "https://api.voyageai.com/v1/embeddings",
+        "functionCode": "// n8n Function node: \"Extract Text\"\n// env: NODE_FUNCTION_ALLOW_BUILTIN=fs,path,os,child_process\n//      NODE_FUNCTION_ALLOW_EXTERNAL=pdf-parse,mammoth\n// container: poppler-utils (pdftoppm) required for scanned-PDF OCR (R1)\nconst fs = require('fs');\nconst path = require('path');\nconst os = require('os');\nconst { execFileSync } = require('child_process');\nconst pdfParse = require('pdf-parse');\nconst mammoth = require('mammoth');\n\nconst input = items[0].json;\nconst { conversation_id, tenant_id, source_name, ttl_seconds } = input;\nconst filePath = input.file_path;\n\n// Infer type from extension (Validate already guaranteed existence + path safety)\nconst ext = path.extname(source_name || filePath).toLowerCase().replace(/^\\./, '');\nconst SUPPORTED = ['pdf', 'docx', 'txt', 'png', 'jpg', 'jpeg'];\nif (!SUPPORTED.includes(ext)) {\n  throw new Error(`Unsupported file type: .${ext}`);   // -> 422 (validation)\n}\n\nconst TEXT_THRESHOLD = 20;   // chars; a PDF below this is treated as scanned\nconst passthrough = { conversation_id, tenant_id, source_name, ttl_seconds };\nconst dataUrl = (buf, mime) => `data:${mime};base64,${buf.toString('base64')}`;\nconst pageNum = f => parseInt((f.match(/(\\d+)\\.png$/) || [])[1] || '0', 10);\n\nlet out;\ntry {\n  if (ext === 'txt') {\n    out = { ...passthrough, source_type: 'txt', text: fs.readFileSync(filePath, 'utf8'),\n            needs_ocr: false, page_count: 1, images: [] };\n\n  } else if (ext === 'docx') {\n    const { value } = await mammoth.extractRawText({ path: filePath });\n    out = { ...passthrough, source_type: 'docx', text: value || '',\n            needs_ocr: false, page_count: 1, images: [] };\n\n  } else if (ext === 'pdf') {\n    const parsed = await pdfParse(fs.readFileSync(filePath));\n    const text = (parsed.text || '').trim();\n    if (text.length >= TEXT_THRESHOLD) {\n      out = { ...passthrough, source_type: 'pdf', text, needs_ocr: false,\n              page_count: parsed.numpages || 1, images: [] };\n    } else {\n      // Scanned PDF -> rasterize each page to PNG, hand images to OCR node (R1)\n      const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ocr-'));\n      execFileSync('pdftoppm', ['-png', '-r', '150', filePath, path.join(workDir, 'page')]);\n      const files = fs.readdirSync(workDir).filter(f => f.endsWith('.png'))\n                      .sort((a, b) => pageNum(a) - pageNum(b));\n      const images = files.map(f => ({\n        page_number: pageNum(f),\n        data_url: dataUrl(fs.readFileSync(path.join(workDir, f)), 'image/png'),\n      }));\n      out = { ...passthrough, source_type: 'pdf', text: '', needs_ocr: true,\n              page_count: images.length, images };\n    }\n\n  } else {\n    // png / jpg / jpeg -> single-image OCR\n    const mime = ext === 'png' ? 'image/png' : 'image/jpeg';\n    out = { ...passthrough, source_type: ext, text: '', needs_ocr: true, page_count: 1,\n            images: [{ page_number: 1, data_url: dataUrl(fs.readFileSync(filePath), mime) }] };\n  }\n} catch (e) {\n  // read / parse / rasterize failures are runtime -> 5xx\n  throw new Error(`Extraction failed for ${source_name}: ${e.message}`);\n}\n\nreturn [{ json: out }];"
+      },
+      "id": "extract",
+      "name": "Extract Text",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        640,
+        380
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.needs_ocr }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "ocr-needed",
+      "name": "Needs OCR?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        840,
+        380
+      ]
+    },
+    {
+      "parameters": {
         "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
-        "bodyContentType": "json",
-        "jsonBody": "={\n  \"model\": \"voyage-4-large\",\n  \"input\": $json.chunks.map(c => c.content),\n  \"input_type\": \"document\"\n}"
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"model\": \"gpt-4o-mini\", \"messages\": [ { \"role\": \"user\", \"content\": [ { \"type\": \"text\", \"text\": \"OCR these page images. Return only the extracted text in page order, with no commentary.\" } ].concat($json.images.map(im => ({ \"type\": \"image_url\", \"image_url\": { \"url\": im.data_url } }))) } ] } }}",
+        "options": {}
+      },
+      "id": "ocr",
+      "name": "OCR (gpt-4o-mini vision)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1040,
+        240
+      ],
+      "onError": "continueErrorOutput",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_ME",
+          "name": "OpenAIAuth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "// n8n Function node: \"Chunk\"\n// Passthrough (conversation_id, tenant_id, ...) is read directly from the\n// \"Extract Text\" node, so it survives the OCR HTTP call with NO reliance on any\n// \"Include Input Fields\" toggle. Text comes from the current item: Extract's\n// text on the non-OCR branch, or the OCR response (choices) on the OCR branch.\n// 512-word windows, 50-word overlap (MODULE_SPEC_M5).\nconst ex = $('Extract Text').first().json;   // passthrough + needs_ocr (both branches)\nconst cur = items[0].json;                    // Extract output OR OCR response\nconst used_ocr = ex.needs_ocr === true;\n\nlet text = (typeof cur.text === 'string' && cur.text.trim().length)\n  ? cur.text\n  : (cur.choices && cur.choices[0] && cur.choices[0].message\n      ? (cur.choices[0].message.content || '')\n      : '');\ntext = String(text).trim();\n\nif (!text.length) {\n  throw new Error(`No extractable text for ${ex.source_name}`);   // -> 5xx (runtime)\n}\n\nconst CHUNK_SIZE = 512;   // words\nconst OVERLAP = 50;\nconst words = text.split(/\\s+/).filter(Boolean);\nconst chunks = [];\nlet i = 0;\nwhile (i < words.length) {\n  chunks.push({\n    content: words.slice(i, i + CHUNK_SIZE).join(' '),\n    chunk_index: chunks.length,\n    page_number: null,     // page boundaries lost after concat; metadata.page_number optional\n  });\n  i += (CHUNK_SIZE - OVERLAP);\n}\n\nreturn [{\n  json: {\n    chunks,\n    conversation_id: ex.conversation_id,\n    tenant_id: ex.tenant_id,\n    source_name: ex.source_name,\n    ttl_seconds: ex.ttl_seconds,\n    used_ocr,\n  },\n}];"
+      },
+      "id": "chunk",
+      "name": "Chunk",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1240,
+        380
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.voyageai.com/v1/embeddings",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"model\": \"voyage-4-large\", \"input\": $json.chunks.map(c => c.content), \"input_type\": \"document\" } }}",
+        "options": {}
       },
       "id": "embed",
       "name": "Voyage embed",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [680, 300]
+      "position": [
+        1440,
+        380
+      ],
+      "onError": "continueErrorOutput",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_ME",
+          "name": "VoyageAuth"
+        }
+      }
     },
     {
       "parameters": {
-        "functionCode": "// INSERT INTO ephemeral_chunks(tenant_id, conversation_id, content, embedding, chunk_index, source_name, expires_at)\n// expires_at = NOW() + ($json.ttl_seconds || 3600) * INTERVAL '1 second'\nreturn [{ json: { stored: true, ttl_seconds: $json.ttl_seconds || 3600 } }];"
+        "functionCode": "// n8n Function node: \"Zip Rows\"\n// chunks[] + passthrough are read directly from the \"Chunk\" node; only the\n// embeddings (data[]) come from the current item (Voyage response). NO reliance\n// on any \"Include Input Fields\" toggle. Explodes to N row items whose field\n// order matches the $1..$8 INSERT contract.\nconst chunkOut = $('Chunk').first().json;\nconst cur = items[0].json;                   // Voyage response: { data: [{embedding, index}, ...] }\nconst chunks = chunkOut.chunks || [];\nconst data = (cur.data || []).slice();\n\nif (!chunks.length) {\n  throw new Error('Zip Rows: no chunks to store');   // -> 5xx\n}\nif (data.length !== chunks.length) {\n  throw new Error(`Embedding count mismatch: ${data.length} for ${chunks.length} chunks`); // -> 5xx\n}\n\ndata.sort((a, b) => (a.index ?? 0) - (b.index ?? 0));   // defensive: align by Voyage index\n\nconst { tenant_id, conversation_id, source_name, ttl_seconds, used_ocr } = chunkOut;\n\nreturn chunks.map((c, i) => {\n  const vec = data[i].embedding;\n  if (!Array.isArray(vec) || vec.length !== 1024) {\n    throw new Error(`Bad embedding for chunk ${i}: expected 1024 dims`);   // -> 5xx\n  }\n  return {\n    json: {\n      tenant_id,                                 // $1  isolation gate (rule 3)\n      conversation_id,                           // $2\n      content: c.content,                        // $3\n      embedding: `[${vec.join(',')}]`,           // $4  ::vector literal\n      chunk_index: c.chunk_index,                // $5\n      source_name,                               // $6\n      metadata: JSON.stringify({                 // $7  ::jsonb\n        used_ocr: used_ocr === true,\n        page_number: c.page_number ?? null,\n      }),\n      ttl_seconds,                               // $8\n    },\n  };\n});"
+      },
+      "id": "zip",
+      "name": "Zip Rows",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1640,
+        380
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO ephemeral_chunks (tenant_id, conversation_id, content, embedding, chunk_index, source_name, metadata, expires_at) VALUES ($1, $2, $3, $4::vector, $5, $6, $7::jsonb, NOW() + ($8 || ' seconds')::interval) RETURNING expires_at;",
+        "options": {
+          "queryReplacement": "={{ [$json.tenant_id, $json.conversation_id, $json.content, $json.embedding, $json.chunk_index, $json.source_name, $json.metadata, $json.ttl_seconds] }}"
+        }
       },
       "id": "store",
       "name": "Store ephemeral",
-      "type": "n8n-nodes-base.function",
-      "typeVersion": 1,
-      "position": [900, 300]
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1840,
+        380
+      ],
+      "onError": "continueErrorOutput",
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_ME",
+          "name": "EphemeralDB"
+        }
+      }
     },
     {
-      "parameters": { "respondWith": "json", "responseBody": "={{ $json }}" },
-      "id": "respond",
-      "name": "Respond",
-      "type": "n8n-nodes-base.respondToWebhook",
+      "parameters": {
+        "functionCode": "// n8n Function node: \"Format success\"\n// Sits between Store ephemeral and Respond (success). Builds the locked \u00a7B\n// success body. Postgres RETURNING gives expires_at (+ one item per inserted\n// row); conversation_id / used_ocr are pulled from the Chunk node (Postgres\n// output doesn't carry them).\nconst rows = items;                          // one item per inserted ephemeral_chunks row\nconst chunk_count = rows.length;\n\nif (!chunk_count) {\n  throw new Error('Format success: no rows were inserted');   // -> 5xx via Format Error\n}\n\nconst rawExpires = rows[0].json.expires_at;\nconst expires_at = (rawExpires instanceof Date) ? rawExpires.toISOString() : rawExpires;\n\nconst chunkMeta = $('Chunk').first().json;\n\nreturn [{\n  json: {\n    status: 'completed',\n    conversation_id: chunkMeta.conversation_id,\n    chunk_count,\n    used_ocr: chunkMeta.used_ocr === true,\n    expires_at,\n  },\n}];"
+      },
+      "id": "format-success",
+      "name": "Format success",
+      "type": "n8n-nodes-base.function",
       "typeVersion": 1,
-      "position": [1120, 300]
+      "position": [
+        2040,
+        380
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "respond",
+      "name": "Respond (success)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        2240,
+        380
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "// n8n Function node: \"Format Error\"\n// All error outputs converge here. Classify 422 (validation) vs 5xx (runtime)\n// and emit the locked failure body. Respond (failure) reads statusCode.\nconst j = items[0].json || {};\n\n// n8n error-output shape varies -- dig the thrown message out of the likely spots\nconst msg =\n  (j.error && (j.error.message || j.error.description)) ||\n  (typeof j.error === 'string' ? j.error : null) ||\n  j.message ||\n  'Unexpected error during ephemeral ingestion';\n\n// Validation messages from Validate + Extract Text -> 422; everything else -> 5xx.\n// .includes (not .startsWith) so an n8n-prepended node label doesn't break matching.\nconst VALIDATION_MARKERS = [\n  'Missing required field',\n  'file_path outside allowed roots',\n  'File exceeds 10 MB limit',\n  'ttl_seconds',                  // \"out of range\" / \"must be an integer\"\n  'Unsupported file type',\n];\nconst isValidation = VALIDATION_MARKERS.some(m => String(msg).includes(m));\n\nreturn [{\n  json: {\n    status: 'failed',\n    error: String(msg),\n    statusCode: isValidation ? 422 : 500,\n  },\n}];"
+      },
+      "id": "format-error",
+      "name": "Format Error",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1040,
+        600
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"status\": \"failed\", \"error\": $json.error } }}",
+        "options": {
+          "responseCode": "={{ $json.statusCode }}"
+        }
+      },
+      "id": "respond-error",
+      "name": "Respond (failure)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1240,
+        600
+      ]
     }
   ],
   "connections": {
-    "Webhook /ingest-ephemeral": { "main": [[{ "node": "Extract + Chunk", "type": "main", "index": 0 }]] },
-    "Extract + Chunk": { "main": [[{ "node": "Voyage embed", "type": "main", "index": 0 }]] },
-    "Voyage embed": { "main": [[{ "node": "Store ephemeral", "type": "main", "index": 0 }]] },
-    "Store ephemeral": { "main": [[{ "node": "Respond", "type": "main", "index": 0 }]] }
+    "Webhook /ingest-ephemeral": {
+      "main": [
+        [
+          {
+            "node": "Validate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate": {
+      "main": [
+        [
+          {
+            "node": "Extract Text",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Text": {
+      "main": [
+        [
+          {
+            "node": "Needs OCR?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Needs OCR?": {
+      "main": [
+        [
+          {
+            "node": "OCR (gpt-4o-mini vision)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Chunk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OCR (gpt-4o-mini vision)": {
+      "main": [
+        [
+          {
+            "node": "Chunk",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chunk": {
+      "main": [
+        [
+          {
+            "node": "Voyage embed",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Voyage embed": {
+      "main": [
+        [
+          {
+            "node": "Zip Rows",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Zip Rows": {
+      "main": [
+        [
+          {
+            "node": "Store ephemeral",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store ephemeral": {
+      "main": [
+        [
+          {
+            "node": "Format success",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format success": {
+      "main": [
+        [
+          {
+            "node": "Respond (success)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Error": {
+      "main": [
+        [
+          {
+            "node": "Respond (failure)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond (failure)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
   "active": false,
-  "settings": { "executionOrder": "v1" },
-  "tags": ["rag-platform", "ephemeral"]
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    "rag-platform",
+    "ephemeral"
+  ]
 }
