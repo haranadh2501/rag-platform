@@ -37,6 +37,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ── Rate limiting (in-process slowapi) ────────────────
+# Routes opt in with @limiter.limit(...). slowapi reads app.state.limiter at
+# request time; the handler turns an exceeded limit into a 429 (not a 500).
+from slowapi import _rate_limit_exceeded_handler  # noqa: E402
+from slowapi.errors import RateLimitExceeded  # noqa: E402
+from app.core.rate_limit import limiter  # noqa: E402
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 # ── Routers — wired up by M2 ──────────────────────────
 from app.api import auth, admin, chat, webhooks, onboarding  # noqa: E402
 app.include_router(auth.router,        prefix="/auth",        tags=["Auth"])

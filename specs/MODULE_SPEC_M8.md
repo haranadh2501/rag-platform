@@ -2,6 +2,11 @@
 
 **Owner**: Member 8 | **Track**: Frontend | **Branch**: `feat/admin-ui`
 
+> **Implementation source of truth**: `frontend/admin/ADMIN_UI_SPEC.md`.
+> This spec file gives the high-level overview; all page layouts, component contracts,
+> API call shapes, and acceptance criteria live in `frontend/admin/ADMIN_UI_SPEC.md`.
+> When this file and `ADMIN_UI_SPEC.md` conflict, `ADMIN_UI_SPEC.md` wins.
+
 ## Role
 Next.js admin dashboard: login, document upload, document management, user management, tenant settings.
 
@@ -9,13 +14,17 @@ Next.js admin dashboard: login, document upload, document management, user manag
 | Day | Deliverable | Done? |
 |---|---|---|
 | 1 | Set up Next.js 14 + TailwindCSS + project structure. Branch. | ☐ |
-| 2 | Generate API client from `specs/openapi.yaml` (openapi-typescript-codegen) | ☐ |
-| 2 | Login page + JWT auth context (cookie storage) | ☐ |
+| 2 | API client (`src/lib/apiClient.ts`) — manual fetch wrapper implemented; codegen skipped (see API Client Setup note below) | ☑ |
+| 2 | `authContext.tsx` done — localStorage hydration, login/logout, AuthProvider wraps layout | ☑ |
+| 2 | Login page (`/login`) placeholder — inputs + disabled button; `POST /auth/login` wiring pending | ☑ |
+| 2 | Wire login page to `POST /auth/login` → `authContext.login(token)` → redirect `/admin` | ☐ |
+| 2 | `AuthGuard` shell — redirects to `/login?next=<path>` when no localStorage token; localStorage-only check; no role checks | ☑ |
 | 2 | Admin layout: sidebar (Documents, Users, Tenants) + header | ☐ |
 | 2 | Document upload page: drag-drop + URL input form | ☐ |
 | 3 | Document list page: table with status badges (pending/processing/completed/failed) | ☐ |
 | 3 | Document detail page: metadata, chunk count, delete button | ☐ |
-| 4 | Wire to real backend: login flow + protected routes + real data | ☐ |
+| 4 | Wire login flow: `POST /auth/login` via `authApi.ts` → `localStorage` + `setAuthToken()` → redirect (Auth.json contract; login page only) | ☑ |
+| 4 | Wire document pages to real backend (`GET /admin/documents`, upload, detail, delete) — separate from login wiring | ☐ |
 | 5 | User management page: list users, invite form | ☐ |
 | 5 | Polish: loading states, error handling, toast notifications | ☐ |
 | 6 | Responsive design, final UI review | ☐ |
@@ -26,7 +35,7 @@ Next.js admin dashboard: login, document upload, document management, user manag
 
 ## Key Pages
 ```
-/admin/login          → login form
+/login                → login form (shared route — not under /admin)
 /admin/documents      → document list with upload button
 /admin/documents/[id] → document detail
 /admin/users          → user list + invite
@@ -35,7 +44,14 @@ Next.js admin dashboard: login, document upload, document management, user manag
 ```
 
 ## API Client Setup
+
+> **Implemented as a manual fetch wrapper** — codegen was skipped.
+> `src/lib/apiClient.ts` exports `apiRequest<T>()`, `ApiError`, `setAuthToken`, and `getAuthToken`.
+> The codegen command below is the original plan; it can still be run to generate typed stubs from
+> the OpenAPI spec, but the manual client is the active implementation and should not be overwritten.
+
 ```bash
+# Original codegen plan (not executed — manual client used instead):
 npx openapi-typescript-codegen \
   --input ../specs/openapi.yaml \
   --output src/lib/api \
@@ -43,20 +59,29 @@ npx openapi-typescript-codegen \
 ```
 
 ## Auth Context
+
+> **Auth strategy resolved**: stateless `Authorization: Bearer` on every request.
+> `POST /auth/login` returns `access_token` in the JSON body; `authContext` stores it in
+> `localStorage` (key: `access_token`) and calls `setAuthToken()` from `src/lib/apiClient.ts`.
+> On app load `authContext` reads `localStorage` and hydrates the token. No httpOnly cookie
+> or Next.js `/api/auth/callback` proxy needed.
+
 ```typescript
-// src/lib/auth.tsx
-// Store JWT in httpOnly cookie via /api/auth/callback route
-// Provide useAuth() hook: { user, token, login, logout }
-// Redirect to /admin/login if not authenticated
+// src/lib/authContext.tsx  (not yet implemented)
+// On login: POST /auth/login → localStorage.setItem('access_token', token) → setAuthToken(token)
+// On mount: localStorage.getItem('access_token') → setAuthToken(token) if present
+// Provide useAuth() hook: { user, role, login, logout }
+// On logout: localStorage.removeItem('access_token') → setAuthToken(null) → redirect to /login
+// On 401: apiClient throws ApiError(401); authContext/AuthGuard handles redirect to /login
 ```
 
 ## Document Status Badge Colors
 ```typescript
 const statusColors = {
-  pending: 'yellow',
-  processing: 'blue',
-  completed: 'green',
-  failed: 'red'
+  pending: 'slate',      // slate-400 — filled dot
+  processing: 'blue',    // blue-500 — spinning circle
+  completed: 'emerald',  // emerald-500 — filled dot
+  failed: 'red',         // red-500 — X mark + error_message
 }
 ```
 
@@ -85,12 +110,14 @@ const statusColors = {
 4. Create `src/lib/api.ts`: `fetch` wrapper that auto-attaches `Bearer `.
 
 ### Day 2 — Auth Pages
-5. `app/login/page.tsx`: email+password form → POST /auth/login → store token → redirect /admin.
-6. `app/admin/layout.tsx`: sidebar (Documents, Users, Tenants, Settings) + AuthGuard HOC redirecting to /login if no token.
+5. `app/login/page.tsx`: placeholder created (inputs + disabled button). Full wiring pending:
+   POST /auth/login → `authContext.login(token)` (stores in `localStorage` + calls `setAuthToken`) → redirect to `/admin/documents`.
+6. `app/admin/layout.tsx`: sidebar done. `AuthGuard` shell done — redirects to `/login?next=<path>`
+   when no localStorage token; no role checks yet. Role-based guards require `GET /auth/me` (see step 5 above).
 
 ### Day 3 — Document Upload + List
 7. `app/admin/documents/page.tsx`: drag-drop zone (use `react-dropzone`) → multipart POST /admin/documents/upload → optimistic row insert.
-8. Status badges: pending (gray) / processing (yellow spinner) / completed (green) / failed (red). Poll every 5 sec for pending rows.
+8. Status badges: pending (slate-400) / processing (blue-500 spinner) / completed (emerald-500) / failed (red-500 X). Poll every 5 sec for pending/processing rows.
 9. Add second tab "Add by URL" → JSON POST /admin/documents/url.
 
 ### Day 4 — Users + Tenants Mgmt
@@ -105,6 +132,10 @@ const statusColors = {
 ### Day 6 — Deploy + Tests
 15. Push to `main` → Vercel auto-deploys (M7 set this up).
 16. Cypress or Playwright smoke test: login → upload → see document in list.
+
+> **Current state — no test runner installed.** `package.json` has no jest/vitest/playwright/cypress.
+> Verification is `npm run typecheck` + `npm run lint` + `npm run build` + screenshot/manual review.
+> Install a test runner before implementing step 16.
 
 ## Learning Resources
 - Next.js App Router: https://nextjs.org/docs/app
