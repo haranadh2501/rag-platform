@@ -1,68 +1,76 @@
-"""Chat API routes — query (with MOCK_N8N mode), conversations.
-
-Owner: M3 (list/get/delete) · M4 (query endpoint wired here via PR coordination).
 """
+Chat API routes.
+- `POST /chat/query` — web adapter over the unified message service (Owner: M4).
+- conversation CRUD — Owner: M3 (stubs below).
+"""
+import logging
+from uuid import UUID, uuid4
+
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
 from app.models.models import User
-from app.schemas.chat import ChatQueryRequest
-from app.services.context_builder import build_web_context
-from app.services.conversation_router import find_or_create_conversation
-from app.services.message_handler import handle_message
+from app.services import message_service, pipeline_client
+from app.services.types import MessageContext
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+class ChatQueryRequest(BaseModel):
+    """Matches openapi.yaml ChatQueryRequest. Defined inline — no schemas/chat.py exists."""
+    query: str = Field(min_length=1, max_length=2000)
+    conversation_id: UUID | None = None
+    max_chunks: int = Field(default=5, ge=1, le=20)
 
 
 @router.post("/query", summary="Send a query — returns grounded answer with citations")
 async def chat_query(
-    body:         ChatQueryRequest,
-    current_user: User           = Depends(get_current_user),
-    db:           AsyncSession   = Depends(get_db),
+    payload: ChatQueryRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
-    """Web chat endpoint. Runs the full RAG pipeline inline and returns the answer."""
-    # Build normalized MessageContext from JWT-authenticated user
-    ctx = build_web_context(current_user, body.query, body.conversation_id)
+    """Build a web MessageContext from the JWT, delegate to process_message, return inline.
 
-    # Resolve conversation — validates ownership if conversation_id was provided
+    401 (invalid JWT) and 422 (missing query) are enforced by the dependency/schema.
+    """
+    ctx = MessageContext(
+        request_id=str(uuid4()),
+        source="web",
+        query=payload.query,
+        user_id=current_user.id,
+        tenant_id=current_user.tenant_id,
+        conversation_id=payload.conversation_id,
+    )
     try:
-        ctx.conversation_id = await find_or_create_conversation(ctx, db)
-    except PermissionError as exc:
-        raise HTTPException(status_code=403, detail=str(exc))
-
-    # Commit conversation so handle_message's independent session can see it
-    await db.commit()
-
-    # Run handler inline (Web is synchronous — blocks until n8n responds)
-    result = await handle_message(ctx)
-
-    if result is None:
-        raise HTTPException(status_code=502, detail="RAG service unavailable — please try again")
-
-    return result
+        return await message_service.process_message(ctx, db)
+    except message_service.ConversationOwnershipError:
+        raise HTTPException(status_code=403, detail="conversation_id belongs to another user")
+    except pipeline_client.PipelineError:
+        return JSONResponse(status_code=502, content={
+            "answer": message_service.FALLBACK_MESSAGE,
+            "sources": [],
+            "follow_up_questions": [],
+        })
 
 
 @router.get("/conversations", summary="List conversations")
-async def list_conversations(current_user: User = Depends(get_current_user)):
+async def list_conversations():
     """M3: Return conversations for current user."""
     raise HTTPException(status_code=501, detail="M3: implement conversation list")
 
 
 @router.get("/conversations/{conversation_id}", summary="Get conversation with messages")
-async def get_conversation(
-    conversation_id: str,
-    current_user: User = Depends(get_current_user),
-):
+async def get_conversation(conversation_id: str):
     """M3: Return conversation + all messages."""
     raise HTTPException(status_code=501, detail="M3: implement get conversation")
 
 
 @router.delete("/conversations/{conversation_id}", status_code=204)
-async def delete_conversation(
-    conversation_id: str,
-    current_user: User = Depends(get_current_user),
-):
+async def delete_conversation(conversation_id: str):
     """M3: Delete conversation and all messages."""
     raise HTTPException(status_code=501, detail="M3: implement delete conversation")

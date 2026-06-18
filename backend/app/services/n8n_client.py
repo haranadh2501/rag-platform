@@ -1,9 +1,10 @@
 """
 n8n HTTP client — called by FastAPI to trigger n8n workflows.
-Owner: M4 (retrieve); M3 (ingest). Do not put RAG logic here.
+Owner: M3 (uses this). Do not put RAG logic here.
 """
 import logging
 import httpx
+from typing import Optional
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -61,29 +62,23 @@ async def ingest(
 
 
 async def retrieve(
-    request_id:      str,
-    tenant_id:       str,
-    conversation_id: str,
-    current_message: str,
-    history:         list[dict],
+    query: str,
+    tenant_id: str,
+    conversation_history: Optional[list] = None,
+    max_chunks: int = 5,
 ) -> dict:
-    """Call n8n retrieval workflow. Returns answer, sources, follow_up_questions.
-
-    Raises httpx.TimeoutException after N8N_TIMEOUT_SECONDS (120s) — the caller
-    must treat this identically to a non-2xx response (no persist, fallback reply).
-    """
+    """Trigger n8n retrieval workflow and return grounded response."""
     if settings.MOCK_N8N:
-        logger.info(f"[MOCK] retrieve tenant={tenant_id} message='{current_message[:50]}'")
+        logger.info(f"[MOCK] Retrieval for tenant={tenant_id} query='{query[:50]}...'")
         return MOCK_RETRIEVE_RESPONSE
 
     payload = {
-        "request_id":      request_id,
-        "tenant_id":       tenant_id,
-        "conversation_id": conversation_id,
-        "current_message": current_message,
-        "history":         history,
+        "query": query,
+        "tenant_id": tenant_id,
+        "conversation_history": conversation_history or [],
+        "max_chunks": max_chunks,
     }
-    async with httpx.AsyncClient(timeout=120.0) as client:
+    async with httpx.AsyncClient(timeout=60.0) as client:
         resp = await client.post(settings.N8N_RETRIEVE_WEBHOOK_URL, json=payload)
         resp.raise_for_status()
         return resp.json()

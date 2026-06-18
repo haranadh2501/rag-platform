@@ -3,7 +3,6 @@ import uuid
 from datetime import datetime, timedelta
 from sqlalchemy import (
     Column, String, Boolean, DateTime, Integer, Numeric, Text, ForeignKey, JSON, BigInteger,
-    UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import DeclarativeBase, relationship
@@ -28,15 +27,13 @@ class Tenant(Base):
 
 class User(Base):
     __tablename__ = "users"
-    id             = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id      = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
-    email          = Column(String(255), unique=True, nullable=False)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    email = Column(String(255), unique=True, nullable=False)
     hashed_password = Column(String(255), nullable=False)
-    role           = Column(String(50), default="user")       # super_admin | admin | user
-    is_active      = Column(Boolean, default=True)
-    phone_number   = Column(String(20),  unique=True, nullable=True)   # M4: WhatsApp identity
-    slack_user_id  = Column(String(255), unique=True, nullable=True)   # M4: Slack identity
-    created_at     = Column(DateTime, default=datetime.utcnow)
+    role = Column(String(50), default="user")  # super_admin | admin | user
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
     tenant = relationship("Tenant", back_populates="users")
 
@@ -60,14 +57,11 @@ class Document(Base):
 
 class Conversation(Base):
     __tablename__ = "conversations"
-    __table_args__ = (
-        UniqueConstraint("user_id", "channel", name="uq_conversations_user_channel"),
-    )
-    id         = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id  = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
-    user_id    = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)  # M4: NOT NULL
-    title      = Column(String(500), nullable=True)
-    channel    = Column(String(50), default="web")    # web | slack | whatsapp
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    title = Column(String(500), nullable=True)
+    channel = Column(String(50), default="web")  # web | whatsapp | slack
     created_at = Column(DateTime, default=datetime.utcnow)
 
     messages = relationship("ChatMessage", back_populates="conversation", cascade="all, delete-orphan")
@@ -118,21 +112,5 @@ class UploadAudit(Base):
 class WhatsAppTenantMap(Base):
     __tablename__ = "whatsapp_tenant_map"
     phone_number = Column(String(20), primary_key=True)
-    tenant_id    = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
-    created_at   = Column(DateTime, default=datetime.utcnow)
-
-
-class SlackWorkspaceMap(Base):
-    """Maps a Slack workspace (team_id) to a platform tenant. Mirrors whatsapp_tenant_map."""
-    __tablename__ = "slack_workspace_map"
-    team_id    = Column(String(64), primary_key=True)
-    tenant_id  = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
-
-
-class ProcessedRequest(Base):
-    """Deduplication table for webhook retries (Slack event_id / Twilio MessageSid).
-    Rows older than 24 hours should be purged by a daily maintenance job."""
-    __tablename__ = "processed_requests"
-    request_id  = Column(String(255), primary_key=True)
-    received_at = Column(DateTime, default=datetime.utcnow)

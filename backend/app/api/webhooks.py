@@ -1,117 +1,33 @@
-"""Webhook routes — WhatsApp (Twilio), Slack Events, n8n callbacks.
-Owner: M4.
+"""
+Webhook routes — WhatsApp (Twilio), Slack Events, n8n callbacks.
+Owner: M4 — implement route bodies.
 """
 import hashlib
 import hmac
 import json
 import logging
-import time
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, Response
-from sqlalchemy.dialects.postgresql import insert as pg_insert
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    HTTPException,
+    Request,
+    Response,
+)
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.bots import slack
 from app.core.config import settings
-from app.core.database import AsyncSessionLocal
-from app.models.models import ProcessedRequest
-from app.services.context_builder import build_slack_context
-from app.services.conversation_router import reset_conversation
-from app.services.message_handler import handle_message
+from app.core.database import AsyncSessionLocal, get_db
+from app.services import message_service, pipeline_client
+from app.services.types import MessageContext
 
-router = APIRouter()
 logger = logging.getLogger(__name__)
 
+router = APIRouter()
 
-# ── helpers ──────────────────────────────────────────────────────────────────
-
-def _verify_slack_signature(headers: dict, body: bytes) -> None:
-    """Raise HTTPException 403 if Slack HMAC does not match or timestamp is stale."""
-    timestamp = headers.get("x-slack-request-timestamp", "")
-    signature = headers.get("x-slack-signature", "")
-
-    try:
-        ts_int = int(timestamp)
-    except (ValueError, TypeError):
-        raise HTTPException(status_code=403, detail="Missing or invalid timestamp header")
-
-    # Reject replays older than 5 minutes
-    if abs(time.time() - ts_int) > 300:
-        raise HTTPException(status_code=403, detail="Request timestamp too old")
-
-    sig_base = f"v0:{timestamp}:".encode() + body
-    expected = "v0=" + hmac.new(
-        settings.SLACK_SIGNING_SECRET.encode(),
-        sig_base,
-        hashlib.sha256,
-    ).hexdigest()
-
-    if not hmac.compare_digest(expected, signature):
-        raise HTTPException(status_code=403, detail="Invalid Slack signature")
-
-
-# ── Slack Events ─────────────────────────────────────────────────────────────
-
-@router.post("/slack/events", summary="Slack Events API webhook")
-async def slack_events(request: Request, background_tasks: BackgroundTasks):
-    # Must read raw bytes BEFORE any other body access — body is a one-shot stream
-    body = await request.body()
-
-    # Step 1 — HMAC verification (fast; raises 403 if invalid)
-    _verify_slack_signature(dict(request.headers), body)
-
-    payload = json.loads(body)
-
-    # URL verification handshake (one-time, during Slack app setup)
-    if payload.get("type") == "url_verification":
-        return {"challenge": payload["challenge"]}
-
-    event = payload.get("event", {})
-
-    # Ignore events from bots to prevent reply loops
-    if event.get("bot_id"):
-        return Response(status_code=200)
-
-    event_id = payload.get("event_id", "")
-
-    # Step 2 — Dedup: insert-on-conflict; rowcount 0 means already processed
-    async with AsyncSessionLocal() as db:
-        stmt = (
-            pg_insert(ProcessedRequest)
-            .values(request_id=event_id)
-            .on_conflict_do_nothing()
-        )
-        result = await db.execute(stmt)
-        await db.commit()
-
-    if result.rowcount == 0:
-        return Response(status_code=200)   # duplicate event_id — already handled
-
-    # Step 3 — Build MessageContext (resolve workspace + user)
-    try:
-        async with AsyncSessionLocal() as db:
-            ctx = await build_slack_context(payload, db)
-    except (ValueError, LookupError) as exc:
-        logger.warning("Slack context build failed: %s", exc)
-        return Response(status_code=200)   # ACK Slack; do not trigger a retry
-
-    # Step 4 — Reset command short-circuit (never touches n8n)
-    if ctx.reset_requested:
-        async with AsyncSessionLocal() as db:
-            async with db.begin():
-                await reset_conversation(ctx, db)
-        from app.bots.slack import post_text
-        await post_text(
-            channel   = event.get("channel", ""),
-            thread_ts = event.get("ts", ""),
-            text      = "New conversation started ✓",
-        )
-        return Response(status_code=200)
-
-    # Step 5 — ACK immediately; conversation lookup + n8n + delivery run in background
-    background_tasks.add_task(handle_message, ctx)
-    return Response(status_code=200)
-
-
-# ── WhatsApp (Twilio) ─────────────────────────────────────────────────────────
 
 @router.post("/whatsapp", summary="Twilio WhatsApp incoming message")
 async def whatsapp_webhook(request: Request):
@@ -127,15 +43,133 @@ async def whatsapp_webhook(request: Request):
     message_body = form.get("Body", "")
     from_number = form.get("From", "")
     # M4: implement real logic
-    twiml = (
-        f'<?xml version="1.0"?><Response>'
-        f'<Message>M4: implement WhatsApp handler. Received: {message_body[:50]}</Message>'
-        f'</Response>'
-    )
+    twiml = f'<?xml version="1.0"?><Response><Message>M4: implement WhatsApp handler. Received: {message_body[:50]}</Message></Response>'
     return Response(content=twiml, media_type="application/xml")
 
 
-# ── n8n ingestion callback ────────────────────────────────────────────────────
+def _verify_slack_signature(raw_body: bytes, timestamp: str, signature: str) -> bool:
+    """HMAC-SHA256 verification per Slack's signing spec."""
+    if not timestamp or not signature or not settings.SLACK_SIGNING_SECRET:
+        return False
+    basestring = b"v0:" + timestamp.encode() + b":" + raw_body
+    digest = hmac.new(
+        settings.SLACK_SIGNING_SECRET.encode(), basestring, hashlib.sha256
+    ).hexdigest()
+    return hmac.compare_digest(f"v0={digest}", signature)
+
+
+async def _process_slack_event(
+    event_id: str,
+    team_id: str | None,
+    slack_user_id: str,
+    query: str,
+    channel: str | None,
+    thread_ts: str | None,
+) -> None:
+    """Background task — runs Steps 2–8 with its own DB session (request session is closed)."""
+    async with AsyncSessionLocal() as db:
+        ctx = MessageContext(
+            request_id=event_id,
+            source="slack",
+            query=query,
+            slack_channel=channel,
+            slack_thread_ts=thread_ts,
+            slack_team_id=team_id,
+            slack_user_id=slack_user_id,
+        )
+        try:
+            await message_service.process_message(ctx, db)
+        except pipeline_client.PipelineError:
+            await slack.post_text(channel, thread_ts, message_service.FALLBACK_MESSAGE)
+        except message_service.IdentityResolutionError as exc:
+            logger.error("Slack identity resolution failed: %s", exc)
+        except Exception:  # noqa: BLE001 — never let a bg task crash silently
+            logger.exception("Slack event processing failed (event_id=%s)", event_id)
+
+
+@router.post("/slack/events", summary="Slack Events API webhook")
+async def slack_events(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+):
+    """Verify → ACK 200 fast; heavy work runs in a BackgroundTask."""
+    raw = await request.body()
+    timestamp = request.headers.get("X-Slack-Request-Timestamp", "")
+    signature = request.headers.get("X-Slack-Signature", "")
+    if not _verify_slack_signature(raw, timestamp, signature):
+        raise HTTPException(status_code=403, detail="Invalid Slack signature")
+
+    body = json.loads(raw)
+
+    if body.get("type") == "url_verification":
+        return {"challenge": body.get("challenge")}
+
+    event = body.get("event") or {}
+    if event.get("bot_id"):                       # prevent reply loops
+        return {"ok": True}
+
+    event_id = body.get("event_id")
+
+    # Dedup: first writer wins; a duplicate event_id inserts nothing.
+    if event_id:
+        result = await db.execute(
+            text("INSERT INTO processed_requests (request_id) VALUES (:rid) "
+                 "ON CONFLICT DO NOTHING"),
+            {"rid": event_id},
+        )
+        await db.commit()
+        if result.rowcount == 0:
+            return {"ok": True}                   # duplicate — already handled
+
+    user = event.get("user")
+    message_text = event.get("text")
+    if not event_id or not user or not message_text:
+        logger.warning(
+            "Slack event missing required fields: event_id=%s user=%s has_text=%s",
+            event_id, user, bool(message_text),
+        )
+        return {"ok": True}                       # 200 so Slack doesn't retry
+
+    background_tasks.add_task(
+        _process_slack_event,
+        event_id,
+        body.get("team_id"),
+        user,
+        message_text,
+        event.get("channel"),
+        event.get("thread_ts") or event.get("ts"),
+    )
+    return {"ok": True}
+
+
+# ── Mock pipeline — dev only. Hosted here (already-registered /webhooks router)
+#    so no change to main.py is required. PIPELINE_URL defaults to this path. ──
+_MOCK_PIPELINE_RESPONSE = {
+    "answer": "This is a sample response from the mock pipeline. In production this "
+              "will be a grounded answer from the RAG engine. [Sample Manual, p.12]",
+    "sources": [
+        {
+            "document_id": "00000000-0000-0000-0000-000000000001",
+            "title": "Sample Product Manual",
+            "chunk_text": "Sample relevant excerpt used to generate this answer.",
+            "page_number": 12,
+            "score": 0.94,
+        }
+    ],
+    "follow_up_questions": [
+        "Can you explain this in more detail?",
+        "What are the next steps?",
+        "Who should I contact for further help?",
+    ],
+}
+
+
+@router.post("/mock/pipeline", summary="Mock RAG pipeline (dev only)")
+async def mock_pipeline(_request: Request):
+    """Canned success response so the message flow can be exercised without n8n."""
+    return _MOCK_PIPELINE_RESPONSE
+
 
 @router.post("/n8n/ingestion-status", summary="n8n ingestion pipeline callback")
 async def n8n_ingestion_callback(request: Request):
