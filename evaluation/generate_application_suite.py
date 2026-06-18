@@ -6,6 +6,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from evaluation.generate_kubernetes_dataset import SOURCE_DOCUMENTS as KUBERNETES_DOCUMENTS
+from evaluation.generate_kubernetes_dataset import build_cases as build_kubernetes_cases
 from evaluation.generate_bug_dataset import SOURCE_DOCUMENTS as BUG_DOCUMENTS
 from evaluation.generate_bug_dataset import build_cases as build_bug_cases
 
@@ -383,6 +385,17 @@ def _case(
 
 def build_suite_cases() -> list[dict[str, Any]]:
     cases: list[dict[str, Any]] = []
+    for case in build_kubernetes_cases():
+        copied = dict(case)
+        copied["expected_sources"] = [
+            {
+                **source,
+                "document": f"kubernetes_troubleshooting/{source['document']}",
+            }
+            for source in case["expected_sources"]
+        ]
+        cases.append(copied)
+
     for case in build_bug_cases():
         copied = dict(case)
         copied["expected_sources"] = [
@@ -403,6 +416,11 @@ def build_suite_cases() -> list[dict[str, Any]]:
 def generate(dataset_path: Path, source_dir: Path) -> None:
     source_dir.mkdir(parents=True, exist_ok=True)
     dataset_path.parent.mkdir(parents=True, exist_ok=True)
+
+    kubernetes_dir = source_dir / "kubernetes_troubleshooting"
+    kubernetes_dir.mkdir(parents=True, exist_ok=True)
+    for filename, content in KUBERNETES_DOCUMENTS.items():
+        (kubernetes_dir / filename).write_text(content, encoding="utf-8")
 
     bug_dir = source_dir / "bug-reporting"
     bug_dir.mkdir(parents=True, exist_ok=True)
@@ -428,7 +446,7 @@ def main() -> None:
     args = parser.parse_args()
     generate(args.output, args.source_dir)
     cases = build_suite_cases()
-    print(f"Generated {len(cases)} cases across {len(APPLICATIONS) + 1} applications")
+    print(f"Generated {len(cases)} cases across {len(APPLICATIONS) + 2} applications")
     print(f"Dataset: {args.output}")
     print(f"Sources: {args.source_dir}")
 

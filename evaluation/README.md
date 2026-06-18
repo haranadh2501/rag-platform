@@ -3,10 +3,13 @@
 This module provides synthetic knowledge bases, test cases, validation,
 live-system execution, RAGAS scoring, quality gates, and automatic reports.
 
-The combined suite contains **118 cases across 12 applications**:
+The combined suite contains **148 cases across 13 applications**. Kubernetes
+troubleshooting is generated first, so smoke runs with `--max-cases` exercise it
+before the other domains.
 
 | Application | Purpose | Cases |
 |---|---|---:|
+| `kubernetes_troubleshooting` | Pods, networking, storage, managed K8s, post-mortem patterns | 30 |
 | `bug_reporting` | Triage, known issues, severity, evidence | 30 |
 | `it_helpdesk` | Password, VPN, MFA, devices, software | 8 |
 | `customer_support` | Warranty, returns, troubleshooting | 8 |
@@ -70,5 +73,8 @@ Each run automatically writes timestamped and `latest` versions of:
 
 Use `--application it_helpdesk` to test one application. Repeat the argument to
 select several applications.
+
+Use `--application kubernetes_troubleshooting` to run only the Kubernetes
+troubleshooting priority suite.
 
 See [TESTING_GUIDE.md](TESTING_GUIDE.md) for the complete workflow.

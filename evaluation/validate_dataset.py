@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parent
 DEFAULT_DATASET = ROOT / "application_suite.jsonl"
 DEFAULT_SOURCE_DIR = ROOT / "sample-data"
 EXPECTED_APPLICATIONS = {
+    "kubernetes_troubleshooting",
     "bug_reporting",
     "it_helpdesk",
     "customer_support",
@@ -257,8 +258,8 @@ def validate_dataset(
 
     if suite_profile:
         applications = Counter(case.get("application") for case in cases)
-        if len(cases) != 118:
-            issues.append(ValidationIssue("error", f"Expected 118 suite cases, found {len(cases)}"))
+        if len(cases) != 148:
+            issues.append(ValidationIssue("error", f"Expected 148 suite cases, found {len(cases)}"))
         missing_applications = EXPECTED_APPLICATIONS - set(applications)
         unexpected_applications = set(applications) - EXPECTED_APPLICATIONS
         if missing_applications:

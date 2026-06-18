@@ -2,7 +2,9 @@
 
 ## 1. What Is Tested
 
-The suite tests retrieval and answer generation across 12 application domains.
+The suite tests retrieval and answer generation across 13 application domains.
+Kubernetes troubleshooting is first in the generated dataset, so small
+connectivity checks exercise it before the other domains.
 Every answerable case contains:
 
 - A question
@@ -18,7 +20,8 @@ whether the system abstains instead of inventing information.
 
 | File | Purpose |
 |---|---|
-| `generate_application_suite.py` | Generates all source documents and 118 cases |
+| `generate_application_suite.py` | Generates all source documents and 148 cases |
+| `generate_kubernetes_dataset.py` | Generates the Kubernetes priority dataset |
 | `application_suite.jsonl` | Combined benchmark |
 | `sample-data/<application>/` | Documents to ingest |
 | `validate_dataset.py` | Structural and grounding validation |
@@ -27,8 +30,9 @@ whether the system abstains instead of inventing information.
 | `reporting.py` | JSON, CSV, Markdown, and HTML reports |
 | `requirements.txt` | Evaluation-only dependencies |
 
-The original 30-case bug-reporting dataset remains available as
-`qa_dataset.jsonl`.
+The standalone 30-case Kubernetes troubleshooting dataset is available as
+`kubernetes_dataset.jsonl`. The original 30-case bug-reporting dataset remains
+available as `qa_dataset.jsonl`.
 
 ## 3. Install Dependencies
 
@@ -53,7 +57,7 @@ python -m evaluation.generate_application_suite
 Expected output:
 
 ```text
-Generated 118 cases across 12 applications
+Generated 148 cases across 13 applications
 ```
 
 Generation is deterministic. Running it again should produce the same source
@@ -69,7 +73,7 @@ Validation checks:
 
 1. Required fields and data types
 2. Unique IDs and questions
-3. All 12 applications are present
+3. All 13 applications are present
 4. Minimum eight cases per application
 5. At least one unanswerable case per application
 6. Expected source files and section names exist
@@ -79,7 +83,7 @@ Validation checks:
 Expected result:
 
 ```text
-Validated 118 cases: 0 errors, 0 warnings
+Validated 148 cases: 0 errors, 0 warnings
 ```
 
 ## 6. Run Automated Preflight
@@ -160,6 +164,12 @@ Run one application:
 
 ```powershell
 python -m evaluation.run_eval --suite-dataset --application it_helpdesk
+```
+
+Run the Kubernetes priority suite:
+
+```powershell
+python -m evaluation.run_eval --suite-dataset --application kubernetes_troubleshooting
 ```
 
 Run several applications:

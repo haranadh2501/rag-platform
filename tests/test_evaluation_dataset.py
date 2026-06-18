@@ -9,6 +9,7 @@ from pathlib import Path
 
 from evaluation.generate_application_suite import generate as generate_application_suite
 from evaluation.generate_bug_dataset import generate
+from evaluation.generate_kubernetes_dataset import generate as generate_kubernetes_dataset
 from evaluation.reporting import write_evaluation_bundle, write_preflight_bundle
 from evaluation.run_eval import (
     _is_mock_response,
@@ -51,10 +52,33 @@ class EvaluationDatasetTests(unittest.TestCase):
             applications = Counter(case["application"] for case in report.cases)
 
             self.assertTrue(report.is_valid, [issue.format() for issue in report.errors])
-            self.assertEqual(len(report.cases), 118)
-            self.assertEqual(len(applications), 12)
+            self.assertEqual(len(report.cases), 148)
+            self.assertEqual(len(applications), 13)
+            self.assertEqual(report.cases[0]["application"], "kubernetes_troubleshooting")
+            self.assertEqual(applications["kubernetes_troubleshooting"], 30)
             self.assertEqual(applications["bug_reporting"], 30)
             self.assertTrue(all(count >= 8 for count in applications.values()))
+
+    def test_kubernetes_dataset_passes_validation(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            dataset = root / "kubernetes_dataset.jsonl"
+            source_dir = root / "sources"
+            generate_kubernetes_dataset(dataset, source_dir)
+
+            report = validate_dataset(dataset, source_dir)
+            categories = Counter(case["category"] for case in report.cases)
+
+            self.assertTrue(report.is_valid, [issue.format() for issue in report.errors])
+            self.assertEqual(len(report.cases), 30)
+            self.assertEqual(
+                {case["application"] for case in report.cases},
+                {"kubernetes_troubleshooting"},
+            )
+            self.assertGreaterEqual(sum(case["answerable"] for case in report.cases), 28)
+            self.assertEqual(sum(not case["answerable"] for case in report.cases), 2)
+            self.assertGreaterEqual(categories["multi_hop"], 4)
+            self.assertGreaterEqual(categories["safety"], 2)
 
     def test_validator_rejects_reference_not_present_in_source(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
