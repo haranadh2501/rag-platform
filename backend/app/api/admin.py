@@ -3,6 +3,13 @@ Admin API routes — documents, users, tenants.
 Owner: M3 (documents) + M2 (users/tenants).
 """
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.database import get_db
+from app.core.dependencies import require_role
+from app.models.models import User
+from app.schemas.auth import UserList, UserOut
 
 router = APIRouter()
 
@@ -44,10 +51,21 @@ async def delete_document(document_id: str):
     raise HTTPException(status_code=501, detail="M3: implement delete document")
 
 
-@router.get("/users", summary="List users in current tenant")
-async def list_users():
-    """M2: Return users filtered by tenant_id."""
-    raise HTTPException(status_code=501, detail="M2: implement user list")
+@router.get("/users", response_model=UserList, summary="List users in current tenant")
+async def list_users(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role("admin")),
+):
+    """List users in the caller's tenant. Admin/super_admin only; always scoped
+    to the caller's tenant_id (super_admin sees its own tenant here — cross-tenant
+    listing lives under /admin/tenants)."""
+    result = await db.execute(
+        select(User)
+        .where(User.tenant_id == current_user.tenant_id)
+        .order_by(User.created_at)
+    )
+    users = result.scalars().all()
+    return UserList(users=[UserOut.model_validate(u) for u in users], total=len(users))
 
 
 @router.post("/users/invite", status_code=201, summary="Invite user")
