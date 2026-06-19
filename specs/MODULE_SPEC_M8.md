@@ -17,15 +17,18 @@ Next.js admin dashboard: login, document upload, document management, user manag
 | 2 | API client (`src/lib/apiClient.ts`) — manual fetch wrapper implemented; codegen skipped (see API Client Setup note below) | ☑ |
 | 2 | `authContext.tsx` done — localStorage hydration, login/logout, AuthProvider wraps layout | ☑ |
 | 2 | Login page (`/login`) placeholder — inputs + disabled button; `POST /auth/login` wiring pending | ☑ |
-| 2 | Wire login page to `POST /auth/login` → `authContext.login(token)` → redirect `/admin` | ☐ |
+| 2 | Wire login page to `POST /auth/login` → `authContext.login(token, user)` → redirect `/admin` | ☑ |
 | 2 | `AuthGuard` shell — redirects to `/login?next=<path>` when no localStorage token; localStorage-only check; no role checks | ☑ |
 | 2 | Admin layout: sidebar (Documents, Users, Tenants) + header | ☐ |
 | 2 | Document upload page: drag-drop + URL input form | ☐ |
 | 3 | Document list page: table with status badges (pending/processing/completed/failed) | ☐ |
 | 3 | Document detail page: metadata, chunk count, delete button | ☐ |
 | 4 | Wire login flow: `POST /auth/login` via `authApi.ts` → `localStorage` + `setAuthToken()` → redirect (Auth.json contract; login page only) | ☑ |
-| 4 | Wire document pages to real backend (`GET /admin/documents`, upload, detail, delete) — separate from login wiring | ☐ |
-| 5 | User management page: list users, invite form | ☐ |
+| 4 | Wire URL ingestion: Add by URL tab → `n8nIngestionApi.ts` → n8n webhook (demo mode); `NEXT_PUBLIC_N8N_INGEST_WEBHOOK_URL` + `NEXT_PUBLIC_DEMO_TENANT_ID` in `.env.example`; accepted-state UX with optimistic pending→processing local demo transition. **Superseded by backend API wiring below.** | ☑ |
+| 4 | Wire Add by URL to backend API: `src/lib/documentApi.ts` → `ingestDocumentUrlApi({ url, title? })` → `apiRequest<DocumentOut>('POST', '/admin/documents/url', body)`; Bearer token attached automatically by `apiClient`; no direct browser → n8n call; `n8nIngestionApi.ts` no longer imported in `documents/page.tsx` (kept for reference); backend owns JWT validation, tenant isolation, and n8n trigger; response 202 `DocumentOut` fields populate the optimistic row; if backend returns `pending`, local 1500 ms `setTimeout` advances row to `processing` for demo feedback (NOT correlated with actual n8n progress); completed status requires real `GET /admin/documents` data; `GET /admin/documents` polling/list refresh remains pending | ☑ |
+| 4 | URL ingestion error UX polish: `classifyUrlError(err)` in `page.tsx` maps `ApiError.status` to friendly messages (401/403/404/429/5xx) and maps network/CORS `TypeError` to "could not reach service"; all paths include `Technical detail: <message>` in muted sub-text; `urlError` state is now `{ message, detail } \| null`; no optimistic row inserted on failure; button re-enables; `aria-live="assertive"` preserved; `ApiError` imported from `apiClient.ts`; direct n8n browser call not in UI path; backend/CORS availability can block URL ingestion | ☑ |
+| 4 | Wire document pages to real backend (`GET /admin/documents`, file upload, detail, delete) — separate from URL ingest wiring | ☐ |
+| 5 | User management page: list users, invite form | ☑ (mock) |
 | 5 | Polish: loading states, error handling, toast notifications | ☐ |
 | 6 | Responsive design, final UI review | ☐ |
 
@@ -58,6 +61,28 @@ npx openapi-typescript-codegen \
   --client axios
 ```
 
+## Registration Endpoint
+
+> **Endpoint confirmed** (Auth.json + openapi.yaml): `POST /auth/register` (Auth.json) and
+> `POST /admin/users/invite` (openapi.yaml) both exist and share `RegisterRequest`:
+> `{ email, password, tenant_id, role? }`. Both are **admin-gated** (require Bearer token) —
+> not a public self-service signup. Use `POST /admin/users/invite` from the admin portal.
+>
+> **First-time vs returning user**: There is no registration page for end users. First-time users
+> are provisioned by admins via the Invite User drawer. All users (first-time and returning)
+> authenticate at `/login`.
+>
+> **Backend-owned rules** (frontend must not replicate these):
+> - Unique email enforcement — backend rejects duplicates
+> - Password hashing — frontend never stores or transmits a hashed password; sends plaintext over TLS; backend hashes on receipt
+> - Tenant-scope guard — 403 if caller passes a `tenant_id` that does not match their own (non-`super_admin`)
+> - Slack onboarding lookup by email — backend responsibility; not a frontend concern
+>
+> **Implementation blockers** (must be resolved with M1/M2 before Phase 5 wiring):
+> 1. `phone_number` not in `RegisterRequest` → raise with M1 to update `openapi.yaml`
+> 2. 409 response for duplicate email not defined in `openapi.yaml` → raise with M1/M2
+> 3. `password` required by schema but absent from current drawer UX spec → confirm auto-generate vs. form field with M2
+
 ## Auth Context
 
 > **Auth strategy resolved**: stateless `Authorization: Bearer` on every request.
@@ -67,12 +92,22 @@ npx openapi-typescript-codegen \
 > or Next.js `/api/auth/callback` proxy needed.
 
 ```typescript
-// src/lib/authContext.tsx  (not yet implemented)
-// On login: POST /auth/login → localStorage.setItem('access_token', token) → setAuthToken(token)
-// On mount: localStorage.getItem('access_token') → setAuthToken(token) if present
-// Provide useAuth() hook: { user, role, login, logout }
-// On logout: localStorage.removeItem('access_token') → setAuthToken(null) → redirect to /login
-// On 401: apiClient throws ApiError(401); authContext/AuthGuard handles redirect to /login
+// src/lib/authContext.tsx  (IMPLEMENTED)
+// On login: POST /auth/login → localStorage.setItem('access_token', token)
+//           + localStorage.setItem('user_context', JSON.stringify(user)) → setAuthToken(token)
+// On mount: hydrates token + UserOut from localStorage; JSON.parse failure discards user silently
+// Provides useAuth() hook: { token, user: UserOut | null, isAuthenticated, isHydrated, login(token, user), logout }
+// On logout (authContext.logout): removes 'access_token' + 'user_context' → setAuthToken(null)
+//   NOTE: redirect is NOT done inside logout() — caller (AdminShellLayout.handleLogout) owns redirect.
+// Logout flow (AdminShellLayout, admin/layout.tsx):
+//   1. logoutApi() → POST /auth/logout with Bearer token (from apiClient in-memory store; no hardcoded JWT)
+//   2. try/catch/finally → authContext.logout() + router.replace('/login') always execute
+//   3. Backend logout failure (network/401/5xx) does NOT prevent local auth clear or redirect
+// On 401: apiClient throws ApiError(401); authContext/AuthGuard handles redirect to /login (TODO)
+// Admin header: avatar initial from user.email, role badge from user.role, tenant pill from user.tenant_id
+//               + "Sign out" button wired to handleLogout (disabled + spinner while in-flight)
+// User data sourced from POST /auth/login response; NOT verified against backend on each request.
+// GET /auth/me wiring is a pending phase. Role guards and Tenants 403 are pending.
 ```
 
 ## Document Status Badge Colors
@@ -90,7 +125,7 @@ const statusColors = {
 - [ ] Upload PDF → status shows `processing` → updates to `completed`
 - [ ] Document list paginated with real data from backend
 - [ ] Delete document removes it from list
-- [ ] Invite user form posts to `POST /admin/users/invite`
+- [ ] Invite user form posts to `POST /admin/users/invite` *(blocked — see Registration Endpoint note below)*
 - [ ] Unauthorized access redirects to login
 - [ ] Loading spinners during API calls
 - [ ] Error toast on API failure
