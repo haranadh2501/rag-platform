@@ -26,3 +26,19 @@ export interface LoginResponse {
 export async function loginApi(email: string, password: string): Promise<LoginResponse> {
   return apiRequest<LoginResponse>('POST', '/auth/login', { email, password });
 }
+
+/**
+ * POST /auth/logout — blacklists the current JWT in Redis server-side.
+ *
+ * The Bearer token is attached automatically by apiRequest() from the in-memory
+ * store (populated by authContext.login()). No request body required.
+ * Returns { message: string } on success; empty body on some implementations —
+ * both handled gracefully (apiRequest returns undefined for empty bodies).
+ *
+ * IMPORTANT: callers must clear local auth state via authContext.logout() and
+ * redirect to /login regardless of whether this call succeeds or fails.
+ * A network error or expired-token 401 must not leave the user stuck.
+ */
+export async function logoutApi(): Promise<void> {
+  await apiRequest<{ message?: string }>('POST', '/auth/logout');
+}

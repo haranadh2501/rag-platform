@@ -1,7 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { useState, Fragment } from 'react';
+import { useState, Fragment, type FormEvent } from 'react';
+import { ingestDocumentUrlApi } from '../../../lib/documentApi';
+import { ApiError } from '../../../lib/apiClient';
 import StatusBadge from '../../../components/admin/StatusBadge';
 import { pipelineStateFromDocument, INGESTION_STAGES } from '@admin-types';
 import type { DocumentOut, PipelineState, IngestionStage, DocumentStatus } from '@admin-types';
@@ -217,8 +219,74 @@ function formatDate(iso: string): string {
 
 type UploadTab = 'file' | 'url';
 
-function UploadSourcePanel() {
+function isValidUrl(value: string): boolean {
+  try {
+    const u = new URL(value);
+    return u.protocol === 'http:' || u.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+interface UrlSubmitError {
+  message: string;
+  detail: string;
+}
+
+function classifyUrlError(err: unknown): UrlSubmitError {
+  const technical = `Technical detail: ${err instanceof Error ? err.message : String(err)}`;
+  if (err instanceof ApiError) {
+    if (err.status === 401) return { message: 'Your session expired. Please sign in again.', detail: technical };
+    if (err.status === 403) return { message: 'You do not have permission to add documents.', detail: technical };
+    if (err.status === 404) return { message: 'The URL ingestion endpoint is not available yet. Please try again after the backend URL ingestion API is deployed.', detail: technical };
+    if (err.status === 429) return { message: 'Too many requests. Please try again in a minute.', detail: technical };
+    if (err.status >= 500) return { message: 'The document service is having trouble. Please try again later.', detail: technical };
+    return { message: 'The document service did not respond. Please try again in a moment.', detail: technical };
+  }
+  return {
+    message: 'Could not reach the document service. Check backend availability or CORS.',
+    detail: technical,
+  };
+}
+
+interface UploadSourcePanelProps {
+  onAccepted: (doc: DocumentOut) => void;
+}
+
+function UploadSourcePanel({ onAccepted }: UploadSourcePanelProps) {
   const [activeTab, setActiveTab] = useState<UploadTab>('file');
+  const [urlInput, setUrlInput] = useState('');
+  const [titleInput, setTitleInput] = useState('');
+  const [urlLoading, setUrlLoading] = useState(false);
+  const [urlSuccess, setUrlSuccess] = useState(false);
+  const [urlError, setUrlError] = useState<UrlSubmitError | null>(null);
+
+  const urlValid = isValidUrl(urlInput);
+  const canSubmitUrl = urlValid && !urlLoading;
+
+  async function handleUrlSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!canSubmitUrl) return;
+    setUrlError(null);
+    setUrlSuccess(false);
+    setUrlLoading(true);
+    const trimmedUrl = urlInput.trim();
+    const trimmedTitle = titleInput.trim();
+    try {
+      const doc = await ingestDocumentUrlApi({
+        url: trimmedUrl,
+        title: trimmedTitle || undefined,
+      });
+      setUrlInput('');
+      setTitleInput('');
+      setUrlSuccess(true);
+      onAccepted(doc);
+    } catch (err) {
+      setUrlError(classifyUrlError(err));
+    } finally {
+      setUrlLoading(false);
+    }
+  }
 
   const tabClass = (tab: UploadTab) =>
     activeTab === tab
@@ -238,66 +306,122 @@ function UploadSourcePanel() {
       </div>
 
       <div className="p-6">
-        {/* Upload File panel */}
+        {/* Upload File panel — disabled; XHR progress wiring pending (Phase 3) */}
         {activeTab === 'file' && (
-          <div className="rounded-lg border-2 border-dashed border-slate-300 bg-slate-50 p-8 text-center">
-            <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm">
-              <svg className="h-5 w-5 text-slate-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m6.75 12-3-3m0 0-3 3m3-3v6m-1.5-15H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
-              </svg>
+          <>
+            <div className="rounded-lg border-2 border-dashed border-slate-300 bg-slate-50 p-8 text-center">
+              <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm">
+                <svg className="h-5 w-5 text-slate-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m6.75 12-3-3m0 0-3 3m3-3v6m-1.5-15H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+                </svg>
+              </div>
+              <p className="text-sm font-medium text-slate-700">
+                Drag &amp; drop PDF, DOCX, or TXT
+              </p>
+              <p className="mt-1 text-xs text-slate-400">or</p>
+              <button
+                type="button"
+                disabled
+                className="mt-2 cursor-not-allowed rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white opacity-40"
+              >
+                Browse files
+              </button>
+              <p className="mt-3 text-xs text-slate-400">Max 25 MB · 20 uploads/hour</p>
             </div>
-            <p className="text-sm font-medium text-slate-700">
-              Drag &amp; drop PDF, DOCX, or TXT
+            <p className="mt-4 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-700">
+              <span className="font-medium">File upload disabled</span> — XHR progress wiring
+              is pending (Phase 3). Use the &quot;Add by URL&quot; tab to ingest via the backend API.
             </p>
-            <p className="mt-1 text-xs text-slate-400">or</p>
-            <button
-              type="button"
-              disabled
-              className="mt-2 cursor-not-allowed rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white opacity-40"
-            >
-              Browse files
-            </button>
-            <p className="mt-3 text-xs text-slate-400">Max 25 MB · 20 uploads/hour</p>
-          </div>
+          </>
         )}
 
-        {/* Add by URL panel */}
+        {/* Add by URL panel — calls POST /admin/documents/url via documentApi */}
         {activeTab === 'url' && (
-          <div className="space-y-3">
+          <form onSubmit={handleUrlSubmit} noValidate className="space-y-3">
             <div>
-              <label className="mb-1 block text-xs font-medium text-slate-700">
-                URL
+              <label
+                htmlFor="url-source-input"
+                className="mb-1 block text-xs font-medium text-slate-700"
+              >
+                URL <span className="text-red-500" aria-hidden="true">*</span>
               </label>
               <input
+                id="url-source-input"
                 type="url"
                 placeholder="https://example.com/document"
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                value={urlInput}
+                onChange={(e) => { setUrlInput(e.target.value); setUrlSuccess(false); }}
+                disabled={urlLoading}
+                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-60"
               />
+              {urlInput.length > 0 && !urlValid && (
+                <p className="mt-1 text-xs text-red-500">
+                  Must be a valid http:// or https:// URL.
+                </p>
+              )}
             </div>
+
             <div>
-              <label className="mb-1 block text-xs font-medium text-slate-700">
+              <label
+                htmlFor="url-title-input"
+                className="mb-1 block text-xs font-medium text-slate-700"
+              >
                 Title <span className="font-normal text-slate-400">(optional)</span>
               </label>
               <input
+                id="url-title-input"
                 type="text"
                 placeholder="e.g. API Reference"
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                value={titleInput}
+                onChange={(e) => setTitleInput(e.target.value)}
+                disabled={urlLoading}
+                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-60"
               />
+              <p className="mt-1 text-xs text-slate-400">
+                Defaults to the URL hostname if left blank.
+              </p>
             </div>
-            <button
-              type="button"
-              disabled
-              className="cursor-not-allowed rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white opacity-40"
-            >
-              Add source
-            </button>
-          </div>
-        )}
 
-        {/* MOCK_N8N notice */}
-        <p className="mt-4 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-700">
-          <span className="font-medium">MOCK_N8N=true</span> — uploads are disabled until n8n workflows are connected.
-        </p>
+            {urlError && (
+              <div role="alert" aria-live="assertive" className="rounded-md border border-red-200 bg-red-50 p-3">
+                <p className="text-sm font-medium text-red-800">Could not submit URL</p>
+                <p className="mt-1 text-xs text-red-700">{urlError.message}</p>
+                <p className="mt-1 text-xs text-red-400">{urlError.detail}</p>
+              </div>
+            )}
+
+            {urlSuccess && (
+              <div role="status" aria-live="polite" className="rounded-md border border-emerald-200 bg-emerald-50 p-3">
+                <p className="text-sm font-medium text-emerald-800">Request accepted</p>
+                <p className="mt-1 text-xs text-emerald-700">
+                  We have started ingesting this URL. It may take a few minutes before it appears
+                  as searchable knowledge.
+                </p>
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={!canSubmitUrl}
+              aria-disabled={!canSubmitUrl}
+              className="flex items-center gap-1.5 rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {urlLoading && (
+                <span
+                  className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white"
+                  aria-hidden="true"
+                />
+              )}
+              {urlLoading ? 'Submitting…' : 'Add source'}
+            </button>
+
+            <p className="text-xs text-slate-400">
+              Sends{' '}
+              <code className="rounded bg-slate-100 px-0.5">POST /admin/documents/url</code>
+              {' '}— backend validates the JWT, enforces tenant isolation, and triggers n8n.
+            </p>
+          </form>
+        )}
       </div>
     </div>
   );
@@ -305,10 +429,31 @@ function UploadSourcePanel() {
 
 export default function DocumentsPage() {
   const [activeFilter, setActiveFilter] = useState<FilterOption>('all');
+  const [optimisticDocs, setOptimisticDocs] = useState<DocumentOut[]>([]);
+
+  const optimisticIds = new Set(optimisticDocs.map((d) => d.id));
+  const allDocs = [...optimisticDocs, ...MOCK_DOCUMENTS];
   const filteredDocs =
     activeFilter === 'all'
-      ? MOCK_DOCUMENTS
-      : MOCK_DOCUMENTS.filter((d) => d.status === activeFilter);
+      ? allDocs
+      : allDocs.filter((d) => d.status === activeFilter);
+
+  function handleAccepted(doc: DocumentOut): void {
+    setOptimisticDocs((prev) => [doc, ...prev]);
+    // Switch to All if the current filter would hide the newly inserted row.
+    if (activeFilter !== 'all' && activeFilter !== doc.status) {
+      setActiveFilter('all');
+    }
+    // If backend returned pending, advance locally to processing after 1500 ms for
+    // demo feedback. Real status requires GET /admin/documents polling (Phase 3).
+    if (doc.status === 'pending') {
+      setTimeout(() => {
+        setOptimisticDocs((prev) =>
+          prev.map((d): DocumentOut => (d.id === doc.id ? { ...d, status: 'processing' } : d)),
+        );
+      }, 1500);
+    }
+  }
 
   return (
     <main className="p-6">
@@ -319,7 +464,7 @@ export default function DocumentsPage() {
         </p>
       </div>
 
-      <UploadSourcePanel />
+      <UploadSourcePanel onAccepted={handleAccepted} />
 
       {/* Storage quota card */}
       <StorageQuotaCard usedMb={MOCK_QUOTA.usedMb} totalMb={MOCK_QUOTA.totalMb} />
@@ -400,6 +545,13 @@ export default function DocumentsPage() {
                 <tr>
                   <td colSpan={6} className="p-0">
                     <PipelineStepper doc={doc} />
+                    {optimisticIds.has(doc.id) && (doc.status === 'pending' || doc.status === 'processing') && (
+                      <p className="border-t border-slate-100 bg-slate-50 px-4 pb-2.5 pt-0 text-xs text-slate-400">
+                        Status preview — live updates require{' '}
+                        <code className="rounded bg-slate-100 px-0.5">GET /admin/documents</code>{' '}
+                        polling.
+                      </p>
+                    )}
                   </td>
                 </tr>
               </Fragment>
