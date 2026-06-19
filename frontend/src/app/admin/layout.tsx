@@ -1,9 +1,11 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useState } from 'react';
 import AuthGuard from '../../components/admin/AuthGuard';
+import { logoutApi } from '../../lib/authApi';
+import { useAuth } from '../../lib/authContext';
 
 interface NavItem {
   label: string;
@@ -53,16 +55,40 @@ const NAV_ITEMS: NavItem[] = [
   },
 ];
 
+function roleBadgeLabel(role: string): string {
+  if (role === 'super_admin') return 'Super Admin';
+  if (role === 'admin') return 'Admin';
+  if (role === 'user') return 'User';
+  return role;
+}
+
 export default function AdminShellLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
+  const { user, logout } = useAuth();
 
   const pageTitle =
     NAV_ITEMS.find((item) => pathname.startsWith(item.href))?.label ?? 'Admin';
+
+  async function handleLogout(): Promise<void> {
+    if (loggingOut) return;
+    setLoggingOut(true);
+    try {
+      await logoutApi();
+    } catch {
+      // Backend logout failed (network error, already-expired token, etc.).
+      // Local auth state is cleared in finally regardless — user must never be stuck.
+    } finally {
+      logout();
+      router.replace('/login');
+    }
+  }
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50">
@@ -165,28 +191,54 @@ export default function AdminShellLayout({
           {/* Right: tenant · divider · role badge + avatar */}
           <div className="flex items-center gap-3">
 
-            {/* Tenant name pill */}
-            <span className="hidden items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600 sm:flex">
+            {/* Tenant pill — shows tenant_id[:8] until tenant name API or GET /auth/me is wired */}
+            <span
+              className="hidden items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600 sm:flex"
+              title={user?.tenant_id ?? 'Tenant ID unavailable'}
+            >
               <svg className="h-3.5 w-3.5 shrink-0 text-slate-400" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24" aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21" />
               </svg>
-              Acme Corp
+              {user?.tenant_id ? user.tenant_id.slice(0, 8) + '…' : '—'}
             </span>
 
             <div className="hidden h-5 w-px bg-slate-200 sm:block" aria-hidden="true" />
 
-            {/* Role badge + avatar */}
+            {/* Role badge + avatar — sourced from POST /auth/login user object */}
             <div className="flex items-center gap-2.5">
               <span className="hidden rounded-full bg-indigo-50 px-2.5 py-0.5 text-xs font-medium text-indigo-700 ring-1 ring-inset ring-indigo-600/20 sm:block">
-                Admin
+                {user ? roleBadgeLabel(user.role) : 'Admin'}
               </span>
               <div
                 className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-xs font-bold text-white ring-2 ring-white"
-                aria-label="User account (placeholder — auth in Phase 1)"
+                aria-label={user ? `Signed in as ${user.email}` : 'User account'}
               >
-                A
+                {user?.email?.charAt(0).toUpperCase() ?? 'A'}
               </div>
             </div>
+
+            <div className="hidden h-5 w-px bg-slate-200 sm:block" aria-hidden="true" />
+
+            {/* Sign out — calls POST /auth/logout then clears local auth regardless of result */}
+            <button
+              type="button"
+              onClick={handleLogout}
+              disabled={loggingOut}
+              aria-label={loggingOut ? 'Signing out…' : 'Sign out'}
+              className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {loggingOut ? (
+                <span
+                  className="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-slate-600"
+                  aria-hidden="true"
+                />
+              ) : (
+                <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9" />
+                </svg>
+              )}
+              <span className="hidden sm:inline">{loggingOut ? 'Signing out…' : 'Sign out'}</span>
+            </button>
           </div>
         </header>
 
