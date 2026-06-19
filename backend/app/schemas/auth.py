@@ -50,3 +50,9 @@ class LoginResponse(BaseModel):
     access_token: str = Field(examples=["eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."])
     token_type: str = "bearer"
     user: UserOut
+
+
+class UserList(BaseModel):
+    """Response for GET /admin/users — users in the current tenant + count."""
+    users: list[UserOut]
+    total: int
