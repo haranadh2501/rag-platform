@@ -2,15 +2,21 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { setAuthToken } from './apiClient';
+import type { UserOut } from '@admin-types';
 
-const STORAGE_KEY = 'access_token';
+const TOKEN_KEY = 'access_token';
+const USER_KEY = 'user_context';
 
 interface AuthContextValue {
   token: string | null;
+  /** User object from the POST /auth/login response, restored from localStorage on hydration.
+   *  Null before hydration or when logged out. Not backend-verified on every request —
+   *  GET /auth/me wiring is a separate pending phase. */
+  user: UserOut | null;
   isAuthenticated: boolean;
   /** False until the localStorage hydration effect has run on the client. */
   isHydrated: boolean;
-  login: (token: string) => void;
+  login: (token: string, user: UserOut) => void;
   logout: () => void;
 }
 
@@ -18,36 +24,51 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
+  const [user, setUser] = useState<UserOut | null>(null);
   const [isHydrated, setIsHydrated] = useState(false);
 
-  // Hydrate token from localStorage on first client render.
+  // Hydrate token and user from localStorage on first client render.
   // isHydrated prevents AuthGuard from flashing a redirect before the
-  // token is read (will be used when AuthGuard is wired in Phase 2).
+  // token is read.
   useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      setToken(stored);
-      setAuthToken(stored);
+    const storedToken = localStorage.getItem(TOKEN_KEY);
+    const storedUser = localStorage.getItem(USER_KEY);
+
+    if (storedToken) {
+      setToken(storedToken);
+      setAuthToken(storedToken);
+    }
+    if (storedUser) {
+      try {
+        setUser(JSON.parse(storedUser) as UserOut);
+      } catch {
+        // Corrupt storage — discard silently.
+        localStorage.removeItem(USER_KEY);
+      }
     }
     setIsHydrated(true);
   }, []);
 
-  function login(newToken: string): void {
-    localStorage.setItem(STORAGE_KEY, newToken);
+  function login(newToken: string, newUser: UserOut): void {
+    localStorage.setItem(TOKEN_KEY, newToken);
+    localStorage.setItem(USER_KEY, JSON.stringify(newUser));
     setToken(newToken);
+    setUser(newUser);
     setAuthToken(newToken);
   }
 
   function logout(): void {
-    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(USER_KEY);
     setToken(null);
+    setUser(null);
     setAuthToken(null);
-    // TODO: redirect to /login?next=<current-path> once AuthGuard is wired (Phase 2).
+    // TODO: redirect to /login?next=<current-path> once apiClient.ts 401 handler is wired.
   }
 
   return (
     <AuthContext.Provider
-      value={{ token, isAuthenticated: token !== null, isHydrated, login, logout }}
+      value={{ token, user, isAuthenticated: token !== null, isHydrated, login, logout }}
     >
       {children}
     </AuthContext.Provider>

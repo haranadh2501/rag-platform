@@ -73,7 +73,40 @@ Poll `GET /admin/documents` every 5 s for rows in `pending` or `processing` stat
 - Use `XMLHttpRequest` (not `fetch`) to stream upload progress as a progress bar per file.
 - On submit: `POST /admin/documents/upload` (multipart). New row appears at table top with `pending` status.
 
-**Add by URL tab** — URL field + optional Title → `POST /admin/documents/url` (JSON). Same optimistic row behavior.
+**Add by URL tab** — URL field + optional Title → sends `POST /admin/documents/url` to backend via `src/lib/documentApi.ts`. "Add source" disabled when URL is invalid or request is in flight. Bearer token attached automatically by `apiClient` from the in-memory store.
+
+> **Backend wiring** (`src/lib/documentApi.ts → apiRequest<DocumentOut>()`):
+> Request body: `{ url: string, title?: string }` (matches `UrlIngestRequest` in openapi.yaml).
+> Backend validates the JWT, enforces tenant isolation, and triggers the n8n ingestion pipeline
+> server-side. No direct browser → n8n call; no webhook URL in the browser bundle.
+> Response: 202 `DocumentOut` — `id`, `title`, `source_type`, `source_url`, `status`,
+> `chunk_count`, `error_message`, `created_at` all come from the backend.
+>
+> **Accepted-state UX** (implemented): while the request is in flight, "Add source" button
+> shows a spinner + "Submitting…" (disabled). On 202 response: "Request accepted" inline panel
+> (`aria-live="polite"`) — "We have started ingesting this URL. It may take a few minutes before
+> it appears as searchable knowledge." URL and title fields cleared. The returned `DocumentOut`
+> is prepended to the document table as an optimistic row. Row starts with the backend-returned
+> status; if that is `pending`, a local `setTimeout` (1500 ms) advances it to `processing` for
+> demo feedback — this is NOT correlated with actual n8n pipeline progress. The existing
+> `pipelineStateFromDocument` helper drives the stepper automatically: pending shows stage 0
+> (uploaded) filled; processing shows the parsed_ocr stage (index 2) spinning. Row shows
+> "Status preview — live updates require GET /admin/documents polling." only while pending or
+> processing. If the current filter would hide the new row, filter auto-switches to All on
+> submit. On failure: "Could not submit URL" panel (`aria-live="assertive"`); no optimistic row
+> inserted; button re-enables. Friendly message is status-specific via `classifyUrlError()` in
+> `page.tsx`: 401 → "session expired"; 403 → "no permission"; 404 → "URL ingestion endpoint
+> not available yet — please try again after the backend URL ingestion API is deployed" (no
+> internal module names exposed to users);
+> 429 → "too many requests"; 5xx → "service trouble"; network/CORS/no-response (`TypeError`) →
+> "Could not reach the document service. Check backend availability or CORS." All cases include
+> `Technical detail: <original message>` in muted sub-text. Direct n8n browser call is not
+> part of the UI path; backend/CORS availability can block URL ingestion.
+>
+> **Optimistic row does not survive page refresh.** Row never auto-completes; completed status
+> requires real backend data from `GET /admin/documents`. `GET /admin/documents` list API wiring
+> remains pending (Phase 3). `n8nIngestionApi.ts` is kept for reference but is no longer
+> imported by `documents/page.tsx`.
 
 ### Storage Quota Bar
 ```
@@ -145,23 +178,70 @@ uploaded → validated → parsed/OCR → chunked → embedded → stored
 
 ## Users Page (`/admin/users`)
 
+> **Current state — mock data, fully interactive table, API wiring blocked.**
+> `MOCK_USERS: UserOut[]` (4 users: super_admin, admin, user, inactive user) replaces the backend call.
+> `GET /admin/users` wiring is Phase 5.
+
 ### User Table
 
 | Email | Role | Active | Joined | Actions |
 |---|---|---|---|---|
-| admin@acme.com | Admin | ✓ | 2026-06-01 | — |
-| user@acme.com | User | ✓ | 2026-06-01 | Deactivate |
+| admin@example.com | Super Admin | ✓ | 15 Jan 2026 | — (current user) |
+| alice@acme.com | Admin | ✓ | 10 Feb 2026 | Deactivate (disabled) |
+| bob@acme.com | User | ✓ | 20 Mar 2026 | Deactivate (disabled) |
+| charlie@acme.com | User | Inactive | 5 Apr 2026 | Deactivate (disabled) |
 
 Role pills: `super_admin` = indigo · `admin` = blue · `user` = slate.
-Current user row has no actions (cannot self-deactivate).
+Current logged-in user's row: emerald "You" badge on email cell; Actions shows "—" (cannot self-deactivate).
+All other rows: disabled "Deactivate" button, `title="API pending — wired in Phase 5 once blockers are resolved"`.
+Empty state: "No users match the current filters." when search/filter produce no results.
+
+**Filters (client-side over mock data):**
+- Email search input: case-insensitive substring match on `user.email`.
+- Role filter buttons: All / Super Admin / Admin / User; active button indigo-filled.
+- Mock data notice above table references `GET /admin/users` (Phase 5).
 
 ### Invite User (slide-over drawer)
+
+Fields (in order): email, phone_number (disabled — amber "Required by team · Schema pending"),
+role (admin/user), tenant_id (read-only — shows `currentUser?.tenant_id` or fallback text),
+password/temp-password.
+
+Amber blocker notice inline (no "M1"/"M2" internal module names in user-facing copy).
+Submit button: "Send invite — API pending" (disabled). Footer: `POST /admin/users/invite` wired in Phase 5.
+
 ```
-  Email:  [____________________]
-  Role:   [User ▾]
-  [Send Invite]
+  Email:         [____________________]
+  Phone number:  [disabled — Required by team · Schema pending]
+  Role:          [User ▾]
+  Tenant:        [<tenant_id from JWT — read-only>]
+  Password:      [••••••••]
+  [Send invite — API pending]  ← disabled
 ```
-Calls `POST /admin/users/invite`. On success: new row inserted at top of table, drawer closes, success toast fires.
+
+Calls `POST /admin/users/invite` (Phase 5, blocked). On success: new row inserted at top of table, drawer closes, success toast fires.
+
+> **Registration vs login**: There is no public self-service registration page in the admin portal.
+> First-time users are provisioned by admins via this drawer; all users (first-time and returning)
+> authenticate at `/login`. The admin portal does not display a "Create account" link.
+>
+> **Contract** (Auth.json + openapi.yaml): `POST /admin/users/invite` and `POST /auth/register` share
+> the same `RegisterRequest` schema — `{ email, password, tenant_id, role? }`. Use
+> `POST /admin/users/invite` for admin-portal provisioning. `tenant_id` is derived from the caller's
+> JWT — not a drawer form field.
+>
+> **Implementation gaps — raise with the backend team before wiring Phase 5:**
+> 1. **Password field**: `RegisterRequest` requires `password`; confirm whether backend auto-generates
+>    a temporary password (not currently documented in openapi.yaml) or the drawer must add a field.
+> 2. **`phone_number` blocker**: `RegisterRequest` has no `phone_number` field. Any requirement to
+>    collect phone number in the invite form is blocked until `openapi.yaml` is updated.
+> 3. **Duplicate-user 409**: No 409 response is defined for `/admin/users/invite` in `openapi.yaml`.
+>    Backend must enforce unique email; frontend will surface the `detail` field from the error
+>    response. Document the 409 shape before implementing inline error handling.
+> 4. **No plaintext passwords**: frontend must never store or log passwords; backend owns hashing.
+> 5. **Tenant-scope guard**: a non-`super_admin` caller passing a different `tenant_id` receives 403
+>    (documented in Auth.json cross-tenant test). Frontend derives `tenant_id` from JWT, so this
+>    guard is for backend enforcement only — no frontend deduplication needed.
 
 ---
 
@@ -222,7 +302,7 @@ Calls `POST /admin/users/invite`. On success: new row inserted at top of table, 
 | Delete document | `DELETE /admin/documents/{id}` |
 | **Users** | |
 | List users | `GET /admin/users` |
-| Invite user | `POST /admin/users/invite` |
+| Invite / register user | `POST /admin/users/invite` → `RegisterRequest { email, password, tenant_id, role? }` → `UserOut` (201); also at `POST /auth/register` (Auth.json, same schema, admin-gated). No `phone_number` in schema (blocker). No 409 for duplicate email documented (blocker). |
 | **Tenants** | |
 | List tenants | `GET /admin/tenants` |
 | Create tenant | `POST /admin/tenants` |
@@ -230,14 +310,37 @@ Calls `POST /admin/users/invite`. On success: new row inserted at top of table, 
 
 All requests send `Authorization: Bearer <token>`. 401 → logout + redirect to `/login`. 429 → toast: "Upload limit reached (20/hour). Try again later."
 
-> **Auth wired; document pages still mock.**
-> `POST /auth/login` is now wired in `src/app/login/page.tsx` via `src/lib/authApi.ts`.
-> Contract sourced from Auth.json (Postman, IISc RAG — Auth M2) and confirmed against `openapi.yaml`.
-> `AuthGuard` protects `/admin/*` by localStorage token presence (no backend verification).
-> All document, user, tenant, and settings pages remain mock/placeholder — `apiClient` is not yet
-> called by any of them. Document page wiring (Phase 3) is a separate step. The
-> `401 → logout + redirect` behaviour in `apiClient.ts` remains a TODO. No automated test runner;
-> verified via typecheck + browser check.
+> **Auth + user context + logout wired; URL ingestion wired (demo mode) with accepted-state UX; document list/detail/file-upload remain mock.**
+> `POST /auth/login` wired in `src/app/login/page.tsx` via `src/lib/authApi.ts`.
+> Login calls `useAuth().login(access_token, user)` — `authContext` stores both `access_token` and
+> the full `UserOut` (`user_context` key) in `localStorage`. Admin header shows live data from that
+> context: email initial (avatar), role badge, `tenant_id` prefix, and a "Sign out" button.
+> `POST /auth/logout` wired via `logoutApi()` in `src/lib/authApi.ts`; header button calls
+> `apiRequest<{ message?: string }>('POST', '/auth/logout')` with the current Bearer token
+> (from apiClient in-memory store — no hardcoded JWT). On success or failure, `authContext.logout()`
+> clears both localStorage keys and the in-memory store, then `router.replace('/login')` redirects.
+> Local auth is always cleared even if the backend logout request fails.
+> Add by URL now calls `POST /admin/documents/url` via `src/lib/documentApi.ts` →
+> `apiRequest<DocumentOut>('POST', '/admin/documents/url', { url, title? })`. Bearer token
+> attached automatically by `apiClient`; backend owns JWT validation, tenant isolation, and
+> n8n trigger. No direct browser → n8n call; `n8nIngestionApi.ts` no longer imported in
+> `documents/page.tsx` (file kept for reference). Response 202 `DocumentOut` fields populate
+> the optimistic row directly (real `id`, `title`, `status`, etc.). Accepted-state UX is
+> implemented: spinner + "Submitting…" while in-flight; "Request accepted" panel on 202;
+> optimistic row starts with backend status; if `pending`, local 1500 ms timer advances to
+> `processing` for demo feedback (NOT correlated with n8n progress); "Could not submit URL"
+> panel on failure with status-specific friendly message + technical detail; no row inserted on
+> failure; direct n8n browser call is not part of the UI path; backend/CORS availability can
+> block URL ingestion.
+> Row never auto-completes; completed status requires real data from `GET /admin/documents`.
+> `GET /admin/documents` polling/list refresh remains pending (Phase 3). File upload disabled.
+> No automated test runner; verified via typecheck + browser check against live backend.
+> User data is localStorage-sourced only — `GET /auth/me` wiring pending.
+> `AuthGuard` protects `/admin/*` by localStorage token presence (no backend verification per request).
+> Document list, detail, file upload, delete, retry, and all user/tenant/settings pages remain
+> mock/placeholder. `apiClient` is not yet called by document pages. `401 → logout + redirect`
+> in `apiClient.ts` remains a TODO. `GET /auth/me`, role guards, and Tenants 403 remain pending.
+> No automated test runner; verified via typecheck + browser check.
 
 ---
 
