@@ -430,3 +430,185 @@ same. Only `storage.py` changes.
 - [ ] `DELETE /admin/documents/{id}` removes the GCS object
 - [ ] Local dev still works with `STORAGE_BACKEND=local` (no cloud credentials needed)
 - [ ] Docker Compose volume mount removed from `docker-compose.yml`
+
+---
+
+## 7. Unit Test Plan
+
+> **Status: approved, not yet written.**
+> Run all tests: `cd backend && pytest ../tests/ -v`
+
+### Test file structure
+
+```
+tests/
+├── test_m3_units.py          # Pure unit tests — no DB, no HTTP
+├── test_m3_admin.py          # Integration tests — admin document endpoints
+└── test_m3_conversations.py  # Integration tests — conversation CRUD
+```
+
+**Pure unit tests** (`test_m3_units.py`) run with no Postgres dependency — using `tmp_path`
+for filesystem tests and plain Pydantic for schema tests.
+
+**Integration tests** follow the same pattern as `tests/test_auth.py` and
+`tests/test_m4_chat.py`: real Postgres (auto-skip if unreachable), `httpx.AsyncClient`
+with `ASGITransport`, self-seeding fixtures, `monkeypatch` for external services
+(n8n_client, storage).
+
+---
+
+### `test_m3_units.py` — Pure unit tests (14 cases)
+
+**Storage service (`services/storage.py`)**
+
+| # | Test | What is verified |
+|---|---|---|
+| 1 | `test_store_upload_local_writes_file` | `store_upload()` creates file in UPLOAD_DIR, returns valid path string |
+| 2 | `test_store_upload_unknown_backend_raises` | raises `ValueError` for unknown `STORAGE_BACKEND` |
+| 3 | `test_delete_upload_local_removes_file` | `delete_upload()` removes existing file |
+| 4 | `test_delete_upload_missing_file_is_noop` | `delete_upload()` swallows `FileNotFoundError` (idempotent) |
+| 5 | `test_delete_upload_unknown_backend_raises` | raises `ValueError` for unknown `STORAGE_BACKEND` |
+
+**File validator (`services/file_validator.py`)**
+
+| # | Test | What is verified |
+|---|---|---|
+| 6 | `test_validate_pdf_valid` | valid PDF magic bytes + MIME passes, returns `ValidatedUpload` |
+| 7 | `test_validate_wrong_magic_raises_415` | DOCX magic declared as `application/pdf` → HTTP 415 |
+| 8 | `test_validate_empty_raises_400` | empty bytes → HTTP 400 |
+| 9 | `test_validate_too_large_raises_413` | bytes > `MAX_UPLOAD_BYTES` → HTTP 413 |
+| 10 | `test_validate_disallowed_mime_raises_415` | `text/html` MIME → HTTP 415 |
+
+**Schema validation (`schemas/documents.py`, `schemas/chat.py`, `schemas/tenants.py`)**
+
+| # | Test | What is verified |
+|---|---|---|
+| 11 | `test_document_out_from_dict` | `DocumentOut` validates from dict with all fields (from_attributes) |
+| 12 | `test_url_ingest_request_requires_url` | `UrlIngestRequest` without `url` raises `ValidationError` |
+| 13 | `test_conversation_out_message_count` | `ConversationOut` accepts manually set `message_count` |
+| 14 | `test_tenant_update_partial` | `TenantUpdate.model_dump(exclude_unset=True)` only includes set fields |
+
+---
+
+### `test_m3_admin.py` — Admin document endpoints (30 cases)
+
+Fixtures:
+- `admin_user` — creates tenant + admin user + JWT; tears down after test
+- `super_admin_user` — same but `role="super_admin"`
+- `doc_in_db` — inserts a `Document` row (`status="pending"`) for `admin_user`'s tenant
+
+**`GET /admin/documents`**
+
+| # | Test | What is verified |
+|---|---|---|
+| 1 | `test_list_documents_empty` | new tenant → `{"documents": [], "total": 0}` |
+| 2 | `test_list_documents_tenant_scoped` | another tenant's docs are not returned |
+| 3 | `test_list_documents_status_filter` | `?status=pending` returns only pending docs |
+| 4 | `test_list_documents_pagination` | `?page=2&per_page=1` returns correct subset |
+| 5 | `test_list_documents_non_admin_403` | regular user role → 403 |
+
+**`GET /admin/documents/{id}`**
+
+| # | Test | What is verified |
+|---|---|---|
+| 6 | `test_get_document_200` | own doc → 200 with correct fields |
+| 7 | `test_get_document_404` | non-existent UUID → 404 |
+| 8 | `test_get_document_403` | another tenant's doc → 403 |
+
+**`DELETE /admin/documents/{id}`**
+
+| # | Test | What is verified |
+|---|---|---|
+| 9 | `test_delete_document_204` | own doc → 204, row removed from DB |
+| 10 | `test_delete_document_404` | non-existent → 404 |
+| 11 | `test_delete_document_403` | another tenant's doc → 403 |
+| 12 | `test_delete_document_calls_storage_cleanup` | `storage.delete_upload` called with `doc.file_path` |
+
+**`POST /admin/documents/upload`**
+
+| # | Test | What is verified |
+|---|---|---|
+| 13 | `test_upload_pdf_202` | valid PDF → 202, `Document` row created with `status="pending"` |
+| 14 | `test_upload_invalid_mime_415` | `text/html` content-type → 415 |
+| 15 | `test_upload_wrong_magic_415` | DOCX bytes declared as PDF → 415 |
+| 16 | `test_upload_rate_limit_429` | inject 20+ `UploadAudit` rows within last hour → 429 |
+| 17 | `test_upload_quota_exceeded_413` | inject `UploadAudit.bytes` = `MAX_BYTES_PER_TENANT` → 413 |
+| 18 | `test_upload_n8n_failure_still_202` | monkeypatch `n8n_client.ingest` to raise → still 202 (best-effort) |
+
+**`POST /admin/documents/url`**
+
+| # | Test | What is verified |
+|---|---|---|
+| 19 | `test_ingest_url_202` | valid URL body → 202 with `source_type="url"` |
+| 20 | `test_ingest_url_n8n_failure_still_202` | n8n failure is non-fatal → 202 |
+
+**`GET /admin/tenants/{id}`**
+
+| # | Test | What is verified |
+|---|---|---|
+| 21 | `test_get_tenant_super_admin_200` | super_admin → 200 with tenant fields |
+| 22 | `test_get_tenant_admin_403` | regular admin role → 403 |
+| 23 | `test_get_tenant_404` | unknown UUID → 404 |
+
+**`PATCH /admin/tenants/{id}`**
+
+| # | Test | What is verified |
+|---|---|---|
+| 24 | `test_update_tenant_name` | PATCH `name` → updated, other fields unchanged |
+| 25 | `test_update_tenant_partial` | only `is_active=false` sent → only that field changed |
+| 26 | `test_update_tenant_admin_403` | regular admin → 403 |
+
+**`POST /webhooks/n8n/ingestion-status`**
+
+| # | Test | What is verified |
+|---|---|---|
+| 27 | `test_ingestion_callback_completes_document` | valid token + doc_id → status/chunk_count written, returns `{"ok": True}` |
+| 28 | `test_ingestion_callback_invalid_token_401` | wrong token → 401 |
+| 29 | `test_ingestion_callback_unknown_doc_404` | non-existent doc_id → 404 |
+| 30 | `test_ingestion_callback_failure_sets_error` | `status=failed` + `error_message` → both persisted |
+
+---
+
+### `test_m3_conversations.py` — Conversation CRUD (12 cases)
+
+Fixtures:
+- `conv_user` — creates tenant + user + JWT; tears down after test (same pattern as `test_m4_chat.py::web_user`)
+- `conv_with_messages` — creates a `Conversation` + 2 `ChatMessage` rows for `conv_user`
+
+**`GET /chat/conversations`**
+
+| # | Test | What is verified |
+|---|---|---|
+| 1 | `test_list_conversations_empty` | new user → `{"conversations": []}` |
+| 2 | `test_list_conversations_own_only` | other user's conversations not returned |
+| 3 | `test_list_conversations_message_count` | `message_count` matches actual messages in DB |
+| 4 | `test_list_conversations_unauthenticated_401` | no token → 401 |
+
+**`GET /chat/conversations/{id}`**
+
+| # | Test | What is verified |
+|---|---|---|
+| 5 | `test_get_conversation_200` | own conversation → 200, messages in chronological order |
+| 6 | `test_get_conversation_404` | non-existent UUID → 404 |
+| 7 | `test_get_conversation_403` | another user's conversation → 403 |
+| 8 | `test_get_conversation_message_count_matches` | `message_count == len(messages)` in response body |
+
+**`DELETE /chat/conversations/{id}`**
+
+| # | Test | What is verified |
+|---|---|---|
+| 9 | `test_delete_conversation_204` | own conversation → 204 |
+| 10 | `test_delete_conversation_404` | non-existent → 404 |
+| 11 | `test_delete_conversation_403` | another user's → 403 |
+| 12 | `test_delete_conversation_cascade` | after delete, `chat_messages` rows are also gone |
+
+---
+
+### Summary
+
+| File | Type | Cases |
+|---|---|---|
+| `test_m3_units.py` | pure unit (no DB) | 14 |
+| `test_m3_admin.py` | integration (DB + monkeypatch) | 30 |
+| `test_m3_conversations.py` | integration (DB + monkeypatch) | 12 |
+| **Total** | | **56** |
