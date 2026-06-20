@@ -1,0 +1,1335 @@
+ ▐▛███▜▌   Claude Code v2.1.170
+▝▜█████▛▘  Sonnet 4.6 · Claude Pro
+  ▘▘ ▝▝    ~\Desktop\rag-platform
+
+
+● Verify the final file looks right, then write and run the verification script:
+
+  Read 1 file (ctrl+o to expand)
+  ⎿  Read scripts\verify_phase1.py (72 lines)
+  ⎿  Read app\services\types.py (28 lines)
+  ⎿  Read scripts\check_neon.py (37 lines)
+  ⎿  Read app\core\config.py (114 lines)
+  ⎿  Read ..\..\..\AppData\Local\Temp\claude\C--Users-tush2-Desktop-rag-platform\4cc448b1-1990-48a2-908b-a2fe6c65ba8f\tasks\bao1168bi.output (1 lines)
+  ⎿  Skills restored (run)
+
+● The n8n_client.py edits look correct. Writing the Phase 2 verification script
+  now.
+
+● Write(backend\scripts\verify_phase2.py)
+  ⎿  Wrote 65 lines to backend\scripts\verify_phase2.py
+       1 """Phase 2 verification — n8n_client.retrieve() signature and mo
+         ck mode."""
+       2 import sys
+       4 import inspect
+       5 
+       6 sys.path.insert(0, "C:\\Users\\tush2\\Desktop\\rag-platform\\bac
+         kend")
+       7 
+       9 import os
+      10 os.environ.setdefault("MOCK_N8N", "true")
+     … +74 lines (ctrl+o to expand)
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Phase 2 verified. Moving to Phase 3 — reading the implementation plan and spec
+  for context_builder details.
+
+  Read 2 files (ctrl+o to expand)
+
+● Let me check the current models.py to understand the actual schema before
+  building context_builder:
+
+  Read 2 files (ctrl+o to expand)
+
+● Now let me check what auth helpers M2 provides before writing context_builder:
+
+  Searched for 3 patterns, read 5 files, listed 1 directory (ctrl+o to expand)
+
+● Now I have everything I need. Writing phases 3, 4, and 5 together since
+  they're interdependent.
+
+● Write(backend\app\services\context_builder.py)
+  ⎿  Wrote 93 lines to backend\app\services\context_builder.py
+      1 """context_builder.py — normalize raw channel payloads into Messa
+        geContext.
+      2 
+      3 No business logic here — extraction and identity resolution only.
+      4 Owner: M4.
+      5 """
+      6 import uuid
+      7 import logging
+      8 from sqlalchemy.ext.asyncio import AsyncSession
+      9 from sqlalchemy import select
+     … +95 lines (ctrl+o to expand)
+
+● Write(backend\app\services\conversation_router.py)
+  ⎿  Wrote 84 lines to backend\app\services\conversation_router.py
+       1 """conversation_router.py — conversation lifecycle for all chann
+         els.
+       3 Schema: UNIQUE(user_id, channel) — one conversation per user per
+          channel at a time.
+       4 Reset = hard delete + create fresh (no is_active flag; enforced 
+       5 Owner: M4.
+       6 """
+       7 import uuid
+       9 from sqlalchemy.ext.asyncio import AsyncSession
+      10 from sqlalchemy import select, delete
+     … +90 lines (ctrl+o to expand)
+
+● Write(backend\app\services\message_handler.py)
+  ⎿  Wrote 120 lines to backend\app\services\message_handler.py
+       1 """message_handler.py — unified message handler for Web and Slac
+       2 
+       3 Entry point: handle_message(ctx).
+       4 - Web:   runs inline; returns response dict
+         a chat.postMessage
+       6 
+         on logs the full
+       8 traceback and delivers the fallback reply. This function must ne
+         ver silently terminate.
+      10 """
+     … +127 lines (ctrl+o to expand)
+
+● Now verify all three files import cleanly with no circular dependencies:
+
+● Write(backend\scripts\verify_phase3_5.py)
+  ⎿  Wrote 99 lines to backend\scripts\verify_phase3_5.py
+       1 """Phase 3-5 verification — import and structural checks for con
+       2 conversation_router, and message_handler."""
+       3 import sys, inspect, asyncio
+       5 sys.path.insert(0, "C:\\Users\\tush2\\Desktop\\rag-platform\\bac
+         kend")
+       7 # ── Phase 3: context_builder ──────────────────────────────────
+         ───────────────
+         ild_web_context, RESET_COMMANDS
+       9 
+         be callable"
+     … +119 lines (ctrl+o to expand)
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● All phases 3, 4, and 5 pass. Phase 6 is next — the Slack adapter in
+  webhooks.py and slack.py. Let me check the current slack.py:
+
+  Read 1 file (ctrl+o to expand)
+● Now implementing Phase 6 — Slack adapter. Rewriting slack.py first, then
+  webhooks.py:
+
+● Write(backend\app\bots\slack.py)
+  ⎿  Added 67 lines, removed 12 lines
+       1 +"""Slack delivery functions — chat.postMessage + Block Kit form
+         +atting.                                                        
+       2 +                                                               
+       3 +Owner: M4.                                                     
+       4 +Called by message_handler (for answers) and webhooks (for reset
+         + confirmation / errors).                                       
+       5  """
+       2 -Slack bot handler.                                             
+       3 -Owner: M4 — implement handle_app_mention.                      
+       4 -"""                                                            
+       6  import logging
+       7 +import httpx                                                   
+       8  
+       9 +from app.core.config import settings                           
+      10 +from app.services.types import MessageContext                  
+      11 +                                                               
+      12  logger = logging.getLogger(__name__)
+      13  
+      14 +SLACK_API = "https://slack.com/api"                            
+      15  
+      10 -async def handle_app_mention(event: dict, tenant_id: str) -> No
+         -ne:                                                            
+      11 -    """                                                        
+      12 -    M4: Implement:                                             
+      13 -    1. Extract text from event (remove @bot mention)           
+      14 -    2. Call n8n_client.retrieve(text, tenant_id)               
+      15 -    3. Post reply in thread using Slack Web API                
+      16 -    """                                                        
+      17 -    logger.info(f"Slack app_mention event: {event}")           
+      18 -    # M4: implement Slack reply                                
+      16 +                                                               
+      17 +async def post_reply(ctx: MessageContext, answer: str, sources:
+         + list) -> None:                                                
+      18 +    """Post a grounded answer in the Slack thread that triggere
+         +d the request."""                                              
+      19 +    event     = ctx._slack_event                               
+      20 +    channel   = event.get("channel", "")                       
+      21 +    thread_ts = event.get("ts", "")                            
+      22 +                                                               
+      23 +    blocks = _build_blocks(answer, sources)                    
+      24 +    await _post_message(channel=channel, thread_ts=thread_ts, t
+         +ext=answer, blocks=blocks)                                     
+      25 +                                                               
+      26 +                                                               
+      27 +async def post_text(channel: str, thread_ts: str, text: str) ->
+         + None:                                                         
+      28 +    """Post a plain-text message (reset confirmation, error fal
+         +lback)."""                                                     
+      29 +    await _post_message(channel=channel, thread_ts=thread_ts, t
+         +ext=text, blocks=None)                                         
+      30 +                                                               
+      31 +                                                               
+      32 +async def _post_message(                                       
+      33 +    channel: str, thread_ts: str, text: str, blocks: list | Non
+         +e                                                              
+      34 +) -> None:                                                     
+      35 +    payload: dict = {                                          
+      36 +        "channel":   channel,                                  
+      37 +        "thread_ts": thread_ts,                                
+      38 +        "text":      text,                                     
+      39 +    }                                                          
+      40 +    if blocks:                                                 
+      41 +        payload["blocks"] = blocks                             
+      42 +                                                               
+      43 +    async with httpx.AsyncClient(timeout=10.0) as client:      
+      44 +        resp = await client.post(                              
+      45 +            f"{SLACK_API}/chat.postMessage",                   
+      46 +            headers={"Authorization": f"Bearer {settings.SLACK_
+         +BOT_TOKEN}"},                                                  
+      47 +            json=payload,                                      
+      48 +        )                                                      
+      49 +                                                               
+      50 +    data = resp.json()                                         
+      51 +    if not data.get("ok"):                                     
+      52 +        logger.error(                                          
+      53 +            "chat.postMessage failed: error=%s channel=%s",    
+      54 +            data.get("error"), channel,                        
+      55 +        )                                                      
+      56 +                                                               
+      57 +                                                               
+      58 +def _build_blocks(answer: str, sources: list) -> list:         
+      59 +    """Build Slack Block Kit payload: answer section + source c
+         +ontext block."""                                               
+      60 +    blocks: list = [                                           
+      61 +        {"type": "section", "text": {"type": "mrkdwn", "text": 
+         +answer}},                                                      
+      62 +    ]                                                          
+      63 +    if sources:                                                
+      64 +        lines = "\n".join(                                     
+      65 +            f"• *{s.get('title', 'Source')}*"                  
+      66 +            + (f" (p.{s['page_number']})" if s.get("page_number
+         +") else "")                                                    
+      67 +            for s in sources[:3]   # cap at 3 in the Slack card
+      68 +        )                                                      
+      69 +        blocks.append({                                        
+      70 +            "type": "context",                                 
+      71 +            "elements": [{"type": "mrkdwn", "text": f"*Sources:
+         +*\n{lines}"}],                                                 
+      72 +        })                                                     
+      73 +    return blocks                                              
+
+● Now replace the Slack events handler in webhooks.py while keeping the WhatsApp
+  and n8n callback stubs intact:
+
+● Write(backend\app\api\webhooks.py)
+  ⎿  Added 116 lines, removed 20 lines
+        1 +"""Webhook routes — WhatsApp (Twilio), Slack Events, n8n callb
+          +acks.                                                         
+        2 +Owner: M4.                                                    
+        3  """
+        2 -Webhook routes — WhatsApp (Twilio), Slack Events, n8n callback
+          -s.                                                            
+        3 -Owner: M4 — implement route bodies.                           
+        4 -"""                                                           
+        5 -from fastapi import APIRouter, Request, Response, HTTPExceptio
+          -n                                                             
+        4 +import hashlib                                                
+        5 +import hmac                                                   
+        6 +import json                                                   
+        7 +import logging                                                
+        8 +import time                                                   
+        9  
+       10 +from fastapi import APIRouter, BackgroundTasks, HTTPException,
+          + Request, Response                                            
+       11 +from sqlalchemy.dialects.postgresql import insert as pg_insert
+       12 +                                                              
+       13 +from app.core.config import settings                          
+       14 +from app.core.database import AsyncSessionLocal               
+       15 +from app.models.models import ProcessedRequest                
+       16 +from app.services.context_builder import build_slack_context  
+       17 +from app.services.conversation_router import reset_conversatio
+          +n                                                             
+       18 +from app.services.message_handler import handle_message       
+       19 +                                                              
+       20  router = APIRouter()
+       21 +logger = logging.getLogger(__name__)                          
+       22  
+       23  
+       24 +# ── helpers ─────────────────────────────────────────────────
+          +─────────────────                                             
+       25 +                                                              
+       26 +def _verify_slack_signature(headers: dict, body: bytes) -> Non
+          +e:                                                            
+       27 +    """Raise HTTPException 403 if Slack HMAC does not match or
+          + timestamp is stale."""                                       
+       28 +    timestamp = headers.get("x-slack-request-timestamp", "")  
+       29 +    signature = headers.get("x-slack-signature", "")          
+       30 +                                                              
+       31 +    try:                                                      
+       32 +        ts_int = int(timestamp)                               
+       33 +    except (ValueError, TypeError):                           
+       34 +        raise HTTPException(status_code=403, detail="Missing o
+          +r invalid timestamp header")                                  
+       35 +                                                              
+       36 +    # Reject replays older than 5 minutes                     
+       37 +    if abs(time.time() - ts_int) > 300:                       
+       38 +        raise HTTPException(status_code=403, detail="Request t
+          +imestamp too old")                                            
+       39 +                                                              
+       40 +    sig_base = f"v0:{timestamp}:".encode() + body             
+       41 +    expected = "v0=" + hmac.new(                              
+       42 +        settings.SLACK_SIGNING_SECRET.encode(),               
+       43 +        sig_base,                                             
+       44 +        hashlib.sha256,                                       
+       45 +    ).hexdigest()                                             
+       46 +                                                              
+       47 +    if not hmac.compare_digest(expected, signature):          
+       48 +        raise HTTPException(status_code=403, detail="Invalid S
+          +lack signature")                                              
+       49 +                                                              
+       50 +                                                              
+       51 +# ── Slack Events ────────────────────────────────────────────
+          +─────────────────                                             
+       52 +                                                              
+       53 +@router.post("/slack/events", summary="Slack Events API webhoo
+          +k")                                                           
+       54 +async def slack_events(request: Request, background_tasks: Bac
+          +kgroundTasks):                                                
+       55 +    # Must read raw bytes BEFORE any other body access — body 
+          +is a one-shot stream                                          
+       56 +    body = await request.body()                               
+       57 +                                                              
+       58 +    # Step 1 — HMAC verification (fast; raises 403 if invalid)
+       59 +    _verify_slack_signature(dict(request.headers), body)      
+       60 +                                                              
+       61 +    payload = json.loads(body)                                
+       62 +                                                              
+       63 +    # URL verification handshake (one-time, during Slack app s
+          +etup)                                                         
+       64 +    if payload.get("type") == "url_verification":             
+       65 +        return {"challenge": payload["challenge"]}            
+       66 +                                                              
+       67 +    event = payload.get("event", {})                          
+       68 +                                                              
+       69 +    # Ignore events from bots to prevent reply loops          
+       70 +    if event.get("bot_id"):                                   
+       71 +        return Response(status_code=200)                      
+       72 +                                                              
+       73 +    event_id = payload.get("event_id", "")                    
+       74 +                                                              
+       75 +    # Step 2 — Dedup: insert-on-conflict; rowcount 0 means alr
+          +eady processed                                                
+       76 +    async with AsyncSessionLocal() as db:                     
+       77 +        stmt = (                                              
+       78 +            pg_insert(ProcessedRequest)                       
+       79 +            .values(request_id=event_id)                      
+       80 +            .on_conflict_do_nothing()                         
+       81 +        )                                                     
+       82 +        result = await db.execute(stmt)                       
+       83 +        await db.commit()                                     
+       84 +                                                              
+       85 +    if result.rowcount == 0:                                  
+       86 +        return Response(status_code=200)   # duplicate event_i
+          +d — already handled                                           
+       87 +                                                              
+       88 +    # Step 3 — Build MessageContext (resolve workspace + user)
+       89 +    try:                                                      
+       90 +        async with AsyncSessionLocal() as db:                 
+       91 +            ctx = await build_slack_context(payload, db)      
+       92 +    except (ValueError, LookupError) as exc:                  
+       93 +        logger.warning("Slack context build failed: %s", exc) 
+       94 +        return Response(status_code=200)   # ACK Slack; do not
+          + trigger a retry                                              
+       95 +                                                              
+       96 +    # Step 4 — Reset command short-circuit (never touches n8n)
+       97 +    if ctx.reset_requested:                                   
+       98 +        async with AsyncSessionLocal() as db:                 
+       99 +            async with db.begin():                            
+      100 +                await reset_conversation(ctx, db)             
+      101 +        from app.bots.slack import post_text                  
+      102 +        await post_text(                                      
+      103 +            channel   = event.get("channel", ""),             
+      104 +            thread_ts = event.get("ts", ""),                  
+      105 +            text      = "New conversation started ✓",         
+      106 +        )                                                     
+      107 +        return Response(status_code=200)                      
+      108 +                                                              
+      109 +    # Step 5 — ACK immediately; conversation lookup + n8n + de
+          +livery run in background                                      
+      110 +    background_tasks.add_task(handle_message, ctx)            
+      111 +    return Response(status_code=200)                          
+      112 +                                                              
+      113 +                                                              
+      114 +# ── WhatsApp (Twilio) ───────────────────────────────────────
+          +──────────────────                                            
+      115 +                                                              
+      116  @router.post("/whatsapp", summary="Twilio WhatsApp incoming me
+           ssage")
+      117  async def whatsapp_webhook(request: Request):
+      118      """
+     ...
+      127      message_body = form.get("Body", "")
+      128      from_number = form.get("From", "")
+      129      # M4: implement real logic
+       24 -    twiml = f'<?xml version="1.0"?><Response><Message>M4: impl
+          -ement WhatsApp handler. Received: {message_body[:50]}</Message
+          -></Response>'                                                 
+      130 +    twiml = (                                                 
+      131 +        f'<?xml version="1.0"?><Response>'                    
+      132 +        f'<Message>M4: implement WhatsApp handler. Received: {
+          +message_body[:50]}</Message>'                                 
+      133 +        f'</Response>'                                        
+      134 +    )                                                         
+      135      return Response(content=twiml, media_type="application/xml
+           ")
+      136  
+      137  
+       28 -@router.post("/slack/events", summary="Slack Events API webhoo
+          -k")                                                           
+       29 -async def slack_events(request: Request):                     
+       30 -    """                                                       
+       31 -    M4: Implement:                                            
+       32 -    1. Handle URL verification challenge                      
+       33 -    2. Verify Slack signature (Day 5)                         
+       34 -    3. Handle app_mention events → call RAG → post reply in th
+          -read                                                          
+       35 -    """                                                       
+       36 -    body = await request.json()                               
+       37 -    # Handle Slack URL verification challenge                 
+       38 -    if body.get("type") == "url_verification":                
+       39 -        return {"challenge": body.get("challenge")}           
+       40 -    # M4: implement app_mention handler                       
+       41 -    return {"ok": True}                                       
+      138 +# ── n8n ingestion callback ──────────────────────────────────
+          +──────────────────                                            
+      139  
+       43 -                                                              
+      140  @router.post("/n8n/ingestion-status", summary="n8n ingestion p
+           ipeline callback")
+      141  async def n8n_ingestion_callback(request: Request):
+      142      """
+
+● Now run a Phase 6 import verification:
+
+● Write(backend\scripts\verify_phase6.py)
+  ⎿  Wrote 94 lines to backend\scripts\verify_phase6.py
+       1 """Phase 6 verification — Slack adapter import and structural ch
+       2 import sys, inspect, asyncio
+       3 
+         kend")
+       5 
+         ───────────────
+       7 from app.bots.slack import post_reply, post_text, _build_blocks
+       9 assert asyncio.iscoroutinefunction(post_reply),  "post_reply mus
+         t be async"
+          be async"
+     … +110 lines (ctrl+o to expand)
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Phase 6 passes. Now Phase 7 — wire M4 services into chat.py. Let me read the
+  existing stub first:
+
+  Read 1 file (ctrl+o to expand)
+
+● Chat.py is M3-owned but M4 needs to wire the query endpoint. Let me check what
+  schemas exist first:
+
+  Read 1 file, ran 1 shell command (ctrl+o to expand)
+
+● Now I'll create the chat schema and update chat.py for the Web adapter (Phase
+  7):
+
+● Write(backend\app\schemas\chat.py)
+  ⎿  Wrote 18 lines to backend\app\schemas\chat.py
+       1 """Pydantic schemas for the Chat API.
+       2 
+       3 Owner: M3/M4. Shapes must match specs/openapi.yaml exactly.
+       4 """
+       5 from pydantic import BaseModel, Field
+       6 
+       7 
+       8 class ChatQueryRequest(BaseModel):
+       9     query: str = Field(
+      10         min_length=1,
+     … +9 lines (ctrl+o to expand)
+
+● Write(backend\app\api\chat.py)
+  ⎿  Added 47 lines, removed 47 lines
+       1 +"""Chat API routes — query (with MOCK_N8N mode), conversations.
+       2 +                                                               
+       3 +Owner: M3 (list/get/delete) · M4 (query endpoint wired here via
+         + PR coordination).                                             
+       4  """
+       2 -Chat API routes — query (with MOCK_N8N mode), conversations.   
+       3 -Owner: M3 — implement route bodies.                            
+       4 -CRITICAL: Ship MOCK_N8N=true response on Day 2 to unblock M4, M
+         -8, M9, M12.                                                    
+       5 -"""                                                            
+       6 -import os                                                      
+       7 -from fastapi import APIRouter, HTTPException                   
+       8 -from app.core.config import settings                           
+       9 -from app.services import n8n_client                            
+       5 +from fastapi import APIRouter, Depends, HTTPException          
+       6 +from sqlalchemy.ext.asyncio import AsyncSession                
+       7  
+       8 +from app.core.database import get_db                           
+       9 +from app.core.dependencies import get_current_user             
+      10 +from app.models.models import User                             
+      11 +from app.schemas.chat import ChatQueryRequest                  
+      12 +from app.services.context_builder import build_web_context     
+      13 +from app.services.conversation_router import find_or_create_con
+         +versation                                                      
+      14 +from app.services.message_handler import handle_message        
+      15 +                                                               
+      16  router = APIRouter()
+      17  
+      13 -# ── Mock response shape — matches real n8n response ───       
+      14 -MOCK_RESPONSE = {                                              
+      15 -    "answer": "Based on the uploaded documentation, here is you
+         -r answer. "                                                    
+      16 -              "This is mock mode — set MOCK_N8N=false to get re
+         -al RAG responses. [Sample Manual, p.12]",                      
+      17 -    "sources": [                                               
+      18 -        {                                                      
+      19 -            "document_id": "00000000-0000-0000-0000-00000000000
+         -1",                                                            
+      20 -            "title": "Sample Product Manual",                  
+      21 -            "chunk_text": "Sample relevant excerpt from the doc
+         -ument used to generate this answer.",                          
+      22 -            "page_number": 12,                                 
+      23 -            "score": 0.94,                                     
+      24 -        }                                                      
+      25 -    ],                                                         
+      26 -    "follow_up_questions": [                                   
+      27 -        "Can you give more details?",                          
+      28 -        "What are the next steps?",                            
+      29 -        "Who should I contact?",                               
+      30 -    ],                                                         
+      31 -    "conversation_id": "00000000-0000-0000-0000-000000000099", 
+      32 -    "metadata": {"model": "gpt-4o-mini", "retrieval_time_ms": 1
+         -200, "chunks_retrieved": 5, "mock": True},                     
+      33 -}                                                              
+      18  
+      35 -                                                               
+      19  @router.post("/query", summary="Send a query — returns grounded
+           answer with citations")
+      37 -async def chat_query(request: dict):                           
+      38 -    """                                                        
+      39 -    M3: Implement:                                             
+      40 -    1. Extract query, conversation_id, tenant_id from request +
+         - current_user                                                  
+      41 -    2. Load conversation history from DB (last 10 messages)    
+      42 -    3. If MOCK_N8N=true: return MOCK_RESPONSE                  
+      43 -    4. Else: call n8n_client.retrieve(query, tenant_id, history
+         -)                                                              
+      44 -    5. Save user message + assistant response to chat_messages 
+      45 -    6. Return ChatQueryResponse                                
+      46 -    """                                                        
+      47 -    if settings.MOCK_N8N:                                      
+      48 -        return MOCK_RESPONSE                                   
+      49 -    # TODO M3: implement real retrieval                        
+      50 -    raise HTTPException(status_code=501, detail="M3: implement 
+         -real n8n retrieval (disable MOCK_N8N)")                        
+      20 +async def chat_query(                                          
+      21 +    body:         ChatQueryRequest,                            
+      22 +    current_user: User           = Depends(get_current_user),  
+      23 +    db:           AsyncSession   = Depends(get_db),            
+      24 +):                                                             
+      25 +    """Web chat endpoint. Runs the full RAG pipeline inline and
+         + returns the answer."""                                        
+      26 +    # Build normalized MessageContext from JWT-authenticated us
+         +er                                                             
+      27 +    ctx = build_web_context(current_user, body.query, body.conv
+         +ersation_id)                                                   
+      28  
+      29 +    # Resolve conversation — validates ownership if conversatio
+         +n_id was provided                                              
+      30 +    try:                                                       
+      31 +        ctx.conversation_id = await find_or_create_conversation
+         +(ctx, db)                                                      
+      32 +    except PermissionError as exc:                             
+      33 +        raise HTTPException(status_code=403, detail=str(exc))  
+      34  
+      35 +    # Commit conversation so handle_message's independent sessi
+         +on can see it                                                  
+      36 +    await db.commit()                                          
+      37 +                                                               
+      38 +    # Run handler inline (Web is synchronous — blocks until n8n
+         + responds)                                                     
+      39 +    result = await handle_message(ctx)                         
+      40 +                                                               
+      41 +    if result is None:                                         
+      42 +        raise HTTPException(status_code=502, detail="RAG servic
+         +e unavailable — please try again")                             
+      43 +                                                               
+      44 +    return result                                              
+      45 +                                                               
+      46 +                                                               
+      47  @router.get("/conversations", summary="List conversations")
+      54 -async def list_conversations():                                
+      48 +async def list_conversations(current_user: User = Depends(get_c
+         +urrent_user)):                                                 
+      49      """M3: Return conversations for current user."""
+      50      raise HTTPException(status_code=501, detail="M3: implement 
+          conversation list")
+      51  
+      52  
+      53  @router.get("/conversations/{conversation_id}", summary="Get co
+          nversation with messages")
+      60 -async def get_conversation(conversation_id: str):              
+      54 +async def get_conversation(                                    
+      55 +    conversation_id: str,                                      
+      56 +    current_user: User = Depends(get_current_user),            
+      57 +):                                                             
+      58      """M3: Return conversation + all messages."""
+      59      raise HTTPException(status_code=501, detail="M3: implement 
+          get conversation")
+      60  
+      61  
+      62  @router.delete("/conversations/{conversation_id}", status_code=
+          204)
+      66 -async def delete_conversation(conversation_id: str):           
+      63 +async def delete_conversation(                                 
+      64 +    conversation_id: str,                                      
+      65 +    current_user: User = Depends(get_current_user),            
+      66 +):                                                             
+      67      """M3: Delete conversation and all messages."""
+      68      raise HTTPException(status_code=501, detail="M3: implement 
+          delete conversation")
+
+● Now run a full Phase 7 verification — import chat.py and confirm the
+  dependency chain resolves cleanly:
+
+● Write(backend\scripts\verify_phase7.py)
+  ⎿  Wrote 68 lines to backend\scripts\verify_phase7.py
+       1 """Phase 7 verification — Web adapter (chat.py) import and struc
+         tural checks."""
+       3 
+       4 sys.path.insert(0, "C:\\Users\\tush2\\Desktop\\rag-platform\\bac
+         kend")
+       6 # ── schema ────────────────────────────────────────────────────
+         ────────────────
+       7 from app.schemas.chat import ChatQueryRequest
+       9 req = ChatQueryRequest(query="What is the refund policy?")
+      10 assert req.query == "What is the refund policy?"
+     … +71 lines (ctrl+o to expand)
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● The logic all passed — just a Windows encoding issue with the → character in
+  the print statement. Quick fix:
+
+● Update(backend\scripts\verify_phase7.py)
+  ⎿  Added 1 line, removed 1 line
+      63  ctx2 = build_web_context(_MockUser(), "test", conv_str)
+      64  assert str(ctx2.conversation_id) == conv_str, "conversation_id 
+          string should parse to UUID"
+      65  
+      66 -print("Full import chain (chat → context_builder → types → rout
+         -er → handler) — passed")                                       
+      66 +print("Full import chain (chat, context_builder, types, router,
+         + handler) -- passed")                                          
+      67  print()
+      68  print("All Phase 7 assertions passed.")
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● All 7 phases verified. Let me now do a final smoke-test by importing the full
+  FastAPI app to make sure everything integrates without errors:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● The full app imports cleanly. All 8 M4 endpoints are registered. Here's a
+  summary of everything completed:
+
+  Phases delivered:
+
+  ┌───────┬───────────────────────────────────────────────────────┬──────────┐
+  │ Phase │                         Files                         │  Status  │
+  ├───────┼───────────────────────────────────────────────────────┼──────────┤
+  │ 2     │ n8n_client.py — 120s timeout, new payload shape       │ Verified │
+  ├───────┼───────────────────────────────────────────────────────┼──────────┤
+  │ 3     │ services/context_builder.py — build_slack_context() + │ Verified │
+  │       │  build_web_context()                                  │          │
+  ├───────┼───────────────────────────────────────────────────────┼──────────┤
+  │ 4     │ services/conversation_router.py —                     │ Verified │
+  │       │ find_or_create_conversation() + reset_conversation()  │          │
+  ├───────┼───────────────────────────────────────────────────────┼──────────┤
+  │       │ services/message_handler.py — handle_message() with   │          │
+  │ 5     │ top-level try/except, history trimming, 5000-char     │ Verified │
+  │       │ budget                                                │          │
+  ├───────┼───────────────────────────────────────────────────────┼──────────┤
+  │       │ bots/slack.py — post_reply(), post_text(), Block Kit; │          │
+  │ 6     │  api/webhooks.py — HMAC verify, dedup, reset          │ Verified │
+  │       │ short-circuit, BackgroundTask dispatch                │          │
+  ├───────┼───────────────────────────────────────────────────────┼──────────┤
+  │ 7     │ schemas/chat.py + api/chat.py — Web query endpoint    │ Verified │
+  │       │ wired to M4 services                                  │          │
+  └───────┴───────────────────────────────────────────────────────┴──────────┘
+
+  Key design decisions aligned to the actual schema (vs. implementation plan 
+  draft):
+  - No is_active/last_message_at/team_id/external_id on conversations — schema
+  uses UNIQUE(user_id, channel) + hard delete for reset
+  - build_web_context takes a User ORM object (not a raw JWT dict) — matches
+  what get_current_user returns
+  - Slack user lookup uses User.slack_user_id, not external_slack_id
+  - Web route commits the conversation before calling handle_message so its
+  independent session sees the new row
+
+  Remaining work (Phase 8): Run the Alembic migration against Neon and write
+  integration tests. Delete check_neon.py before committing.
+
+✻ Brewed for 10m 47s
+
+❯ implement phase 8                                                             
+
+● Let me check the existing test infrastructure before writing anything.
+
+  Read 3 files, ran 1 shell command (ctrl+o to expand)
+
+● Let me check what test dependencies are installed and available:
+  Ran 4 shell commands (ctrl+o to expand)
+
+● Good — same pattern as test_auth.py (pytestmark = pytest.mark.asyncio, ASGI
+  transport). Writing both test files now:
+
+● Write(tests\test_m4_slack.py)
+  ⎿  Wrote 423 lines to tests\test_m4_slack.py
+       1 """M4 Slack webhook integration tests.
+       2 
+       3 Tests run against the real FastAPI ASGI app using the Neon (or l
+       4 MOCK_N8N=True (default) — no real n8n needed.
+       5 Slack API calls (post_reply, post_text) are patched with AsyncMo
+         ck in every test
+       6 that would trigger them, so no real Slack token is required.
+       7 
+       9     cd backend
+      10     pytest ../tests/test_m4_slack.py -v
+     … +491 lines (ctrl+o to expand)
+
+● Write(tests\test_m4_web.py)
+  ⎿  Wrote 313 lines to tests\test_m4_web.py
+       1 """M4 Web chat integration tests.
+       2 
+       3 Tests run against the real FastAPI ASGI app using the Neon (or l
+       4 MOCK_N8N=True (default) — responses come from MOCK_RETRIEVE_RESP
+         ONSE in n8n_client.py.
+       5 
+       6 Run:
+       7     cd backend
+       9 
+      10 Skipped automatically if Postgres is unreachable.
+     … +344 lines (ctrl+o to expand)
+
+● Now run the tests. First check if the Neon DB is reachable, then run both
+  suites:
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+● Neon may be paused (free tier). Let me run the tests — they auto-skip when the
+  DB is unreachable:
+
+  Read 1 file, ran 2 shell commands (ctrl+o to expand)
+
+● Tests are running but DB is unreachable so they're auto-skipping. Let me check
+  for completion:
+
+  Read 1 file (ctrl+o to expand)
+
+● The tests are stuck on the DB connectivity check which is timing out (Neon is
+  paused). Let me check if the run has completed or is still hanging:
+
+  Read 1 file (ctrl+o to expand)
+
+● The test is blocking on a DB connection (Neon waking from pause). Let me check
+  the Neon DB status directly:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Let me check what's happening with both background tasks:
+
+  Read 1 file (ctrl+o to expand)
+
+● Background command "Quick DB connectivity check with error capture" completed (exit code 0)
+
+● The Neon DB is timing out (paused). Let me add a short timeout to the
+  _db_available check in both test files so tests skip quickly rather than
+  hanging:
+
+● Update(tests\test_m4_slack.py)
+  ⎿  Added 4 lines, removed 2 lines
+      78  # ── DB / lifecycle fixtures ──────────────────────────────────
+          ─────────────────
+      79  
+      80  async def _db_available() -> bool:
+      81 +    import asyncio                                             
+      82      try:
+      82 -        async with engine.connect() as conn:                   
+      83 -            await conn.execute(text("SELECT 1"))               
+      83 +        async with asyncio.timeout(8):   # bail quickly if Neon
+         + is paused                                                     
+      84 +            async with engine.connect() as conn:               
+      85 +                await conn.execute(text("SELECT 1"))           
+      86          return True
+      87      except Exception:
+      88          return False
+
+● Update(tests\test_m4_web.py)
+  ⎿  Added 4 lines, removed 2 lines
+      46  # ── DB / lifecycle fixtures ──────────────────────────────────
+          ─────────────────
+      47  
+      48  async def _db_available() -> bool:
+      49 +    import asyncio                                             
+      50      try:
+      50 -        async with engine.connect() as conn:                   
+      51 -            await conn.execute(text("SELECT 1"))               
+      51 +        async with asyncio.timeout(8):   # bail quickly if Neon
+         + is paused                                                     
+      52 +            async with engine.connect() as conn:               
+      53 +                await conn.execute(text("SELECT 1"))           
+      54          return True
+      55      except Exception:
+      56          return False
+
+● Now wait for the hanging test run to finish, then re-run with the fixed
+  timeout:
+
+  Read 1 file (ctrl+o to expand)
+
+● The tests are progressing with DB timeouts (the first set of changes are
+  taking ~30s each). I'll wait for the background task to complete before
+  running the fixed version:
+
+  Read 1 file (ctrl+o to expand)
+● Still waiting for the hanging tests (each DB-unreachable test takes ~60s for
+  asyncpg to timeout). The 8-second fix is already applied to the files. Let me
+  wait for the background task notification to fire, then run the fresh suite.
+
+  Since each of the 18 tests is waiting ~60s for Neon to timeout before
+  skipping, the current run could take 18 minutes. Let me also try running the
+  migration while we wait — if Neon is slow to connect on async but responsive
+  to psycopg2 (sync), the migration might succeed:
+
+  Read 1 file, ran 1 shell command (ctrl+o to expand)
+
+● Both processes are stuck waiting for Neon. Let me just wait for the
+  notifications and check the final state. In the meantime, let me verify the
+  test files are syntactically correct with a dry-run collect:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● All 18 tests collect cleanly. Now let me check if either background task has
+  progressed:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Tests are progressing — 7 done, 11 remaining. Each takes ~60s for the DB
+  timeout. Let me wait for the test background task to complete and check the
+  alembic status:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Test 8 may be actively running against a live DB (Neon woke up). Let me check
+  the alembic status since if the DB is now reachable, the migration might
+  succeed:
+
+  Read 1 file (ctrl+o to expand)
+
+● Both tasks still running. I'll wait for the notifications to fire rather than
+  polling.
+
+  In the meantime, let me do a final code review of the test files to catch any
+  issues before the DB comes up:
+
+  Read 1 file (ctrl+o to expand)
+
+● The test structure looks correct. Let me check the background task status one
+  more time:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● 8 of 9 Slack tests are skipped. The last Slack test and all 9 web tests are in
+  progress. Let me check on the alembic run meanwhile:
+
+  Read 1 file (ctrl+o to expand)
+
+● Let me wait for the notification from the long-running test and alembic
+  processes. I'll check their final state once the notifications arrive.
+
+  While waiting, I can see the tests are correctly structured and collecting.
+  The Neon DB is currently paused — when it wakes up, there's one more thing to
+  fix first. Looking back at the migration, it hasn't been applied yet. Let me
+  check what alembic version is running on Neon via the sync check script we
+  have:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● psycopg2 (sync) connects to Neon fine — asyncpg (async) is timing out, likely
+  because the -pooler endpoint has PgBouncer compatibility issues with asyncpg.
+  Current state: migration 0001_initial only; slack_workspace_map and
+  processed_requests don't exist yet.
+
+  Let me run the migration now (uses psycopg2/sync):
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Let me check the migration progress:
+
+  Read 1 file (ctrl+o to expand)
+
+● Migration is still running. Let me wait for the background task notifications
+  rather than polling.
+
+  While waiting: there's a likely root cause for why asyncpg times out but
+  psycopg2 works. The Neon free tier pools via PgBouncer, and asyncpg needs an
+  extra SNI hint (options parameter) to connect through the pooler. Let me check
+  the .env file to understand the connection string better and potentially fix
+  it for asyncpg:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● The asyncpg timeout is because the Neon pooler requires an endpoint SNI hint
+  that asyncpg doesn't send automatically. Adding
+  &options=endpoint%3D<endpoint-id> to the DATABASE_URL fixes this. Let me
+  update .env:
+
+  Read 1 file (ctrl+o to expand)
+
+● Update(.env)
+  ⎿  Added 1 line, removed 1 line
+      18  MOCK_N8N=true
+      19  
+      20  # ── Database (Neon Postgres) ─────────────────────────────────
+          ────────────
+      21 -DATABASE_URL=postgresql+asyncpg://neondb_owner:npg_pZfyDjkngM74
+         -@ep-plain-shadow-aowguhj1-pooler.c-2.ap-southeast-1.aws.neon.te
+         -ch/neondb?ssl=require                                          
+      21 +DATABASE_URL=postgresql+asyncpg://neondb_owner:npg_pZfyDjkngM74
+         +@ep-plain-shadow-aowguhj1-pooler.c-2.ap-southeast-1.aws.neon.te
+         +ch/neondb?ssl=require&options=endpoint%3Dep-plain-shadow-aowguh
+         +j1                                                             
+      22  POSTGRES_PASSWORD=npg_pZfyDjkngM74
+      23  
+      24  # ── n8n (RAG engine — all AI logic lives here) ───────────────
+          ──────────
+● Now let me check the migration status and test the asyncpg connection with the
+  fixed URL:
+
+  Read 1 file (ctrl+o to expand)
+
+● Migration still running. Let me test the asyncpg connection with the updated
+  URL:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● The test URL showed localhost — the .env isn't being picked up when running
+  from backend directory. Let me check alembic's env.py to understand how it
+  connects:
+
+  Read 1 file (ctrl+o to expand)
+
+● I see the issue. The Set-Location backend makes alembic look for .env in
+  backend/ (where it doesn't exist), so it falls back to localhost. Need to run
+  alembic from the repo root and use PYTHONPATH:
+
+  Read 1 file (ctrl+o to expand)
+
+● The previous alembic run is trying to connect to localhost (wrong .env). Let
+  me run it correctly from the project root:
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+● Background command "Run M4 test suites" completed (exit code 0)
+
+● The test run completed. Let me check the final results:
+
+  Read 1 file (ctrl+o to expand)
+
+● All 18 tests correctly skipped in ~60s each (old code, pre-8s fix). Now let me
+  fix the alembic connection — the issue is pydantic-settings looks for .env in
+  backend/ but the file is in the project root. Easiest fix is to set
+  DATABASE_URL as an env var:
+
+  Read 1 file, ran 1 shell command (ctrl+o to expand)
+
+● The %3D in the URL breaks alembic's configparser interpolation. Fix: update
+  SYNC_DATABASE_URL to strip asyncpg-specific options (psycopg2 handles Neon SNI
+  natively so the options=endpoint param isn't needed):
+
+● Update(backend\app\core\config.py)
+  ⎿  Added 11 lines, removed 4 lines
+      32  
+      33      @property
+      34      def SYNC_DATABASE_URL(self) -> str:
+      35 -        """Sync (psycopg2) DSN derived from DATABASE_URL — used
+         - by Alembic, which                                             
+      36 -        runs migrations synchronously.                         
+      37 -        asyncpg uses ssl=require; psycopg2 uses sslmode=require
+         - — both are normalised here."""                                
+      38 -        return (                                               
+      35 +        """Sync (psycopg2) DSN for Alembic. Derived from DATABA
+         +SE_URL with three fixes:                                       
+      36 +        1. driver: +asyncpg → +psycopg2                        
+      37 +        2. SSL param: ssl=require → sslmode=require  (psycopg2 
+         +spelling)                                                      
+      38 +        3. Strip options=endpoint%3D... — Neon SNI workaround f
+         +or asyncpg only;                                               
+      39 +           psycopg2 sends SNI natively so the param is unnecess
+         +ary AND its %3D                                                
+      40 +           encoding breaks configparser interpolation in alembi
+         +c.ini."""                                                      
+      41 +        import re                                              
+      42 +        url = (                                                
+      43              self.DATABASE_URL
+      44              .replace("+asyncpg", "+psycopg2")
+      45              .replace("ssl=require", "sslmode=require")
+      46          )
+      47 +        # Remove &options=endpoint... or ?options=endpoint... (
+         +asyncpg-only Neon hint)                                        
+      48 +        url = re.sub(r"[&?]options=endpoint[^&]*", "", url)    
+      49 +        return url                                             
+      50  
+      51      # ── n8n ──────────────────────────────────────────────────
+          ────────
+      52      N8N_BASE_URL: str = "http://localhost:5678"
+
+● Now run alembic again with the env var so config.py picks up Neon creds:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Connected to Neon — revision 0001_initial. Running the upgrade now:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● The idx_conv_tenant index already exists in Neon (likely from a prior
+  attempt). Fix the migration to use if_not_exists=True:
+
+  Read 1 file (ctrl+o to expand)
+
+● Update(backend\alembic\versions\0002_m4_messaging.py)
+  ⎿  Added 2 lines
+      63          "idx_conv_tenant",
+      64          "conversations", ["tenant_id", "created_at"],
+      65          postgresql_using="btree",
+      66 +        if_not_exists=True,   # index may already exist from a 
+         +partial prior run                                              
+      67      )
+      68  
+      69      # ── chat_messages: history load index ────────────────────
+          ────────────────
+      70      op.create_index(
+      71          "idx_messages_conv_time",
+      72          "chat_messages", ["conversation_id", "created_at"],
+      73 +        if_not_exists=True,                                    
+      74      )
+      75  
+      76      # ── slack_workspace_map ──────────────────────────────────
+          ─────────────────
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Migration ran with no errors. Let me verify the revision and check that all M4
+  tables exist:
+  Ran 1 shell command (ctrl+o to expand)
+
+● Migration is on 0002_m4_messaging (head). Now let me verify the schema via
+  psycopg2:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Both M4 tables are in Neon. Now run the tests from the project root (where
+  .env lives, so asyncpg picks up the fixed URL with options=endpoint=...):
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+● Background command "Run M4 tests from project root with fixed asyncpg URL" failed with exit code 2
+
+● Windows cp1252 can't read the .env UTF-8 box-drawing chars. Fix: enable Python
+  UTF-8 mode:
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+● Background command "Run M4 tests with PYTHONUTF8=1 to handle .env encoding" completed (exit code 0)
+
+● Tests completed. Let me read the results:
+
+  Read 1 file (ctrl+o to expand)
+
+● Tests still skipping in 1.3s — the 8-second DB check timeout is firing. Let me
+  test the asyncpg connection directly with the updated URL:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● options is not supported by asyncpg. For asyncpg with Neon, the direct
+  connection endpoint (without -pooler) must be used. Updating .env to use the
+  direct endpoint:
+
+● Update(.env)
+  ⎿  Added 3 lines, removed 1 line
+      18  MOCK_N8N=true
+      19  
+      20  # ── Database (Neon Postgres) ─────────────────────────────────
+          ────────────
+      21 -DATABASE_URL=postgresql+asyncpg://neondb_owner:npg_pZfyDjkngM74
+         -@ep-plain-shadow-aowguhj1-pooler.c-2.ap-southeast-1.aws.neon.te
+         -ch/neondb?ssl=require&options=endpoint%3Dep-plain-shadow-aowguh
+         -j1                                                             
+      21 +# asyncpg requires the direct endpoint (no -pooler) — pooler on
+         +ly works with psycopg2/libpq drivers.                          
+      22 +# Alembic (psycopg2) uses the pooler automatically via SYNC_DAT
+         +ABASE_URL in config.py.                                        
+      23 +DATABASE_URL=postgresql+asyncpg://neondb_owner:npg_pZfyDjkngM74
+         +@ep-plain-shadow-aowguhj1.c-2.ap-southeast-1.aws.neon.tech/neon
+         +db?ssl=require                                                 
+      24  POSTGRES_PASSWORD=npg_pZfyDjkngM74
+      25  
+      26  # ── n8n (RAG engine — all AI logic lives here) ───────────────
+          ──────────
+
+● Also update the misleading comment in .env:
+
+● Update(.env)
+  ⎿  Added 2 lines, removed 2 lines
+      18  MOCK_N8N=true
+      19  
+      20  # ── Database (Neon Postgres) ─────────────────────────────────
+          ────────────
+      21 -# asyncpg requires the direct endpoint (no -pooler) — pooler on
+         -ly works with psycopg2/libpq drivers.                          
+      22 -# Alembic (psycopg2) uses the pooler automatically via SYNC_DAT
+         -ABASE_URL in config.py.                                        
+      21 +# Direct endpoint (no -pooler): asyncpg does not support the SN
+         +I workaround needed for Neon's                                 
+      22 +# PgBouncer pooler. Alembic (psycopg2) uses SYNC_DATABASE_URL d
+         +erived from this URL.                                          
+      23  DATABASE_URL=postgresql+asyncpg://neondb_owner:npg_pZfyDjkngM74
+          @ep-plain-shadow-aowguhj1.c-2.ap-southeast-1.aws.neon.tech/neon
+          db?ssl=require
+      24  POSTGRES_PASSWORD=npg_pZfyDjkngM74
+      25  
+
+● Now test the asyncpg connection with the direct endpoint:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● asyncpg now connects successfully via the direct endpoint. Now run the tests:
+
+  Read 1 file, ran 1 shell command (ctrl+o to expand)
+
+● Tests are running (no SKIPPED yet — DB connected). Let me check progress:
+
+  Read 1 file (ctrl+o to expand)
+
+● First 4 tests PASSED. Let me wait for the full run:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● 5/9 Slack tests passed. Waiting for the full run:
+
+  Ran 1 shell command (ctrl+o to expand)
+  ⎿  Referenced file ..\..\AppData\Local\Temp\claude\C--Users-tush2-Desktop-rag-platform\4cc448b1-1990-48a2-908b-a2fe6c65ba8f\tasks\bar1hm8r5.output
+  ⎿  Read .env (89 lines)
+  ⎿  Read backend\alembic\versions\0002_m4_messaging.py (125 lines)  ⎿  Read backend\app\core\config.py (121 lines)
+  ⎿  Read ..\..\AppData\Local\Temp\claude\C--Users-tush2-Desktop-rag-platform\4cc448b1-1990-48a2-908b-a2fe6c65ba8f\tasks\b1y9zxaef.output (1 lines)
+  ⎿  Skills restored (run)
+
+● The output only shows up to test 7. Let me read the full file to see if it
+  completed:
+
+  Read 1 file (ctrl+o to expand)
+
+● Background command "Run all 18 M4 tests against live Neon DB" failed with exit code 1
+
+● Three distinct bugs. Let me read the current files before fixing them:
+
+  Read 3 files (ctrl+o to expand)
+
+● Let me check the models for cascade rules:
+
+  Searched for 1 pattern, read 1 file (ctrl+o to expand)
+
+● Three bugs, clear root causes:
+
+  1. message_handler.py line 61: _load_history() triggers SQLAlchemy autobegin;
+  the second async with db.begin(): then fails with "A transaction is already
+  begun." The Slack tests masked this — _deliver_error called post_reply with
+  the fallback, so mock_reply.assert_called_once() passed even though the real
+  path crashed.
+  2. slack_workspace fixture teardown: reset_conversation creates a new
+  Conversation row; the test's finally only cleans processed_requests, so the
+  fixture teardown's DELETE FROM users fails on the FK conversations.user_id → 
+  users.id (no CASCADE).
+  3. test_chat_query_cross_user_conversation_returns_403: user_b.id is None when
+  Conversation is built — user not flushed yet.
+
+● Update(backend\app\services\message_handler.py)
+  ⎿  Added 16 lines, removed 14 lines
+      57      answer  = n8n_resp.get("answer", FALLBACK_REPLY)
+      58      sources = n8n_resp.get("sources", [])
+      59  
+      60 -    # Step 4 — Persist in one transaction (only on n8n success)
+      61 -    async with db.begin():                                     
+      62 -        db.add(ChatMessage(                                    
+      63 -            conversation_id = ctx.conversation_id,             
+      64 -            role            = "user",                          
+      65 -            content         = ctx.raw_query,                   
+      66 -            sources         = [],                              
+      67 -        ))                                                     
+      68 -        db.add(ChatMessage(                                    
+      69 -            conversation_id = ctx.conversation_id,             
+      70 -            role            = "assistant",                     
+      71 -            content         = answer,                          
+      72 -            sources         = sources,                         
+      73 -        ))                                                     
+      60 +    # Step 4 — Persist (on n8n success only). db may have an au
+         +tobegin transaction                                            
+      61 +    # started by _load_history; using db.add() + commit() works
+         + whether or not                                                
+      62 +    # autobegin is active (avoids "A transaction is already beg
+         +un" from begin()).                                             
+      63 +    db.add(ChatMessage(                                        
+      64 +        conversation_id = ctx.conversation_id,                 
+      65 +        role            = "user",                              
+      66 +        content         = ctx.raw_query,                       
+      67 +        sources         = [],                                  
+      68 +    ))                                                         
+      69 +    db.add(ChatMessage(                                        
+      70 +        conversation_id = ctx.conversation_id,                 
+      71 +        role            = "assistant",                         
+      72 +        content         = answer,                              
+      73 +        sources         = sources,                             
+      74 +    ))                                                         
+      75 +    await db.commit()                                          
+      76  
+      77      # Step 5 — Deliver reply
+      78      if ctx.source == ChannelType.SLACK:
+
+● Now fix the slack_workspace fixture teardown to delete conversations before
+  users:
+
+● Update(tests\test_m4_slack.py)
+  ⎿  Added 5 lines
+      134  
+      135      async with AsyncSessionLocal() as db:
+      136          await db.execute(text("DELETE FROM slack_workspace_map
+            WHERE team_id = :t"), {"t": team_id})
+      137 +        # conversations.user_id → users.id has no CASCADE; del
+          +ete conversations first                                       
+      138 +        await db.execute(text(                                
+      139 +            "DELETE FROM conversations WHERE user_id IN "     
+      140 +            "(SELECT id FROM users WHERE tenant_id = :t)"     
+      141 +        ), {"t": tenant_id})                                  
+      142          await db.execute(text("DELETE FROM users   WHERE tenan
+           t_id = :t"), {"t": tenant_id})
+      143          await db.execute(text("DELETE FROM tenants WHERE id = 
+           :t"),         {"t": tenant_id})
+      144          await db.commit()
+
+● Now fix the three issues in test_m4_web.py — flush user_b, fix its finally
+  cleanup, and fix the web_user teardown:
+
+● Update(tests\test_m4_web.py)
+  ⎿  Added 1 line
+      236              role            = "user",
+      237          )
+      238          db.add(user_b)
+      239 +        await db.flush()  # populate user_b.id before referenc
+          +ing it in Conversation                                        
+      240  
+      241          # Give user_b a pre-existing conversation
+      242          convo_b = Conversation(
+
+● Update(tests\test_m4_web.py)
+  ⎿  Added 2 lines
+      260  
+      261      finally:
+      262          async with AsyncSessionLocal() as db:
+      263 +            # conversations.user_id → users.id has no CASCADE;
+          + delete conversations first                                   
+      264 +            await db.execute(text("DELETE FROM conversations W
+          +HERE tenant_id = :t"), {"t": tenant_b_id})                    
+      265              await db.execute(text("DELETE FROM users   WHERE t
+           enant_id = :t"), {"t": tenant_b_id})
+      266              await db.execute(text("DELETE FROM tenants WHERE i
+           d = :t"),         {"t": tenant_b_id})
+      267              await db.commit()
+
+● Also harden the web_user fixture teardown (if any test fails before its
+  finally runs, conversations would block the user delete):
+
+● Update(tests\test_m4_web.py)
+  ⎿  Added 5 lines
+       93      }
+       94  
+       95      async with AsyncSessionLocal() as db:
+       96 +        # conversations.user_id → users.id has no CASCADE; del
+          +ete conversations first                                       
+       97 +        await db.execute(text(                                
+       98 +            "DELETE FROM conversations WHERE user_id IN "     
+       99 +            "(SELECT id FROM users WHERE tenant_id = :t)"     
+      100 +        ), {"t": tenant_id})                                  
+      101          await db.execute(text("DELETE FROM users   WHERE tenan
+           t_id = :t"), {"t": tenant_id})
+      102          await db.execute(text("DELETE FROM tenants WHERE id = 
+           :t"),         {"t": tenant_id})
+      103          await db.commit()
+
+● Now re-run the full test suite:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● 18/18 passed. Phase 8 (Testing) is complete.
+
+  Summary of fixes applied this session:
+
+  - message_handler.py: Replaced async with db.begin(): for message persistence
+  with db.add() + await db.commit(). _load_history() triggers SQLAlchemy
+  autobegin; the second explicit begin() was colliding with it. The Slack tests
+  had been falsely passing — _deliver_error satisfied
+  mock_reply.assert_called_once() even when the real path crashed.
+  - tests/test_m4_slack.py: Fixture teardown now deletes conversations before
+  users (the conversations.user_id → users.id FK has no CASCADE, so the DELETE
+  on users was being blocked by rows created by reset_conversation).
+  - tests/test_m4_web.py: Added await db.flush() after db.add(user_b) to get a
+  real UUID before building the Conversation object; hardened both the
+  cross-user test's finally and the web_user fixture teardown to clear
+  conversations before deleting users.
+
+✻ Brewed for 32m 34s
+
+❯ check if shell executions are over or stuck                                   
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+● You have 10 stuck Python processes — all alembic current or alembic upgrade 
+  head commands that have been hanging since the previous session (started
+  between 23:28 and 00:38, now over an hour old). They're not doing any useful
+  work — likely waiting on a Neon DB connection that timed out or was never
+  established.
+
+  Safe to kill them all:
+  Ran 2 shell commands (ctrl+o to expand)
+
+● Background command "Check current Alembic revision" failed with exit code 127
+
+● Background command "Check alembic revision with explicit env path (test if backend dir works)" failed with exit code 255
+
+● Background command "Run M4 Alembic migration against Neon" failed with exit code 255
+
+● Background command "Check current Alembic revision on Neon" failed with exit code 255
+
+● Background command "Check current Alembic revision on Neon DB" failed with exit code 255
+
+● All clear. No Python/Node processes are running anymore. The 10 stuck alembic 
+  current/alembic upgrade head processes from the previous session have been
+  killed — they were all hanging (most for over an hour) waiting on a DB
+  connection that had timed out. The background task notifications are just
+  those old processes finally reporting their termination.
+
+✻ Cooked for 37s
+
+※ recap: All 18 M4 tests now pass. Next step is to commit the Phase 8 work and open a PR to dev.
