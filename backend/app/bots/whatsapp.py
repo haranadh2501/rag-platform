@@ -3,10 +3,16 @@ WhatsApp bot logic — Twilio integration.
 Owner: M12 — implement handle_whatsapp_message and helper functions.
 """
 import logging
-from typing import Optional
-from app.services import n8n_client
+
+import httpx
+from twilio.rest import Client
+
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+
+_MAX_WHATSAPP_LENGTH = 1600
+_MAX_SOURCES = 3
 
 
 def twiml_reply(message: str) -> str:
@@ -16,15 +22,44 @@ def twiml_reply(message: str) -> str:
     return f'<?xml version="1.0"?><Response><Message>{escaped}</Message></Response>'
 
 
-async def handle_whatsapp_message(body: str, from_number: str) -> str:
-    """
-    M12: Implement:
-    1. get_tenant_for_phone(from_number)
-    2. Load conversation history from DB for this phone number
-    3. Call n8n_client.retrieve(body, tenant_id, history)
-    4. Save messages to DB
-    5. Format and return TwiML
-    """
-    logger.info(f"WhatsApp message from {from_number}: {body[:50]}")
-    # M12: implement full logic
-    return twiml_reply("M12: WhatsApp bot not yet implemented. Coming Day 2!")
+async def post_text(to: str, text: str) -> None:
+    """Send a plain text message (for "🤔 Thinking..." or error messages)."""
+    text = text[:_MAX_WHATSAPP_LENGTH]
+    try:
+        client = Client(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
+        client.messages.create(
+            from_=settings.TWILIO_WHATSAPP_NUMBER,
+            to=to,
+            body=text
+        )
+    except Exception as exc:
+        logger.error("Twilio messages.create failed: %s", exc)
+
+
+async def post_reply(to: str, answer: str, sources: list) -> None:
+    """Send answer + sources via Twilio REST API (not TwiML)."""
+    # Format: answer text + "\n\n📚 Sources: Title p.N, Title p.N"
+    formatted_text = answer
+    if sources:
+        source_lines = []
+        for src in sources[:_MAX_SOURCES]:
+            title = src.get("title", "source")
+            page = src.get("page_number")
+            if page:
+                source_lines.append(f"{title} p.{page}")
+            else:
+                source_lines.append(title)
+        formatted_text += f"\n\n📚 Sources: {', '.join(source_lines)}"
+
+    # Truncate to 1600 chars (WhatsApp limit)
+    formatted_text = formatted_text[:_MAX_WHATSAPP_LENGTH]
+
+    try:
+        client = Client(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
+        client.messages.create(
+            from_=settings.TWILIO_WHATSAPP_NUMBER,
+            to=to,
+            body=formatted_text
+        )
+    except Exception as exc:
+        logger.error("Twilio messages.create failed: %s", exc)
