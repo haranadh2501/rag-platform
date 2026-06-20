@@ -15,16 +15,15 @@ Owner: M2.
 import uuid
 
 from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.security import decode_token
 from app.models.models import User
 
-# tokenUrl is used by Swagger's "Authorize" button; the real token is minted by
-# POST /auth/login (JSON body, per the OpenAPI contract).
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+# HTTPBearer renders as a plain "Value" token field in Swagger UI's Authorize dialog.
+_bearer_scheme = HTTPBearer(auto_error=True)
 
 _CREDENTIALS_EXC = HTTPException(
     status_code=status.HTTP_401_UNAUTHORIZED,
@@ -34,11 +33,11 @@ _CREDENTIALS_EXC = HTTPException(
 
 
 async def get_current_user(
-    token: str = Depends(oauth2_scheme),
+    credentials: HTTPAuthorizationCredentials = Depends(_bearer_scheme),
     db: AsyncSession = Depends(get_db),
 ) -> User:
     """Decode the Bearer JWT and load the active user it points to."""
-    payload = decode_token(token)
+    payload = decode_token(credentials.credentials)
     if not payload:
         raise _CREDENTIALS_EXC
 
