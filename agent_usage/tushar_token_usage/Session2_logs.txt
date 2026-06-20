@@ -1,0 +1,1365 @@
+ ▐▛███▜▌   Claude Code v2.1.178
+▝▜█████▛▘  Opus 4.8 · Claude Enterprise
+  ▘▘ ▝▝    ~/Desktop/Personal/rag-platform-feature-M4_webhook/backend
+
+
+❯ /model                                                                        
+  ⎿  Set model to Opus 4.8 (1M context) (default) and saved as your default for
+     new sessions
+          Managed settings pins Sonnet 4.6 — that applies on restart
+
+❯ '/Users/tushsriv/Desktop/Personal/rag-platform-feature-M4_webhook/specs/SPEC_ 
+  M4_MESSAGE_SERVICE.md' This is the updated spec file for backend . I need you 
+  to examine this spec file , ask me for clarity, and tell me if any issues     
+  are present                                                                   
+
+⏺ Please run /login · API Error: 401 Invalid authentication credentials
+
+✻ Worked for 3s
+
+❯ /login                                                                        
+  ⎿  Login successful
+
+❯ '/Users/tushsriv/Desktop/Personal/rag-platform-feature-M4_webhook/specs/SPEC_ 
+  M4_MESSAGE_SERVICE.md' This is the updated spec file for backend . I need you 
+  to examine this spec file , ask me for clarity, and tell me if any issues     
+  are present                                                                   
+
+⏺ I'll read the spec file you mentioned.
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Let me examine the current state of the codebase to compare against what the
+  spec assumes exists.
+
+  Read 1 file, listed 1 directory (ctrl+o to expand)
+
+⏺ Several discrepancies are already visible. Let me check the existing
+  implementation files and the database init scripts.
+
+  Read 4 files (ctrl+o to expand)
+
+⏺ Now let me check the database init scripts, config, and routing to confirm the
+  schema and path assumptions.
+
+  Read 2 files, listed 1 directory (ctrl+o to expand)
+
+⏺ The migration 0002_m4_messaging.py exists. Let me read it and check the
+  OpenAPI contract and config for the routing path.
+
+  Searched for 1 pattern, read 2 files, listed 1 directory (ctrl+o to expand)
+
+⏺ Let me confirm who depends on n8n_client before flagging its removal.
+
+  Searched for 1 pattern, read 1 file, ran 1 shell command (ctrl+o to expand)
+
+⏺ I've now examined the spec against the actual codebase, OpenAPI contract,
+  migrations, ORM models, and module ownership rules. Here's my assessment.
+
+  What the spec gets right
+
+  The processing flow is sound and the Slack handling is correct in the
+  important places: HMAC verification → url_verification echo → bot_id
+  loop-prevention → dedup → ACK-then-BackgroundTask. The dedup-via-INSERT ... ON
+  CONFLICT and the "save only on pipeline success" rule are good. The
+  MessageContext carrier and the find-or-create + reset logic are clean. The
+  required schema (slack columns, slack_workspace_map, processed_requests,
+  UNIQUE(user_id, channel)) does exist — in migration 0002_m4_messaging.py.
+
+  Issues found
+
+  🔴 Blocking — contract & ownership
+
+  1. Slack path contradicts the contract. Spec §2/§5 says POST /webhooks/slack,
+  but specs/openapi.yaml:576 and the existing route define POST 
+  /webhooks/slack/events. CLAUDE.md says endpoints must match the OpenAPI
+  contract exactly.
+  2. POST /mock/pipeline is not in openapi.yaml. New endpoint absent from the
+  contract. Per CLAUDE.md, spec changes need M1 to update the YAML first.
+  3. Cross-module ownership violation. Per CLAUDE.md, M4 owns only webhooks.py,
+  bots/slack.py, (and tenant_map.py/whatsapp.py are M12). But the spec's file
+  list modifies chat.py (M3), main.py (M2), and removes shared services. This
+  needs PRs/coordination with M3 and M2, not a solo M4 change.
+  4. Removing n8n_client.py will break other modules. It's imported by admin.py
+  (ingestion — n8n_client.ingest), bots/whatsapp.py (M12), and mcp/tools.py.
+  pipeline_client.py only covers retrieval, so deleting n8n_client.py breaks
+  document ingestion and WhatsApp/MCP. The three other "files to remove"
+  (context_builder.py, conversation_router.py, message_handler.py) don't exist
+  in the tree — the spec's file list is stale.
+  5. Response/source shape diverges from the contract. Spec uses sources: 
+  [{title, url, chunk_id}] and a pipeline response of {answer, sources, 
+  follow_up_questions}. But openapi.yaml SourceChunk is {document_id, title, 
+  chunk_text, page_number, score} and ChatQueryResponse also carries
+  conversation_id, faithfulness, requires_clarification, metadata. The existing
+  MOCK_RESPONSE follows the OpenAPI shape. These are incompatible.
+
+  🟠 Schema sync
+
+  6. §6's claim "no schema changes needed" is misleading/contradictory. Changes
+  are real — they live in migration 0002. But models.py (ORM) was not updated:
+  no slack_workspace_map/processed_requests models, no
+  slack_user_id/phone_number on User, Conversation.user_id is still
+  nullable=True, and no UNIQUE(user_id, channel). Yet the spec lists models.py
+  as "Keep — no changes." If you access these via ORM it'll fail; the spec's
+  raw-SQL snippets sidestep this, so the access strategy must be decided.
+  7. init.sql and migration 0002 have diverged. database/init.sql conversations
+  has no unique constraint, still has an external_id column, and lacks
+  slack_workspace_map/processed_requests/slack_user_id. If Docker bootstraps
+  from init.sql rather than alembic upgrade head, the tables the spec relies on
+  won't exist. (init.sql is M7-owned.)
+  8. schemas/chat.py doesn't exist (only auth.py), so "Keep ChatQueryRequest —
+  no changes" is wrong; there's no Python ChatQueryRequest at all today (current
+  chat.py uses request: dict).
+
+  🟡 Logic / minor
+
+  9. Web Step 7→8 ordering is not achievable inline. Once FastAPI returns the
+  HTTP response (Step 7), no further code runs, so Step 8 (save) must happen
+  before the return — or via a background task. The linear narrative needs a
+  web-specific note.
+  10. 120s synchronous web request risks client/proxy timeouts (Slack is fine
+  since it's async).
+  11. PIPELINE_URL / PIPELINE_TIMEOUT_SECONDS aren't in config.py yet (Settings
+  is M2-owned).
+  12. Dedup INSERT happens before the field-presence check, so malformed events
+  still consume a dedup row (minor).
+
+  Before I'd consider the spec implementation-ready, four decisions need your
+  call:
+
+⏺ User answered Claude's questions:
+  ⎿  · The spec uses POST /webhooks/slack, but openapi.yaml and existing code 
+     use POST /webhooks/slack/events. Which is authoritative? → Keep 
+     /slack/events
+     · Spec sources are {title,url,chunk_id}; openapi SourceChunk is 
+     {document_id,title,chunk_text,page_number,score} plus 
+     faithfulness/metadata. Which response contract wins? → Follow openapi.yaml
+     · n8n_client.py is used by ingestion (admin.py), WhatsApp (M12), and MCP. 
+     The spec says delete it. How should pipeline_client.py coexist? → Keep 
+     n8n_client, add pipeline_client
+     · The new tables/columns exist in migration 0002 but not in models.py ORM 
+     (and init.sql has diverged). How will message_service access them? → Raw 
+     SQL (as spec shows)
+
+⏺ Your answers resolve the four blocking items. Here's how the spec must change
+  to be implementation-ready, plus what's left:
+
+  Reconciled direction
+
+  1. Slack path → /webhooks/slack/events. Update spec §2, §5 (currently say
+  /webhooks/slack). No OpenAPI change needed.
+  2. Response shape → follow openapi.yaml. The spec's {title, url, chunk_id}
+  sources and the trimmed pipeline response must be rewritten to the contract
+  shape: SourceChunk = {document_id, title, chunk_text, page_number, score}, and
+  ChatQueryResponse keeps conversation_id, faithfulness,
+  requires_clarification, metadata. Knock-on edits:
+    - §5 Web response, §6 pipeline response, §9 mock response, and the Step 8
+  INSERT ... sources — all need the contract shape.
+    - The mock response in §9 should match the existing MOCK_RESPONSE in
+  chat.py:14.
+  3. Keep n8n_client.py; add pipeline_client.py alongside. Remove the "Files to
+  remove" row for n8n_client.py from §7. Note the other three files in that list
+  (context_builder.py, conversation_router.py, message_handler.py) don't exist
+  — drop them from the table entirely (stale). pipeline_client.py is M4-scoped
+  for retrieval only; ingestion/WhatsApp/MCP stay on n8n_client.
+  4. Raw SQL for the new tables. Fine — but then §7 must stop claiming models.py
+  is untouched-because-unneeded; instead state explicitly "accessed via raw
+  SQL; ORM models intentionally not added." And §6's "no schema changes needed"
+  is simply wrong — it must say "schema provided by migration 0002_m4_messaging;
+  run alembic upgrade head."
+
+  Still open (not blocking, but the spec should address)
+
+  - init.sql vs migration 0002 divergence (issue #7) — this is the real
+  landmine. If docker compose seeds Postgres from database/init.sql, none of
+  slack_workspace_map, processed_requests, slack_user_id, or UNIQUE(user_id, 
+  channel) will exist, and your raw SQL will fail at runtime. You need M7 to
+  either (a) reconcile init.sql with 0002, or (b) confirm the bootstrap path
+  runs alembic upgrade head. Which is it in your environment? This determines
+  whether the spec works at all.
+  - Ownership/PR coordination — modifying chat.py (M3) and main.py/config.py
+  (M2) is outside M4's lane per CLAUDE.md. The spec should name these as
+  cross-module PRs so M2/M3 sign off.
+  - Web Step 7→8 ordering — clarify that for web the save happens before the
+  HTTP return (or in a background task); the current linear text implies you can
+  save after returning, which FastAPI won't execute.
+  - Add PIPELINE_URL / PIPELINE_TIMEOUT_SECONDS to config.py (M2-owned) —
+  they're referenced but not in Settings.
+
+  Want me to apply these edits to the spec file directly, or hand them to you as
+  a change list to take to M1/M2/M3/M7?
+
+  I'd also suggest saving these four decisions so they persist for the next
+  session — say the word and I'll record them.
+
+✻ Sautéed for 2m 47s
+
+※ recap: Reviewing the M4 message-service spec against the codebase; you resolved the four blocking decisions (Slack path, response shape, keep n8n_client, raw SQL). Next: confirm whether Docker seeds Postgres from init.sql or runs alembic, since init.sql lacks the required tables. (disable recaps in /config)
+
+❯ Do not modify any files conflicting with other modules, create an             
+  implementation plan without affecting other modules. Just create plan do not  
+  code yet                                                                      
+
+⏺ Auto mode lets Claude handle permission prompts automatically — Claude
+  checks each tool call for risky actions and prompt injection before 
+  executing. Actions Claude identifies as safe are executed, while 
+  actions Claude identifies as risky are blocked and Claude may try a 
+  different approach. Ideal for long-running tasks. Sessions are 
+  slightly more expensive. Claude can make mistakes that allow harmful 
+  commands to run, it's recommended to only use in isolated 
+  environments. Shift+Tab to change mode.
+⏺ Good constraint. Let me quickly ground the plan in a few facts — how DB
+  sessions are obtained, the auth dependency signature (for the web handoff),
+  and where tests live — so the plan stays strictly within M4's lane.
+
+  Read 2 files, ran 1 shell command (ctrl+o to expand)
+
+⏺ Plan grounded. Key facts that shape it: SLACK_BOT_TOKEN/SLACK_SIGNING_SECRET
+  already exist in config.py (so no M2 edit needed for those); httpx and
+  slack-sdk are already in requirements; get_db yields an AsyncSession; and
+  tests/ is M10-owned.
+
+  Here is the implementation plan — M4 stays entirely within its own lane;
+  everything that would touch M2/M3/M7 is isolated as a handoff, not an edit.
+
+  ---
+  M4 Implementation Plan — Unified Message Service (Slack slice + shared core)
+
+  Guiding principle
+
+  M4 ships a self-contained Slack vertical plus a channel-agnostic 
+  process_message() core that M3 wires into the web path later. M4 does not edit
+  any file owned by another module.
+
+  Files M4 will touch
+
+  ┌──────────────────────────────────┬───────┬───────┬─────────────────────┐
+  │               File               │ Actio │ Owner │        Notes        │
+  │                                  │   n   │       │                     │
+  ├──────────────────────────────────┼───────┼───────┼─────────────────────┤
+  │ backend/app/services/types.py    │ New   │ unown │ MessageContext      │
+  │                                  │       │ ed    │ dataclass           │
+  ├──────────────────────────────────┼───────┼───────┼─────────────────────┤
+  │                                  │       │       │ httpx POST to       │
+  │ backend/app/services/pipeline_cl │ New   │ unown │ pipeline; reads     │
+  │ ient.py                          │       │ ed    │ PIPELINE_URL via    │
+  │                                  │       │       │ os.getenv           │
+  ├──────────────────────────────────┼───────┼───────┼─────────────────────┤
+  │ backend/app/services/message_ser │ New   │ unown │ process_message(ctx │
+  │ vice.py                          │       │ ed    │ , db) — steps 2–8   │
+  ├──────────────────────────────────┼───────┼───────┼─────────────────────┤
+  │                                  │       │       │ implement /webhooks │
+  │ backend/app/api/webhooks.py      │ Modif │ M4    │ /slack/events + add │
+  │                                  │ y     │       │  /webhooks/mock/pip │
+  │                                  │       │       │ eline               │
+  ├──────────────────────────────────┼───────┼───────┼─────────────────────┤
+  │                                  │ Modif │       │ post_reply() /      │
+  │ backend/app/bots/slack.py        │ y     │ M4    │ post_text() via     │
+  │                                  │       │       │ chat.postMessage    │
+  └──────────────────────────────────┴───────┴───────┴─────────────────────┘
+
+  Explicitly NOT touched (handoffs to other modules)
+
+  ┌─────────────────────────────┬───────┬───────────────────────────────────┐
+  │            Need             │ Owner │      M4 workaround / handoff      │
+  ├─────────────────────────────┼───────┼───────────────────────────────────┤
+  │ Web adapter wiring          │       │ M4 delivers process_message();    │
+  │ (chat.py)                   │ M3    │ document the exact call contract  │
+  │                             │       │ for M3 to wire. No edit.          │
+  ├─────────────────────────────┼───────┼───────────────────────────────────┤
+  │                             │       │ Avoid by hosting the mock under   │
+  │ Router registration /       │ M2    │ the already-registered /webhooks  │
+  │ main.py                     │       │ router → POST                     │
+  │                             │       │ /webhooks/mock/pipeline.          │
+  ├─────────────────────────────┼───────┼───────────────────────────────────┤
+  │ PIPELINE_URL,               │       │ Read via os.getenv in             │
+  │ PIPELINE_TIMEOUT_SECONDS in │ M2    │ pipeline_client.py (Settings has  │
+  │  config.py                  │       │ extra="ignore", so .env entries   │
+  │                             │       │ are tolerated).                   │
+  ├─────────────────────────────┼───────┼───────────────────────────────────┤
+  │ slack_* /                   │       │ Raw SQL (your decision) — no      │
+  │ processed_requests ORM      │ M2    │ models.py change.                 │
+  │ models                      │       │                                   │
+  ├─────────────────────────────┼───────┼───────────────────────────────────┤
+  │                             │       │ Flag, don't fix. Add a            │
+  │ DB schema (migration 0002   │ M7    │ precondition: deploy must run     │
+  │ vs init.sql drift)          │       │ alembic upgrade head. See Risk    │
+  │                             │       │ #1.                               │
+  ├─────────────────────────────┼───────┼───────────────────────────────────┤
+  │ .env.example keys           │ M1    │ Document the two new vars in the  │
+  │                             │       │ PR description for M1 to add.     │
+  └─────────────────────────────┴───────┴───────────────────────────────────┘
+
+  Component design
+
+  1. types.py — MessageContext
+  Dataclass exactly per spec §4 (request_id, user_id, tenant_id, source, query, 
+  conversation_id, slack_channel, slack_thread_ts).
+
+  2. pipeline_client.py
+  - async def call_pipeline(payload: dict) -> dict
+  - PIPELINE_URL = os.getenv("PIPELINE_URL", 
+  "http://localhost:8000/webhooks/mock/pipeline"), timeout from
+  os.getenv("PIPELINE_TIMEOUT_SECONDS", "120").
+  - Returns parsed dict on 2xx; raises PipelineError on timeout/non-2xx.
+  - Response contract = openapi ChatQueryResponse shape (your decision): answer,
+  sources:[SourceChunk], follow_up_questions, optional
+  conversation_id/faithfulness/metadata.
+
+  3. message_service.py — async def process_message(ctx, db) -> dict
+  Channel-agnostic; raises typed exceptions so each adapter maps them
+  appropriately:
+  - Step 2 — resolve identity (Slack: raw-SQL JOIN slack_workspace_map + users;
+  web: already on ctx).
+  - Step 3 — find/create conversation (raw SQL); on web conversation_id
+  ownership mismatch → raise ConversationOwnershipError.
+  - Step 4 — reset (/new /reset /clear) → delete + recreate + return
+  confirmation, STOP.
+  - Step 5 — load last 10 (raw SQL DESC LIMIT 10, reverse).
+  - Step 6 — pipeline_client.call_pipeline(...); on failure raise PipelineError.
+  - Step 7 — delivery: if source=="slack" → slack.post_reply(...); if "web" →
+  return payload (no side-effect).
+  - Step 8 — save user+assistant in one transaction (raw SQL), only on success.
+  - Returns the response dict (web uses it; Slack ignores the return).
+
+  4. webhooks.py (M4)
+  - Replace the /slack/events stub: read raw body bytes → HMAC-SHA256 verify
+  against settings.SLACK_SIGNING_SECRET (403 on fail) → url_verification echo →
+  bot_id skip (200) → dedup INSERT ... ON CONFLICT DO NOTHING (rowcount 0 → 200)
+  → field validation (missing → 200 + log) → ACK 200 → BackgroundTask(_run).
+  - _run opens its own AsyncSessionLocal (the request's get_db session is closed
+  post-response), builds MessageContext, calls process_message; catches
+  PipelineError/identity errors → posts fallback or logs.
+  - Add POST /mock/pipeline here (becomes /webhooks/mock/pipeline) returning the
+  canned openapi-shaped response (mirror chat.py:14 MOCK_RESPONSE).
+  - Leave /whatsapp and /n8n/ingestion-status stubs untouched (out of M4 scope
+  here).
+
+  5. bots/slack.py (M4)
+  - async def post_reply(channel, thread_ts, answer, sources) and
+  post_text(channel, thread_ts, text) via chat.postMessage (httpx +
+  settings.SLACK_BOT_TOKEN), Block Kit: answer section + sources context block
+  capped at 3.
+
+  Web path = documented handoff (no code by M4)
+
+  M4 provides M3 this integration contract to wire inside chat.py later:
+  ctx = MessageContext(request_id=uuid4, user_id=current_user.id,
+                       tenant_id=current_user.tenant_id, source="web",
+                       query=body.query, conversation_id=body.conversation_id,
+                       slack_channel=None, slack_thread_ts=None)
+  resp = await process_message(ctx, db)        # db = Depends(get_db)
+  # map ConversationOwnershipError→403, PipelineError→502, return resp on
+  success
+
+  Testing
+
+  tests/ is M10-owned. To avoid conflict, M4's plan is to add tests in a new
+  tests/test_m4_slack.py file (additive, no edits to conftest.py/test_auth.py)
+  and flag it for M10 sign-off in the PR. Coverage: HMAC pass/fail (403),
+  url_verification, bot_id no-op, duplicate event_id no-op, reset short-circuit,
+  pipeline-failure → nothing saved, history limited to 10.
+
+  Risks to surface in the PR (not fixed by M4)
+
+  1. 🔴 init.sql vs migration 0002 drift — if the DB is seeded from
+  database/init.sql, the tables M4's raw SQL needs won't exist. Hard
+  precondition: run alembic upgrade head. Owner: M7 to reconcile.
+  2. Mock path divergence — spec says /mock/pipeline; M4 ships
+  /webhooks/mock/pipeline to avoid editing main.py. If the bare path is
+  required, that's an M2 router-registration PR.
+  3. Web path not live until M3 wires process_message — M4 delivers Slack
+  end-to-end + the reusable core only.
+  4. Spec text still says /webhooks/slack, {title,url,chunk_id} sources, "no 
+  schema changes," and lists non-existent files to delete — recommend updating
+  SPEC_M4_MESSAGE_SERVICE.md (M4-owned) to match the four decisions before
+  implementation.
+
+  ---
+  Want me to (a) start implementing this in the M4-owned/new files, (b) first
+  update the spec file to reflect the four decisions, or (c) refine any part of
+  the plan? I won't write code until you confirm.
+
+✻ Cogitated for 1m 50s
+
+❯ create a doc for this under docs/M4                                           
+
+⏺ docs/ is M11-owned, but you've explicitly asked for it and a new file under
+  docs/M4/ is additive (no edits to M11's files). I'll create it there and note
+  the ownership in the PR. Let me check the existing docs layout first.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ docs/M4/ already exists and is empty. I'll write the implementation plan
+  there.
+
+⏺ Write(~/Desktop/Personal/rag-platform-feature-M4_webhook/docs/M4/IMPLEMENTATIO
+       N_PLAN.md)
+  ⎿  Wrote 219 lines to ../docs/M4/IMPLEMENTATION_PLAN.md
+      1 # M4 Implementation Plan — Unified Message Service (Slack slice +
+      2 
+      3 **Status:** Plan — not yet implemented
+      4 **Author:** Tushar | **Date:** 2026-06-18
+        /SPEC_M4_MESSAGE_SERVICE.md)
+      6 **Scope of this doc:** How M4 will be built **without modifying a
+      7 
+      8 > ⚠️ This file lives under `docs/` which is **M11-owned**. It is 
+        an additive new file
+         the PR.
+     … +300 lines (ctrl+o to expand)
+
+⏺ Created docs/M4/IMPLEMENTATION_PLAN.md.
+
+  It captures the full plan: the four resolved decisions, the exact files M4
+  touches (2 modified M4-owned + 3 new unowned), the handoff table for
+  everything M2/M3/M7/M1-owned, per-component design, the Slack flow diagram,
+  the M3 web-wiring contract, test plan, env vars, risks, and a build order.
+
+  Two notes:
+  - The doc lives under docs/ (M11-owned) per your request — it's a new additive
+  file, flagged inside the doc for M11 awareness.
+  - It does not modify any other module's files, and no implementation code was
+  written.
+
+  Want me to also update SPEC_M4_MESSAGE_SERVICE.md to match the four decisions
+  (Risk #4), or start the build at step 1?
+
+✻ Crunched for 1m 3s
+
+❯ Implement this plan, with minimal chnages                                     
+
+⏺ The user trimmed decision #3 from the doc (we're not touching n8n_client.py
+  anyway, so no impact). Let me verify a couple of raw-SQL details — the
+  conversations / chat_messages DDL (defaults for id/created_at) and the
+  security module — before writing.
+
+  Read 2 files (ctrl+o to expand)
+
+⏺ DB provides gen_random_uuid() and NOW() defaults, and sources is JSONB. Now
+  I'll implement, in build order.
+
+  1. types.py — MessageContext (adds slack_team_id/slack_user_id so Step 2
+  resolution can run inside process_message):
+
+⏺ Write(app/services/types.py)
+  ⎿  Wrote 23 lines to app/services/types.py
+       1 """Shared data carrier for the unified message service (M4).
+       2 
+       3 All channel adapters normalize their payload into a `MessageCont
+         ext` before
+       4 handing it to `message_service.process_message`.
+       6 from dataclasses import dataclass
+       7 from uuid import UUID
+       8 
+       9 
+      10 @dataclass
+     … +19 lines (ctrl+o to expand)
+
+⏺ 2. pipeline_client.py:
+
+⏺ Write(app/services/pipeline_client.py)
+  ⎿  Wrote 36 lines to app/services/pipeline_client.py
+       1 """HTTP client for the RAG pipeline (M4).
+       2 
+         URL in prod) and
+       4 returns the parsed response. Config is read via `os.getenv` so t
+         his module stays
+          (M2-owned).
+       6 """
+       7 import logging
+       9 
+      10 import httpx
+     … +35 lines (ctrl+o to expand)
+
+⏺ 3. message_service.py — the channel-agnostic core (steps 2–8, raw SQL):
+
+⏺ Write(app/services/message_service.py)
+  ⎿  Wrote 166 lines to app/services/message_service.py
+       1 """Unified message service (M4).
+       3 Channel-agnostic processing core. A single entry point — `proces
+         s_message(ctx, db)` —
+         story → pipeline →
+       5 deliver → save). Adapters (Slack webhook, web chat) build a `Mes
+       6 
+       7 New tables (`slack_workspace_map`, `processed_requests`) and the
+       8 column are accessed via raw SQL — no ORM model changes (see migr
+         ation 0002_m4_messaging).
+      10 import json
+     … +196 lines (ctrl+o to expand)
+
+⏺ 4. bots/slack.py — delivery via chat.postMessage:
+
+⏺ Write(app/bots/slack.py)
+  ⎿  Added 50 lines, removed 12 lines
+       1 +"""Slack delivery (M4).                                        
+       2 +                                                               
+       3 +Posts answers back to Slack via the Web API `chat.postMessage`,
+         + threaded under the                                            
+       4 +originating message. `SLACK_BOT_TOKEN` is read from settings (a
+         +lready defined in config).                                     
+       5  """
+       2 -Slack bot handler.                                             
+       3 -Owner: M4 — implement handle_app_mention.                      
+       4 -"""                                                            
+       6  import logging
+       7  
+       8 +import httpx                                                   
+       9 +                                                               
+      10 +from app.core.config import settings                           
+      11 +                                                               
+      12  logger = logging.getLogger(__name__)
+      13  
+      14 +_POST_MESSAGE_URL = "https://slack.com/api/chat.postMessage"   
+      15 +_MAX_SOURCES = 3                                               
+      16  
+      10 -async def handle_app_mention(event: dict, tenant_id: str) -> No
+         -ne:                                                            
+      11 -    """                                                        
+      12 -    M4: Implement:                                             
+      13 -    1. Extract text from event (remove @bot mention)           
+      14 -    2. Call n8n_client.retrieve(text, tenant_id)               
+      15 -    3. Post reply in thread using Slack Web API                
+      16 -    """                                                        
+      17 -    logger.info(f"Slack app_mention event: {event}")           
+      18 -    # M4: implement Slack reply                                
+      17 +                                                               
+      18 +async def post_text(channel: str, thread_ts: str | None, text: 
+         +str) -> None:                                                  
+      19 +    """Post a plain text message in-thread."""                 
+      20 +    await _post({"channel": channel, "thread_ts": thread_ts, "t
+         +ext": text})                                                   
+      21 +                                                               
+      22 +                                                               
+      23 +async def post_reply(                                          
+      24 +    channel: str, thread_ts: str | None, answer: str, sources: 
+         +list                                                           
+      25 +) -> None:                                                     
+      26 +    """Post an answer with a Block Kit sources context block (c
+         +apped at 3)."""                                                
+      27 +    blocks: list[dict] = [                                     
+      28 +        {"type": "section", "text": {"type": "mrkdwn", "text": 
+         +answer}}                                                       
+      29 +    ]                                                          
+      30 +    if sources:                                                
+      31 +        lines = [f"• {s.get('title', 'source')}" for s in sourc
+         +es[:_MAX_SOURCES]]                                             
+      32 +        blocks.append({                                        
+      33 +            "type": "context",                                 
+      34 +            "elements": [{"type": "mrkdwn", "text": "\n".join(l
+         +ines)}],                                                       
+      35 +        })                                                     
+      36 +    await _post({                                              
+      37 +        "channel": channel,                                    
+      38 +        "thread_ts": thread_ts,                                
+      39 +        "text": answer,        # fallback for notifications / c
+         +lients without blocks                                          
+      40 +        "blocks": blocks,                                      
+      41 +    })                                                         
+      42 +                                                               
+      43 +                                                               
+      44 +async def _post(payload: dict) -> None:                        
+      45 +    headers = {                                                
+      46 +        "Authorization": f"Bearer {settings.SLACK_BOT_TOKEN}", 
+      47 +        "Content-Type": "application/json; charset=utf-8",     
+      48 +    }                                                          
+      49 +    try:                                                       
+      50 +        async with httpx.AsyncClient(timeout=10.0) as client:  
+      51 +            resp = await client.post(_POST_MESSAGE_URL, json=pa
+         +yload, headers=headers)                                        
+      52 +            data = resp.json()                                 
+      53 +        if not data.get("ok"):                                 
+      54 +            logger.error("Slack chat.postMessage failed: %s", d
+         +ata.get("error"))                                              
+      55 +    except httpx.HTTPError as exc:                             
+      56 +        logger.error("Slack chat.postMessage transport error: %
+         +s", exc)                                                       
+
+⏺ 5. webhooks.py — Slack fast path + mock pipeline (whatsapp & n8n stubs 
+  untouched):
+
+⏺ Update(app/api/webhooks.py)
+  ⎿  Added 23 lines, removed 1 line
+       2  Webhook routes — WhatsApp (Twilio), Slack Events, n8n callbacks
+          .
+       3  Owner: M4 — implement route bodies.
+       4  """
+       5 -from fastapi import APIRouter, Request, Response, HTTPException
+       5 +import hashlib                                                 
+       6 +import hmac                                                    
+       7 +import json                                                    
+       8 +import logging                                                 
+       9  
+      10 +from fastapi import (                                          
+      11 +    APIRouter,                                                 
+      12 +    BackgroundTasks,                                           
+      13 +    Depends,                                                   
+      14 +    HTTPException,                                             
+      15 +    Request,                                                   
+      16 +    Response,                                                  
+      17 +)                                                              
+      18 +from sqlalchemy import text                                    
+      19 +from sqlalchemy.ext.asyncio import AsyncSession                
+      20 +                                                               
+      21 +from app.bots import slack                                     
+      22 +from app.core.config import settings                           
+      23 +from app.core.database import AsyncSessionLocal, get_db        
+      24 +from app.services import message_service, pipeline_client      
+      25 +from app.services.types import MessageContext                  
+      26 +                                                               
+      27 +logger = logging.getLogger(__name__)                           
+      28 +                                                               
+      29  router = APIRouter()
+      30  
+      31  
+
+⏺ Update(app/api/webhooks.py)
+  ⎿  Added 118 lines, removed 10 lines
+       47      return Response(content=twiml, media_type="application/xml
+           ")
+       48  
+       49  
+       50 +def _verify_slack_signature(raw_body: bytes, timestamp: str, s
+          +ignature: str) -> bool:                                       
+       51 +    """HMAC-SHA256 verification per Slack's signing spec."""  
+       52 +    if not timestamp or not signature or not settings.SLACK_SI
+          +GNING_SECRET:                                                 
+       53 +        return False                                          
+       54 +    basestring = b"v0:" + timestamp.encode() + b":" + raw_body
+       55 +    digest = hmac.new(                                        
+       56 +        settings.SLACK_SIGNING_SECRET.encode(), basestring, ha
+          +shlib.sha256                                                  
+       57 +    ).hexdigest()                                             
+       58 +    return hmac.compare_digest(f"v0={digest}", signature)     
+       59 +                                                              
+       60 +                                                              
+       61 +async def _process_slack_event(                               
+       62 +    event_id: str,                                            
+       63 +    team_id: str | None,                                      
+       64 +    slack_user_id: str,                                       
+       65 +    query: str,                                               
+       66 +    channel: str | None,                                      
+       67 +    thread_ts: str | None,                                    
+       68 +) -> None:                                                    
+       69 +    """Background task — runs Steps 2–8 with its own DB sessio
+          +n (request session is closed)."""                             
+       70 +    async with AsyncSessionLocal() as db:                     
+       71 +        ctx = MessageContext(                                 
+       72 +            request_id=event_id,                              
+       73 +            source="slack",                                   
+       74 +            query=query,                                      
+       75 +            slack_channel=channel,                            
+       76 +            slack_thread_ts=thread_ts,                        
+       77 +            slack_team_id=team_id,                            
+       78 +            slack_user_id=slack_user_id,                      
+       79 +        )                                                     
+       80 +        try:                                                  
+       81 +            await message_service.process_message(ctx, db)    
+       82 +        except pipeline_client.PipelineError:                 
+       83 +            await slack.post_text(channel, thread_ts, message_
+          +service.FALLBACK_MESSAGE)                                     
+       84 +        except message_service.IdentityResolutionError as exc:
+       85 +            logger.error("Slack identity resolution failed: %s
+          +", exc)                                                       
+       86 +        except Exception:  # noqa: BLE001 — never let a bg tas
+          +k crash silently                                              
+       87 +            logger.exception("Slack event processing failed (e
+          +vent_id=%s)", event_id)                                       
+       88 +                                                              
+       89 +                                                              
+       90  @router.post("/slack/events", summary="Slack Events API webhoo
+           k")
+       51 -async def slack_events(request: Request):                     
+       52 -    """                                                       
+       53 -    M4: Implement:                                            
+       54 -    1. Handle URL verification challenge                      
+       55 -    2. Verify Slack signature (Day 5)                         
+       56 -    3. Handle app_mention events → call RAG → post reply in th
+          -read                                                          
+       57 -    """                                                       
+       58 -    body = await request.json()                               
+       59 -    # Handle Slack URL verification challenge                 
+       91 +async def slack_events(                                       
+       92 +    request: Request,                                         
+       93 +    background_tasks: BackgroundTasks,                        
+       94 +    db: AsyncSession = Depends(get_db),                       
+       95 +):                                                            
+       96 +    """Verify → ACK 200 fast; heavy work runs in a BackgroundT
+          +ask."""                                                       
+       97 +    raw = await request.body()                                
+       98 +    timestamp = request.headers.get("X-Slack-Request-Timestamp
+          +", "")                                                        
+       99 +    signature = request.headers.get("X-Slack-Signature", "")  
+      100 +    if not _verify_slack_signature(raw, timestamp, signature):
+      101 +        raise HTTPException(status_code=403, detail="Invalid S
+          +lack signature")                                              
+      102 +                                                              
+      103 +    body = json.loads(raw)                                    
+      104 +                                                              
+      105      if body.get("type") == "url_verification":
+      106          return {"challenge": body.get("challenge")}
+       62 -    # M4: implement app_mention handler                       
+      107 +                                                              
+      108 +    event = body.get("event") or {}                           
+      109 +    if event.get("bot_id"):                       # prevent re
+          +ply loops                                                     
+      110 +        return {"ok": True}                                   
+      111 +                                                              
+      112 +    event_id = body.get("event_id")                           
+      113 +                                                              
+      114 +    # Dedup: first writer wins; a duplicate event_id inserts n
+          +othing.                                                       
+      115 +    if event_id:                                              
+      116 +        result = await db.execute(                            
+      117 +            text("INSERT INTO processed_requests (request_id) 
+          +VALUES (:rid) "                                               
+      118 +                 "ON CONFLICT DO NOTHING"),                   
+      119 +            {"rid": event_id},                                
+      120 +        )                                                     
+      121 +        await db.commit()                                     
+      122 +        if result.rowcount == 0:                              
+      123 +            return {"ok": True}                   # duplicate 
+          +— already handled                                             
+      124 +                                                              
+      125 +    user = event.get("user")                                  
+      126 +    message_text = event.get("text")                          
+      127 +    if not event_id or not user or not message_text:          
+      128 +        logger.warning(                                       
+      129 +            "Slack event missing required fields: event_id=%s 
+          +user=%s has_text=%s",                                         
+      130 +            event_id, user, bool(message_text),               
+      131 +        )                                                     
+      132 +        return {"ok": True}                       # 200 so Sla
+          +ck doesn't retry                                              
+      133 +                                                              
+      134 +    background_tasks.add_task(                                
+      135 +        _process_slack_event,                                 
+      136 +        event_id,                                             
+      137 +        body.get("team_id"),                                  
+      138 +        user,                                                 
+      139 +        message_text,                                         
+      140 +        event.get("channel"),                                 
+      141 +        event.get("thread_ts") or event.get("ts"),            
+      142 +    )                                                         
+      143      return {"ok": True}
+      144  
+      145  
+      146 +# ── Mock pipeline — dev only. Hosted here (already-registered
+          + /webhooks router)                                            
+      147 +#    so no change to main.py is required. PIPELINE_URL default
+          +s to this path. ──                                            
+      148 +_MOCK_PIPELINE_RESPONSE = {                                   
+      149 +    "answer": "This is a sample response from the mock pipelin
+          +e. In production this "                                       
+      150 +              "will be a grounded answer from the RAG engine. 
+          +[Sample Manual, p.12]",                                       
+      151 +    "sources": [                                              
+      152 +        {                                                     
+      153 +            "document_id": "00000000-0000-0000-0000-0000000000
+          +01",                                                          
+      154 +            "title": "Sample Product Manual",                 
+      155 +            "chunk_text": "Sample relevant excerpt used to gen
+          +erate this answer.",                                          
+      156 +            "page_number": 12,                                
+      157 +            "score": 0.94,                                    
+      158 +        }                                                     
+      159 +    ],                                                        
+      160 +    "follow_up_questions": [                                  
+      161 +        "Can you explain this in more detail?",               
+      162 +        "What are the next steps?",                           
+      163 +        "Who should I contact for further help?",             
+      164 +    ],                                                        
+      165 +}                                                             
+      166 +                                                              
+      167 +                                                              
+      168 +@router.post("/mock/pipeline", summary="Mock RAG pipeline (dev
+          + only)")                                                      
+      169 +async def mock_pipeline(_request: Request):                   
+      170 +    """Canned success response so the message flow can be exer
+          +cised without n8n."""                                         
+      171 +    return _MOCK_PIPELINE_RESPONSE                            
+      172 +                                                              
+      173 +                                                              
+      174  @router.post("/n8n/ingestion-status", summary="n8n ingestion p
+           ipeline callback")
+      175  async def n8n_ingestion_callback(request: Request):
+      176      """
+
+⏺ 6. Tests. Let me check the existing test fixtures so the M4 test fits the
+  harness.
+  Read 2 files (ctrl+o to expand)
+
+⏺ Now the M4 test file — it self-seeds like test_auth.py, signs requests with a
+  real HMAC, and skips gracefully if the M4 schema (migration 0002) isn't
+  applied (Risk #1):
+
+⏺ Write(~/Desktop/Personal/rag-platform-feature-M4_webhook/tests/test_m4_slack.p
+       y)
+  ⎿  Wrote 242 lines to ../tests/test_m4_slack.py
+       1 """M4 Slack webhook tests.
+       3 Hit the real FastAPI app over ASGI against a live Postgres (same
+          pattern as
+         ng-field, mock
+         orkspace_map /
+       6 processed_requests are skipped if migration 0002 hasn't been app
+       7 
+       8     docker compose run --rm -v "$PWD":/repo -w /repo backend pyt
+       9 
+         gn-off with M10.
+     … +286 lines (ctrl+o to expand)
+
+⏺ Let me syntax-check all the new/modified files and try importing the app to
+  catch wiring errors.
+
+  Ran 4 shell commands (ctrl+o to expand)
+
+⏺ All files compile. Now let me try importing the app to catch any wiring errors
+  (depends on whether deps are installed).
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Host Python lacks the deps (slowapi, etc.) — the import failed in main.py:43,
+  before reaching any M4 code. Let me check whether Docker is available to run
+  the real test suite the way the repo intends.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ No Docker and no Python deps in this environment, so I can't execute the app
+  or the test suite here. Syntax is validated (py_compile passed). Let me do a
+  final read of the assembled webhooks.py to confirm coherence end-to-end.
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ webhooks.py is coherent — WhatsApp and n8n stubs untouched, mock pipeline
+  added, Slack path fully implemented. Let me update the plan doc's status to
+  reflect that it's now implemented.
+
+⏺ Update(~/Desktop/Personal/rag-platform-feature-M4_webhook/docs/M4/IMPLEMENTATI
+        ON_PLAN.md)
+  ⎿  Added 1 line, removed 1 line
+      1  # M4 Implementation Plan — Unified Message Service (Slack slice 
+         + shared core)
+      2  
+      3 -**Status:** Plan — not yet implemented                          
+      3 +**Status:** Implemented (Slack slice + shared core); web wiring 
+        +handed off to M3                                                
+      4  **Author:** Tushar | **Date:** 2026-06-18
+      5  **Source spec:** [`specs/SPEC_M4_MESSAGE_SERVICE.md`](../../spec
+         s/SPEC_M4_MESSAGE_SERVICE.md)
+      6  **Scope of this doc:** How M4 will be built **without modifying 
+         any file owned by another module.**
+
+⏺ Implementation complete. Here's what I built, strictly within M4's lane.
+
+  Files created (unowned — no conflict)
+
+  - backend/app/services/types.py — MessageContext dataclass (added
+  slack_team_id/slack_user_id so Step 2 identity resolution can live inside the
+  core).
+  - backend/app/services/pipeline_client.py — call_pipeline(); reads
+  PIPELINE_URL/PIPELINE_TIMEOUT_SECONDS via os.getenv (no config.py edit),
+  raises PipelineError.
+  - backend/app/services/message_service.py — process_message(ctx, db), Steps
+  2–8 in raw SQL: identity resolve, find/create conversation (+web
+  ownership 403), reset short-circuit, last-10 history, pipeline call, deliver,
+  save-on-success.
+
+  Files modified (M4-owned)
+
+  - backend/app/api/webhooks.py — /webhooks/slack/events: HMAC verify (403) →
+  url_verification echo → bot_id no-op → dedup INSERT ... ON CONFLICT → field
+  check → ACK 200 → BackgroundTask. Plus /webhooks/mock/pipeline (hosted here to
+  avoid touching main.py). WhatsApp + n8n stubs left untouched.
+  - backend/app/bots/slack.py — post_reply() / post_text() via chat.postMessage,
+  Block Kit, 3-source cap.
+
+  Test added
+
+  - tests/test_m4_slack.py — fast-path tests
+  (signature/challenge/bot/missing-field/mock) need no schema; end-to-end tests
+  (happy path, reset, dedup) self-seed and skip gracefully if migration 0002
+  isn't applied. Flagged for M10 sign-off (their dir).
+
+  Untouched (handoffs, as planned)
+
+  chat.py (M3 web wiring), main.py/config.py (M2), models.py, n8n_client.py,
+  init.sql (M7), .env.example (M1).
+
+  Verification status
+
+  - ✅ py_compile passes on all six files.
+  - ⚠️ Could not run the app or pytest here — this environment has no Docker and
+  no Python deps (slowapi/sqlalchemy/fastapi absent). Run the suite the way the
+  repo intends:
+  docker compose up -d postgres
+  docker compose run --rm -v "$PWD":/repo -w /repo backend pytest
+  tests/test_m4_slack.py -v
+  - The end-to-end tests require alembic upgrade head first (migration 0002 —
+  Risk #1 in the doc).
+
+  Two things worth your attention before merge: the init.sql vs migration 0002 
+  drift (M7 must reconcile, or deploys must run alembic), and the mock path is 
+  /webhooks/mock/pipeline (not the spec's /mock/pipeline) to avoid editing
+  main.py. Both are documented in the plan.
+
+  Want me to wire up the M3 web adapter handoff snippet into a short note for
+  M3, or leave it as-is in the doc?
+
+✻ Cooked for 5m 50s
+
+※ recap: Goal: implement M4's unified message service (Slack + shared core) without touching other modules' files. Done and syntax-checked; couldn't run tests here (no Docker/deps). Next: run pytest in Docker after applying migration 0002. (disable recaps in /config)
+
+❯ updated the spec file, now implement /chat api as well                        
+  ⎿  ⧉ Selected 1 lines from ../specs/SPEC_M4_MESSAGE_SERVICE.md in Visual Studio Code
+  ⎿  Found 1 new diagnostic issue in 1 file (ctrl+o to expand)
+
+⏺ The spec now moves chat.py into M4 scope. Let me re-read the updated spec's
+  web contract and file table, plus the current chat.py, to implement it
+  correctly.
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ The spec keeps the {title,url,chunk_id} example, but our confirmed decision
+  was to follow openapi.yaml — process_message already passes the pipeline
+  response through unchanged, so the web adapter stays contract-aligned without
+  reshaping. I'll define ChatQueryRequest inline in chat.py (the listed
+  schemas/chat.py doesn't actually exist) to keep everything in the now-M4-owned
+  file.
+
+  Let me also fix that pipeline_client lint while I'm here.
+
+⏺ Update(app/services/pipeline_client.py)
+  ⎿  Added 1 line, removed 1 line
+      32              resp.raise_for_status()
+      33              return resp.json()
+      34      except (httpx.HTTPError, ValueError) as exc:
+      35 -        logger.error("Pipeline call to %s failed: %s", PIPELINE
+         -_URL, exc)                                                     
+      35 +        logger.exception("Pipeline call to %s failed", PIPELINE
+         +_URL)                                                          
+      36          raise PipelineError(str(exc)) from exc
+
+⏺ Now the web adapter in chat.py (preserving M3's conversation-CRUD stubs
+  untouched):
+
+⏺ Update(app/api/chat.py)
+  ⎿  Added 49 lines, removed 41 lines
+       1  """
+       2 -Chat API routes — query (with MOCK_N8N mode), conversations.   
+       3 -Owner: M3 — implement route bodies.                            
+       4 -CRITICAL: Ship MOCK_N8N=true response on Day 2 to unblock M4, M
+         -8, M9, M12.                                                    
+       2 +Chat API routes.                                               
+       3 +- `POST /chat/query` — web adapter over the unified message ser
+         +vice (Owner: M4).                                              
+       4 +- conversation CRUD — Owner: M3 (stubs below).                 
+       5  """
+       6 -import os                                                      
+       7 -from fastapi import APIRouter, HTTPException                   
+       8 -from app.core.config import settings                           
+       9 -from app.services import n8n_client                            
+       6 +import logging                                                 
+       7 +from uuid import UUID, uuid4                                   
+       8  
+       9 +from fastapi import APIRouter, Depends, HTTPException          
+      10 +from fastapi.responses import JSONResponse                     
+      11 +from pydantic import BaseModel, Field                          
+      12 +from sqlalchemy.ext.asyncio import AsyncSession                
+      13 +                                                               
+      14 +from app.core.database import get_db                           
+      15 +from app.core.dependencies import get_current_user             
+      16 +from app.models.models import User                             
+      17 +from app.services import message_service, pipeline_client      
+      18 +from app.services.types import MessageContext                  
+      19 +                                                               
+      20 +logger = logging.getLogger(__name__)                           
+      21  router = APIRouter()
+      22  
+      13 -# ── Mock response shape — matches real n8n response ───       
+      14 -MOCK_RESPONSE = {                                              
+      15 -    "answer": "Based on the uploaded documentation, here is you
+         -r answer. "                                                    
+      16 -              "This is mock mode — set MOCK_N8N=false to get re
+         -al RAG responses. [Sample Manual, p.12]",                      
+      17 -    "sources": [                                               
+      18 -        {                                                      
+      19 -            "document_id": "00000000-0000-0000-0000-00000000000
+         -1",                                                            
+      20 -            "title": "Sample Product Manual",                  
+      21 -            "chunk_text": "Sample relevant excerpt from the doc
+         -ument used to generate this answer.",                          
+      22 -            "page_number": 12,                                 
+      23 -            "score": 0.94,                                     
+      24 -        }                                                      
+      25 -    ],                                                         
+      26 -    "follow_up_questions": [                                   
+      27 -        "Can you give more details?",                          
+      28 -        "What are the next steps?",                            
+      29 -        "Who should I contact?",                               
+      30 -    ],                                                         
+      31 -    "conversation_id": "00000000-0000-0000-0000-000000000099", 
+      32 -    "metadata": {"model": "gpt-4o-mini", "retrieval_time_ms": 1
+         -200, "chunks_retrieved": 5, "mock": True},                     
+      33 -}                                                              
+      23  
+      24 +class ChatQueryRequest(BaseModel):                             
+      25 +    """Matches openapi.yaml ChatQueryRequest. Defined inline — 
+         +no schemas/chat.py exists."""                                  
+      26 +    query: str = Field(min_length=1, max_length=2000)          
+      27 +    conversation_id: UUID | None = None                        
+      28 +    max_chunks: int = Field(default=5, ge=1, le=20)            
+      29  
+      30 +                                                               
+      31  @router.post("/query", summary="Send a query — returns grounded
+           answer with citations")
+      37 -async def chat_query(request: dict):                           
+      32 +async def chat_query(                                          
+      33 +    payload: ChatQueryRequest,                                 
+      34 +    current_user: User = Depends(get_current_user),            
+      35 +    db: AsyncSession = Depends(get_db),                        
+      36 +):                                                             
+      37 +    """Build a web MessageContext from the JWT, delegate to pro
+         +cess_message, return inline.                                   
+      38 +                                                               
+      39 +    401 (invalid JWT) and 422 (missing query) are enforced by t
+         +he dependency/schema.                                          
+      40      """
+      39 -    M3: Implement:                                             
+      40 -    1. Extract query, conversation_id, tenant_id from request +
+         - current_user                                                  
+      41 -    2. Load conversation history from DB (last 10 messages)    
+      42 -    3. If MOCK_N8N=true: return MOCK_RESPONSE                  
+      43 -    4. Else: call n8n_client.retrieve(query, tenant_id, history
+         -)                                                              
+      44 -    5. Save user message + assistant response to chat_messages 
+      45 -    6. Return ChatQueryResponse                                
+      46 -    """                                                        
+      47 -    if settings.MOCK_N8N:                                      
+      48 -        return MOCK_RESPONSE                                   
+      49 -    # TODO M3: implement real retrieval                        
+      50 -    raise HTTPException(status_code=501, detail="M3: implement 
+         -real n8n retrieval (disable MOCK_N8N)")                        
+      41 +    ctx = MessageContext(                                      
+      42 +        request_id=str(uuid4()),                               
+      43 +        source="web",                                          
+      44 +        query=payload.query,                                   
+      45 +        user_id=current_user.id,                               
+      46 +        tenant_id=current_user.tenant_id,                      
+      47 +        conversation_id=payload.conversation_id,               
+      48 +    )                                                          
+      49 +    try:                                                       
+      50 +        return await message_service.process_message(ctx, db)  
+      51 +    except message_service.ConversationOwnershipError:         
+      52 +        raise HTTPException(status_code=403, detail="conversati
+         +on_id belongs to another user")                                
+      53 +    except pipeline_client.PipelineError:                      
+      54 +        return JSONResponse(status_code=502, content={         
+      55 +            "answer": message_service.FALLBACK_MESSAGE,        
+      56 +            "sources": [],                                     
+      57 +            "follow_up_questions": [],                         
+      58 +        })                                                     
+      59  
+      60  
+      61  @router.get("/conversations", summary="List conversations")
+
+⏺ Let me verify the rest of chat.py (the M3 CRUD stubs) still compiles with the
+  new imports.
+  Read 1 file (ctrl+o to expand)
+  ⎿  Found 6 new diagnostic issues in 1 file (ctrl+o to expand)
+
+⏺ The CRUD stubs are intact. The Sonar hints suggest Annotated dependencies, but
+  the rest of the repo (e.g. auth.py) uses Depends() directly — I'll match the
+  surrounding style rather than diverge. The "document responses" hints also
+  pre-exist on M3's 501 stubs.
+
+  Now web tests for /chat/query:
+
+⏺ Write(~/Desktop/Personal/rag-platform-feature-M4_webhook/tests/test_m4_chat.py
+       )
+  ⎿  Wrote 152 lines to ../tests/test_m4_chat.py
+       1 """M4 web chat tests — POST /chat/query.
+       3 Hit the real FastAPI app over ASGI against a live Postgres (same
+          pattern as
+       4 test_auth.py). The web path needs only base tables (users/conver
+       5 chat_messages), so no migration-0002 guard is required.
+       6 
+         est tests/test_m4_chat.py -v
+       8 
+       9 NOTE: tests/ is M10-owned — this file is additive; coordinate si
+      10 """
+     … +168 lines (ctrl+o to expand)
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Both compile. Now let me update the plan doc to reflect that the web adapter
+  is now implemented in M4 (no longer a handoff). Let me read the relevant
+  sections to edit precisely.
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Update(~/Desktop/Personal/rag-platform-feature-M4_webhook/docs/M4/IMPLEMENTATI
+        ON_PLAN.md)
+  ⎿  Added 1 line
+      40  | `backend/app/services/message_service.py` | **New** | unowned
+           | `process_message(ctx, db)` — steps 2–8 |
+      41  | `backend/app/api/webhooks.py` | Modify | **M4** | implement `
+          /webhooks/slack/events` + add `/webhooks/mock/pipeline` |
+      42  | `backend/app/bots/slack.py` | Modify | **M4** | `post_reply()
+          ` / `post_text()` via `chat.postMessage` |
+      43 +| `backend/app/api/chat.py` | Modify | **M4** | web adapter `PO
+         +ST /chat/query`: JWT → `MessageContext` → `process_message` → r
+         +eturn. `ChatQueryRequest` defined inline (no `schemas/chat.py` 
+         +exists). Conversation-CRUD stubs left for M3. |                
+      44  
+      45  ### Already available — no edit required
+      46  - `SLACK_BOT_TOKEN` and `SLACK_SIGNING_SECRET` already exist in
+           `config.py` → read via `settings`.
+
+⏺ Update(~/Desktop/Personal/rag-platform-feature-M4_webhook/docs/M4/IMPLEMENTATI
+        ON_PLAN.md)
+  ⎿  Removed 1 line
+      54  
+      55  | Need | Owner | M4 workaround / handoff |
+      56  |---|---|---|
+      57 -| Web adapter wiring (`chat.py`) | M3 | M4 delivers `process_me
+         -ssage()`; document the call contract (§7) for M3 to wire. No ed
+         -it. |                                                          
+      57  | Router registration / `main.py` | M2 | **Avoid** by hosting t
+          he mock under the already-registered `/webhooks` router → `POST
+           /webhooks/mock/pipeline`. |
+      58  | `PIPELINE_URL`, `PIPELINE_TIMEOUT_SECONDS` in `config.py` | M
+          2 | Read via `os.getenv` in `pipeline_client.py` (Settings has 
+          `extra="ignore"`, so `.env` entries are tolerated). |
+      59  | `slack_*` / `processed_requests` ORM models | M2 | **Raw SQL*
+          * — no `models.py` change. |
+
+⏺ Now update §7 (the handoff section) and the web-path risk. Let me read those
+  sections.
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Update(~/Desktop/Personal/rag-platform-feature-M4_webhook/docs/M4/IMPLEMENTATI
+        ON_PLAN.md)
+  ⎿  Added 20 lines, removed 15 lines
+      141  
+      142  ---
+      143  
+      144 -## 7. Web Path = Documented Handoff (no code by M4)           
+      144 +## 7. Web Path — implemented in M4 (`POST /chat/query`)       
+      145  
+      146 -M4 provides M3 this contract to wire inside `chat.py` later (M
+          -3-owned file):                                                
+      146 +The web adapter now lives in `chat.py` (moved into M4 scope pe
+          +r the updated spec). It                                       
+      147 +authenticates via the JWT dependency, builds a web `MessageCon
+          +text`, delegates to                                           
+      148 +`process_message`, and returns the response inline:           
+      149  
+      150  ```python
+      149 -ctx = MessageContext(                                         
+      150 -    request_id=str(uuid4()),                                  
+      151 -    user_id=current_user.id,                                  
+      152 -    tenant_id=current_user.tenant_id,                         
+      153 -    source="web",                                             
+      154 -    query=body.query,                                         
+      155 -    conversation_id=body.conversation_id,                     
+      156 -    slack_channel=None,                                       
+      157 -    slack_thread_ts=None,                                     
+      158 -)                                                             
+      159 -resp = await process_message(ctx, db)          # db = Depends(
+          -get_db)                                                       
+      160 -# map ConversationOwnershipError → 403, PipelineError → 502, e
+          -lse return resp                                               
+      151 +@router.post("/query")                                        
+      152 +async def chat_query(payload: ChatQueryRequest,               
+      153 +                     current_user: User = Depends(get_current_
+          +user),                                                        
+      154 +                     db: AsyncSession = Depends(get_db)):     
+      155 +    ctx = MessageContext(request_id=str(uuid4()), source="web"
+          +, query=payload.query,                                        
+      156 +                         user_id=current_user.id, tenant_id=cu
+          +rrent_user.tenant_id,                                         
+      157 +                         conversation_id=payload.conversation_
+          +id)                                                           
+      158 +    try:                                                      
+      159 +        return await process_message(ctx, db)                 
+      160 +    except ConversationOwnershipError:      # → 403           
+      161 +        raise HTTPException(403, "conversation_id belongs to a
+          +nother user")                                                 
+      162 +    except PipelineError:                   # → 502 + fallback
+          + body                                                         
+      163 +        return JSONResponse(502, {"answer": FALLBACK_MESSAGE, 
+          +"sources": [], "follow_up_questions": []})                    
+      164  ```
+      165  
+      163 -Web path is **not live** until M3 wires this. M4 delivers Slac
+          -k end-to-end + the reusable core only.                        
+      166 +- **401** (invalid/expired JWT) — enforced by `get_current_use
+          +r`.                                                           
+      167 +- **422** (missing/empty query) — enforced by the inline `Chat
+          +QueryRequest` schema.                                         
+      168 +- Conversation-CRUD endpoints (`/chat/conversations*`) remain 
+          +**M3** stubs — untouched.                                     
+      169  
+      170  ---
+      171  
+
+⏺ Update(~/Desktop/Personal/rag-platform-feature-M4_webhook/docs/M4/IMPLEMENTATI
+        ON_PLAN.md)
+  ⎿  Added 14 lines, removed 8 lines
+      171  
+      172  ## 8. Testing
+      173  
+      174 -`tests/` is **M10-owned**. To avoid conflict, M4 adds a **new*
+          -* file                                                        
+      175 -`tests/test_m4_slack.py` (additive; no edits to `conftest.py` 
+          -/ `test_auth.py`) and flags                                   
+      176 -it for M10 sign-off in the PR.                                
+      174 +`tests/` is **M10-owned**. M4 adds two **new** additive files 
+          +(no edits to                                                  
+      175 +`conftest.py` / `test_auth.py`), flagged for M10 sign-off in t
+          +he PR:                                                        
+      176  
+      178 -Coverage:                                                     
+      177 +**`tests/test_m4_slack.py`** (Slack):                         
+      178  - HMAC pass / fail (403)
+      179  - `url_verification` challenge echo
+      180  - `bot_id` event → 200 no-op
+      182 -- duplicate `event_id` → 200 no-op, no double processing      
+      183 -- reset command → old conversation deleted, new created, pipel
+          -ine NOT called                                                
+      184 -- pipeline failure/timeout → fallback delivered, nothing saved
+          - to `chat_messages`                                           
+      185 -- history capped at last 10, oldest-first                     
+      181 +- missing required fields → 200 no-op                         
+      182 +- mock pipeline endpoint returns a valid shape                
+      183 +- happy path → threaded reply posted + 2 messages saved (needs
+          + migration 0002)                                              
+      184 +- reset command → conversation recreated, pipeline NOT called,
+          + nothing saved                                                
+      185 +- duplicate `event_id` → delivered once                       
+      186  
+      187 +**`tests/test_m4_chat.py`** (web):                            
+      188 +- missing query → 422                                         
+      189 +- no auth → 401                                               
+      190 +- happy path → 200 with `conversation_id` + 2 messages saved  
+      191 +- foreign `conversation_id` → 403                             
+      192 +                                                              
+      193  ---
+      194  
+      195  ## 9. Environment Variables (read via `os.getenv`, documented 
+           for M1)
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Update(~/Desktop/Personal/rag-platform-feature-M4_webhook/docs/M4/IMPLEMENTATI
+        ON_PLAN.md)
+  ⎿  Added 5 lines, removed 4 lines
+      211     Owner: M7 to reconcile `init.sql`.
+      212  2. **Mock path divergence** — spec says `/mock/pipeline`; M4 s
+           hips `/webhooks/mock/pipeline`
+      213     to avoid editing `main.py`. If the bare path is required, t
+           hat's an M2 router-registration PR.
+      214 -3. **Web path not live** until M3 wires `process_message` (§7)
+          -.                                                             
+      215 -4. **Spec text drift** — `SPEC_M4_MESSAGE_SERVICE.md` still sa
+          -ys `/webhooks/slack`,                                         
+      216 -   `{title,url,chunk_id}` sources, "no schema changes," and li
+          -sts non-existent files to delete.                             
+      217 -   Recommend updating the spec (M4-owned) to match §2 decision
+          -s before implementation.                                      
+      214 +3. **`chat.py` shared with M3** — M4 owns `POST /chat/query`; 
+          +M3 owns the conversation-CRUD                                 
+      215 +   stubs in the same file. Both edit `chat.py`, so coordinate 
+          +merges to avoid conflicts.                                    
+      216 +4. **Spec text drift** — `SPEC_M4_MESSAGE_SERVICE.md` still sh
+          +ows `/webhooks/slack` and                                     
+      217 +   `{title,url,chunk_id}` sources and says "no schema changes.
+          +" Implementation follows the                                  
+      218 +   §2 decisions (`/webhooks/slack/events`, openapi response sh
+          +ape, migration 0002) instead.                                 
+      219  
+      220  ---
+      221  
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Update(~/Desktop/Personal/rag-platform-feature-M4_webhook/docs/M4/IMPLEMENTATI
+        ON_PLAN.md)
+  ⎿  Added 3 lines, removed 2 lines
+      226  3. `message_service.py` (steps 2–8, raw SQL)
+      227  4. `bots/slack.py` (`post_reply` / `post_text`)
+      228  5. `webhooks.py` `/slack/events` fast path + BackgroundTask wi
+           ring
+      229 -6. `tests/test_m4_slack.py` (coordinate with M10)             
+      230 -7. PR with handoff notes for M1 (env), M2 (optional mock path)
+          -, M3 (web wiring), M7 (schema)                                
+      229 +6. `chat.py` `POST /chat/query` web adapter (inline `ChatQuery
+          +Request`)                                                     
+      230 +7. `tests/test_m4_slack.py` + `tests/test_m4_chat.py` (coordin
+          +ate with M10)                                                 
+      231 +8. PR with handoff notes for M1 (env), M2 (optional mock path)
+          +, M3 (chat.py merge), M7 (schema)                             
+
+⏺ Done. Here's what the /chat/query implementation adds, all within M4's
+  now-expanded scope.
+
+  backend/app/api/chat.py (rewritten query handler; M3 CRUD stubs untouched)
+
+  - POST /chat/query — JWT via get_current_user → builds a source="web"
+  MessageContext → process_message(ctx, db) → returns inline.
+  - ChatQueryRequest defined inline (matches openapi.yaml: query 1–2000 chars,
+  optional conversation_id: UUID, max_chunks) since schemas/chat.py doesn't
+  actually exist.
+  - Error mapping per spec §5: 401 (JWT dependency), 422 (schema), 403
+  (ConversationOwnershipError), 502 with the fallback body (PipelineError).
+  - Removed the dead n8n_client import and MOCK_RESPONSE; left
+  /chat/conversations* as M3's 501 stubs.
+
+  The response shape follows openapi.yaml (your earlier decision) —
+  process_message passes the pipeline response through and stamps
+  conversation_id/request_id, so no reshaping needed.
+
+  backend/app/services/pipeline_client.py
+
+  Fixed the SonarQube hint — logger.error → logger.exception in the except
+  block.
+
+  tests/test_m4_chat.py (new, additive)
+
+  Web coverage: missing query → 422, no auth → 401, happy path → 200 + 2 saved
+  messages, foreign conversation_id → 403. Self-seeds and cleans up like
+  test_auth.py; needs only base tables (no migration-0002 guard).
+
+  Plan doc updated
+
+  chat.py moved from handoff → implemented (§3 files table, §7 rewritten, risks,
+  build order, test list).
+
+  Verification
+
+  - ✅ py_compile passes on chat.py, pipeline_client.py, and both test files.
+  - ⚠️ Still can't run the suite here (no Docker / deps). Run:
+  docker compose up -d postgres        # then: alembic upgrade head
+  docker compose run --rm -v "$PWD":/repo -w /repo backend pytest
+  tests/test_m4_chat.py tests/test_m4_slack.py -v
+
+  Two notes carried forward: chat.py is now shared with M3 (M4 = query, M3 =
+  conversation CRUD) so merges need coordination, and the init.sql vs migration
+  0002 drift (Risk #1) still needs M7 — though the web path itself only needs
+  base tables, so it works even without migration 0002.
+
+  One small lint I deliberately left: Sonar suggests Annotated[...] for the
+  Depends() params, but auth.py uses the plain Depends() style — I matched the
+  existing codebase. Want me to switch both to Annotated for Sonar cleanliness,
+  or keep it consistent with the repo?
+
+✻ Baked for 3m 29s
+
+❯ /compact                                                                      
+  ⎿  Compacted (ctrl+o to see full summary)
+  ⎿  Referenced file ../docs/M4/IMPLEMENTATION_PLAN.md
+  ⎿  Read ../tests/test_m4_chat.py (153 lines)
+  ⎿  Read app/api/chat.py (77 lines)
+  ⎿  Read app/services/pipeline_client.py (37 lines)
+  ⎿  Referenced file ../specs/SPEC_M4_MESSAGE_SERVICE.md
+※ recap: Implementing M4's unified message service: built the Slack webhook flow, shared message_service core, and now the /chat/query web adapter, all without touching other modules. Next, run the pytest suite via Docker to verify everything works. (disable recaps in /config)
