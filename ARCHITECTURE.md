@@ -219,6 +219,55 @@ Response:
 }
 ```
 
+### POST `/webhook/retrieve-ephemeral` (FastAPI → n8n)
+> **Separate lean workflow** for conversation-scoped Q&A over `ephemeral_chunks`.
+> Deliberate deviation from the unified `search_ephemeral` agent tool above
+> (`include_ephemeral`) — flagged for M1 to unify later. v1 omits the Gemini
+> self-check / DeepSeek-Pro fallback (`faithfulness` is `null`).
+```json
+{
+  "query": "What is the refund window?",
+  "tenant_id": "uuid",
+  "conversation_id": "uuid",
+  "max_chunks": 5,
+  "conversation_history": [...]
+}
+```
+Response:
+```json
+{
+  "answer": "Refunds are accepted within 30 days [1].",
+  "sources": [{"chunk_text": "...", "source_name": "refund-policy.txt", "chunk_index": 0, "score": 0.94}],
+  "follow_up_questions": ["...", "...", "..."],
+  "faithfulness": null,
+  "requires_clarification": false,
+  "conversation_id": "uuid",
+  "metadata": {"model": "deepseek-v4-flash", "chunks_retrieved": 3}
+}
+```
+SQL filters `tenant_id` **and** `conversation_id` **and** `expires_at > NOW()`. An
+empty session returns HTTP 200 with a graceful "no documents in this session"
+answer and `sources: []` (no DeepSeek call).
+
+### POST `/webhook/purge-ephemeral` (FastAPI → n8n)
+> Session-end signal (e.g. WhatsApp session closed) → immediate
+> conversation-scoped delete. Complements the hourly TTL cron
+> (`cleanup_expired_ephemeral_chunks()`), which remains the lifetime safety net.
+```json
+{
+  "conversation_id": "uuid",
+  "tenant_id": "uuid",
+  "token": "<settings.N8N_PURGE_TOKEN>"
+}
+```
+Response:
+```json
+{ "status": "purged", "conversation_id": "uuid", "deleted_count": 3 }
+```
+`DELETE ... WHERE tenant_id=$1 AND conversation_id=$2` — `tenant_id` is mandatory
+(cross-tenant purge defense). Destructive: enable the shared-secret `token` before
+exposing beyond localhost.
+
 ### POST `/webhooks/n8n/ingestion-status` (n8n → FastAPI)
 ```json
 {

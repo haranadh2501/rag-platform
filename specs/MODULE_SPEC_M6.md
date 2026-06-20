@@ -129,6 +129,105 @@ See [`n8n-workflows/retrieval-pipeline.json`](../n8n-workflows/retrieval-pipelin
 
 
 ---
+
+## [ADDED] Ephemeral Retrieval & Purge (separate workflows)
+
+> Added to complete the WhatsApp/chat **session loop**: a user uploads a document
+> (ingested by M5's `ingest-ephemeral.json` into `ephemeral_chunks`), asks
+> questions scoped to that session, and the data is wiped on session end or TTL.
+> **Owner: M6.** ⚠️ **Deviation flag for M1:** the locked design models ephemeral
+> search as a `search_ephemeral` *tool* inside the unified `/webhook/retrieve`
+> (`include_ephemeral`). These ship as **two standalone workflows** instead — a
+> deliberate, user-approved lean v1. To be unified into the agentic loop later;
+> until then the backend `n8n_client.retrieve()` (which only targets
+> `/webhook/retrieve`) must be extended (M3) to call these.
+
+### New files (owner M6)
+- `n8n-workflows/retrieval-ephemeral.json`
+- `n8n-workflows/purge-ephemeral.json`
+
+Reuses the **existing `ephemeral_chunks` table** (no new table) and the proven
+error-handling pattern from `ingest-ephemeral.json` (per-node
+`onError:"continueErrorOutput"` → single `Format Error` classifier →
+`Respond (failure)` with `responseCode = {{ $json.statusCode }}`; 422 validation /
+5xx runtime).
+
+### v1 scope decision
+Lean, fully-working: `embed → pgvector kNN → Voyage rerank → DeepSeek answer`.
+**Gemini self-check + DeepSeek Pro fallback are OUT for v1** (the response still
+carries `faithfulness: null` for forward-compat). v2 insertion point: between
+`Generate (DeepSeek)` and `Format response`, add Gemini `gemini-3.5-flash`
+self-check → `IF faithfulness < 0.7` → DeepSeek `deepseek-v4-pro` retry.
+
+### Contract — `POST /webhook/retrieve-ephemeral`
+Request:
+```json
+{
+  "query": "What is the refund window?",
+  "tenant_id": "uuid",
+  "conversation_id": "uuid",
+  "max_chunks": 5,
+  "conversation_history": [{ "role": "user", "content": "..." }]
+}
+```
+Response:
+```json
+{
+  "answer": "... [1] ...",
+  "sources": [{ "chunk_text": "...", "source_name": "refund-policy.txt", "chunk_index": 0, "score": 0.94 }],
+  "follow_up_questions": ["...", "...", "..."],
+  "faithfulness": null,
+  "requires_clarification": false,
+  "conversation_id": "uuid",
+  "metadata": { "model": "deepseek-v4-flash", "chunks_retrieved": 3 }
+}
+```
+Empty session (no chunks found for this `conversation_id`) returns HTTP 200 with a
+graceful `answer` ("I couldn't find any documents in this session…") and
+`sources: []` — no DeepSeek call is made.
+
+pgvector kNN (note `tenant_id` **and** `conversation_id` **and** `expires_at` filter):
+```sql
+SELECT id, content, source_name, chunk_index, metadata,
+       1 - (embedding <=> $1::vector) AS score
+FROM ephemeral_chunks
+WHERE tenant_id = $2 AND conversation_id = $3 AND expires_at > NOW()
+ORDER BY embedding <=> $1::vector
+LIMIT $4;
+```
+
+### Contract — `POST /webhook/purge-ephemeral` (session-end signal)
+Request: `{ "conversation_id": "uuid", "tenant_id": "uuid", "token": "<N8N_PURGE_TOKEN?>" }`
+Response: `{ "status": "purged", "conversation_id": "uuid", "deleted_count": 3 }`
+(`deleted_count: 0` is a valid, idempotent success.)
+```sql
+DELETE FROM ephemeral_chunks
+WHERE tenant_id = $1 AND conversation_id = $2
+RETURNING id;
+```
+`tenant_id` in the WHERE is **mandatory** (cross-tenant purge defense). This is an
+**additional** path; the hourly `cleanup_expired_ephemeral_chunks()` TTL cron stays
+as the lifetime safety net. Destructive endpoint — enable the shared-secret
+`token` before exposing the webhook beyond localhost.
+
+### Acceptance criteria
+- [ ] Retrieve returns grounded, cited answers from the session's uploaded docs
+- [ ] Every retrieval SQL filters `tenant_id` + `conversation_id` + `expires_at > NOW()`
+- [ ] Cross-tenant query (same `conversation_id`, different `tenant_id`) → 0 chunks, empty-session answer
+- [ ] Empty session → graceful answer, no DeepSeek call, HTTP 200
+- [ ] Purge deletes only the target `(tenant_id, conversation_id)`; cross-tenant purge = 0 rows
+- [ ] Validation errors → HTTP 422 with `{status:"failed", phase:"validation", ...}`
+- [ ] Export both workflow JSONs committed to repo
+
+### Backend wiring (coordinate — not M6-owned)
+- `backend/app/core/config.py` (M2): `N8N_RETRIEVE_EPHEMERAL_WEBHOOK_URL`,
+  `N8N_PURGE_EPHEMERAL_WEBHOOK_URL`, `N8N_PURGE_TOKEN`.
+- `backend/app/services/n8n_client.py` (M3): `retrieve_ephemeral(...)`,
+  `purge_ephemeral(...)`.
+- WhatsApp session-end → `purge_ephemeral()` (M4/M12).
+
+
+---
 <!-- AUTO-APPENDED:SKILLS-V1 -->
 ## Skills Required
 - **Must-have:** n8n LangChain nodes (`@n8n/n8n-nodes-langchain.agent`), tool-calling agents, Postgres + pgvector kNN queries, Voyage rerank API, Google Gemini API, DeepSeek API (OpenAI-compatible).
