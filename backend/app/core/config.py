@@ -34,7 +34,11 @@ class Settings(BaseSettings):
     def SYNC_DATABASE_URL(self) -> str:
         """Sync (psycopg2) DSN derived from DATABASE_URL — used by Alembic, which
         runs migrations synchronously."""
-        return self.DATABASE_URL.replace("+asyncpg", "+psycopg2")
+        return (
+            self.DATABASE_URL
+            .replace("+asyncpg", "+psycopg2")
+            .replace("ssl=require", "sslmode=require")
+        )
 
     # ── n8n ──────────────────────────────────────────────────────────
     N8N_BASE_URL: str = "http://localhost:5678"

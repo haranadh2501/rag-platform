@@ -1,47 +1,47 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../../../lib/authContext';
+import { listUsersApi, createUserApi } from '../../../lib/userApi';
+import { ApiError } from '../../../lib/apiClient';
 import type { UserOut, UserRole } from '@admin-types';
-
-// Mock users — replaced by GET /admin/users in Phase 5.
-const MOCK_USERS: UserOut[] = [
-  {
-    id: 'user-001',
-    email: 'admin@example.com',
-    role: 'super_admin',
-    tenant_id: '11111111-1111-1111-1111-111111111111',
-    is_active: true,
-    created_at: '2026-01-15T10:00:00Z',
-  },
-  {
-    id: 'user-002',
-    email: 'alice@acme.com',
-    role: 'admin',
-    tenant_id: '11111111-1111-1111-1111-111111111111',
-    is_active: true,
-    created_at: '2026-02-10T14:30:00Z',
-  },
-  {
-    id: 'user-003',
-    email: 'bob@acme.com',
-    role: 'user',
-    tenant_id: '11111111-1111-1111-1111-111111111111',
-    is_active: true,
-    created_at: '2026-03-20T09:15:00Z',
-  },
-  {
-    id: 'user-004',
-    email: 'charlie@acme.com',
-    role: 'user',
-    tenant_id: '11111111-1111-1111-1111-111111111111',
-    is_active: false,
-    created_at: '2026-04-05T11:00:00Z',
-  },
-];
 
 type InviteRole = Extract<UserRole, 'admin' | 'user'>;
 type RoleFilter = UserRole | 'all';
+
+interface PageError {
+  message: string;
+  detail: string;
+}
+
+function classifyFetchError(err: unknown): PageError {
+  const technical = `Technical detail: ${err instanceof Error ? err.message : String(err)}`;
+  if (err instanceof ApiError) {
+    if (err.status === 401) return { message: 'Your session expired. Please sign in again.', detail: technical };
+    if (err.status === 403) return { message: 'You do not have permission to view users.', detail: technical };
+    if (err.status >= 500) return { message: 'The user service is having trouble. Please try again later.', detail: technical };
+    return { message: 'Could not load users. Please try again.', detail: technical };
+  }
+  return { message: 'Could not reach the user service. Check backend availability or CORS.', detail: technical };
+}
+
+function classifyCreateError(err: unknown): PageError {
+  const technical = `Technical detail: ${err instanceof Error ? err.message : String(err)}`;
+  if (err instanceof ApiError) {
+    if (err.status === 401) return { message: 'Your session expired. Please sign in again.', detail: technical };
+    if (err.status === 403) return { message: 'You do not have permission to create users.', detail: technical };
+    if (err.status === 409) return { message: 'A user with this email already exists.', detail: technical };
+    if (err.status === 429) return { message: 'Too many requests. Please try again in a minute.', detail: technical };
+    if (err.status >= 500) return { message: 'The user service is having trouble. Please try again later.', detail: technical };
+    // 400/422 or duplicate keyword in detail
+    const msg = err.message.toLowerCase();
+    if (msg.includes('already exists') || msg.includes('duplicate') || msg.includes('unique')) {
+      return { message: 'A user with this email already exists.', detail: technical };
+    }
+    return { message: 'Please check the user details and try again.', detail: technical };
+  }
+  return { message: 'Could not reach the user service. Check backend availability or CORS.', detail: technical };
+}
 
 const ROLE_FILTER_OPTIONS: { value: RoleFilter; label: string }[] = [
   { value: 'all', label: 'All' },
@@ -77,6 +77,11 @@ function formatDate(iso: string): string {
 export default function UsersPage() {
   const { user: currentUser } = useAuth();
 
+  // Data state
+  const [users, setUsers] = useState<UserOut[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<PageError | null>(null);
+
   // Table filters
   const [searchEmail, setSearchEmail] = useState('');
   const [roleFilter, setRoleFilter] = useState<RoleFilter>('all');
@@ -86,14 +91,74 @@ export default function UsersPage() {
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<InviteRole>('user');
   const [invitePassword, setInvitePassword] = useState('');
+  const [inviteLoading, setInviteLoading] = useState(false);
+  const [inviteError, setInviteError] = useState<PageError | null>(null);
 
-  const filteredUsers = MOCK_USERS.filter((u) => {
+  useEffect(() => {
+    let cancelled = false;
+
+    async function fetchUsers() {
+      setLoading(true);
+      setFetchError(null);
+      try {
+        const data = await listUsersApi();
+        if (!cancelled) setUsers(data.users);
+      } catch (err) {
+        if (!cancelled) setFetchError(classifyFetchError(err));
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    void fetchUsers();
+    return () => { cancelled = true; };
+  }, []);
+
+  const filteredUsers = users.filter((u) => {
     const matchesEmail = u.email.toLowerCase().includes(searchEmail.toLowerCase());
     const matchesRole = roleFilter === 'all' || u.role === roleFilter;
     return matchesEmail && matchesRole;
   });
 
   const hasActiveFilter = searchEmail.length > 0 || roleFilter !== 'all';
+
+  const tenantId = currentUser?.tenant_id ?? '';
+  const canSubmitInvite =
+    inviteEmail.trim().length > 0 &&
+    invitePassword.length >= 8 &&
+    tenantId.length > 0 &&
+    !inviteLoading;
+
+  function closeDrawer() {
+    setOpen(false);
+    setInviteEmail('');
+    setInviteRole('user');
+    setInvitePassword('');
+    setInviteError(null);
+  }
+
+  async function handleInviteSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!canSubmitInvite) return;
+
+    setInviteLoading(true);
+    setInviteError(null);
+
+    try {
+      const newUser = await createUserApi({
+        email: inviteEmail.trim(),
+        password: invitePassword,
+        tenant_id: tenantId,
+        role: inviteRole,
+      });
+      setUsers((prev) => [newUser, ...prev]);
+      closeDrawer();
+    } catch (err) {
+      setInviteError(classifyCreateError(err));
+    } finally {
+      setInviteLoading(false);
+    }
+  }
 
   return (
     <main className="p-6">
@@ -141,10 +206,18 @@ export default function UsersPage() {
         </div>
       </div>
 
-      <p className="mb-3 text-xs text-slate-400">
-        Mock data — live list requires{' '}
-        <code className="rounded bg-slate-100 px-0.5">GET /admin/users</code> (Phase 5).
-      </p>
+      {/* ── List fetch error panel ───────────────────────── */}
+      {fetchError && (
+        <div
+          role="alert"
+          aria-live="assertive"
+          className="mb-4 rounded-md border border-red-200 bg-red-50 p-3"
+        >
+          <p className="text-sm font-medium text-red-800">Could not load users</p>
+          <p className="mt-1 text-xs text-red-700">{fetchError.message}</p>
+          <p className="mt-1 text-xs text-red-400">{fetchError.detail}</p>
+        </div>
+      )}
 
       {/* ── User table ───────────────────────────────────── */}
       <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
@@ -162,12 +235,26 @@ export default function UsersPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {filteredUsers.length === 0 ? (
+            {loading ? (
+              Array.from({ length: 3 }).map((_, i) => (
+                <tr key={i}>
+                  {Array.from({ length: 5 }).map((__, j) => (
+                    <td key={j} className="px-4 py-3">
+                      <div className="h-4 animate-pulse rounded bg-slate-100" />
+                    </td>
+                  ))}
+                </tr>
+              ))
+            ) : fetchError ? (
+              <tr>
+                <td colSpan={5} className="px-4 py-6 text-center text-sm text-slate-400">
+                  User list unavailable — see error above.
+                </td>
+              </tr>
+            ) : filteredUsers.length === 0 ? (
               <tr>
                 <td colSpan={5} className="px-4 py-10 text-center text-sm text-slate-400">
-                  {hasActiveFilter
-                    ? 'No users match the current filters.'
-                    : 'No users found.'}
+                  {hasActiveFilter ? 'No users match the current filters.' : 'No users found.'}
                 </td>
               </tr>
             ) : (
@@ -175,7 +262,6 @@ export default function UsersPage() {
                 const isCurrent = u.email === currentUser?.email;
                 return (
                   <tr key={u.id} className="hover:bg-slate-50">
-                    {/* Email */}
                     <td className="px-4 py-3 text-sm">
                       <span className="font-medium text-slate-800">{u.email}</span>
                       {isCurrent && (
@@ -184,15 +270,9 @@ export default function UsersPage() {
                         </span>
                       )}
                     </td>
-
-                    {/* Role pill */}
                     <td className="px-4 py-3">
-                      <span className={roleBadgeClass(u.role)}>
-                        {roleBadgeLabel(u.role)}
-                      </span>
+                      <span className={roleBadgeClass(u.role)}>{roleBadgeLabel(u.role)}</span>
                     </td>
-
-                    {/* Active */}
                     <td className="px-4 py-3 text-sm">
                       {u.is_active ? (
                         <span className="text-emerald-600">✓ Active</span>
@@ -200,13 +280,9 @@ export default function UsersPage() {
                         <span className="text-slate-400">Inactive</span>
                       )}
                     </td>
-
-                    {/* Joined */}
                     <td className="px-4 py-3 text-sm text-slate-500">
                       {formatDate(u.created_at)}
                     </td>
-
-                    {/* Actions */}
                     <td className="px-4 py-3 text-sm">
                       {isCurrent ? (
                         <span className="text-slate-400" title="Cannot deactivate your own account">
@@ -216,7 +292,7 @@ export default function UsersPage() {
                         <button
                           type="button"
                           disabled
-                          title="API pending — wired in Phase 5 once blockers are resolved"
+                          title="Deactivate API not yet wired"
                           className="cursor-not-allowed rounded border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-400 disabled:opacity-50"
                         >
                           Deactivate
@@ -234,14 +310,12 @@ export default function UsersPage() {
       {/* ── Invite User drawer ───────────────────────────── */}
       {open && (
         <>
-          {/* Backdrop */}
           <div
             className="fixed inset-0 z-40 bg-slate-900/50"
             aria-hidden="true"
-            onClick={() => setOpen(false)}
+            onClick={closeDrawer}
           />
 
-          {/* Slide-over panel */}
           <div
             role="dialog"
             aria-modal="true"
@@ -251,10 +325,7 @@ export default function UsersPage() {
             {/* Drawer header */}
             <div className="flex shrink-0 items-center justify-between border-b border-slate-200 px-6 py-4">
               <div>
-                <h2
-                  id="invite-drawer-title"
-                  className="text-base font-semibold text-slate-900"
-                >
+                <h2 id="invite-drawer-title" className="text-base font-semibold text-slate-900">
                   Invite User
                 </h2>
                 <p className="mt-0.5 text-xs text-slate-500">
@@ -263,7 +334,7 @@ export default function UsersPage() {
               </div>
               <button
                 type="button"
-                onClick={() => setOpen(false)}
+                onClick={closeDrawer}
                 aria-label="Close drawer"
                 className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500"
               >
@@ -280,26 +351,22 @@ export default function UsersPage() {
               </button>
             </div>
 
-            {/* Blocker notice */}
+            {/* Pending items notice */}
             <div className="mx-6 mt-5 shrink-0 rounded-md border border-amber-200 bg-amber-50 p-4 text-xs text-amber-800">
-              <p className="font-semibold">API wiring pending — resolve blockers first</p>
+              <p className="font-semibold">Known pending items</p>
               <ul className="mt-2 list-disc space-y-1 pl-4">
                 <li>
                   <strong>phone_number</strong> is required by team spec but absent from{' '}
                   <code className="rounded bg-amber-100 px-0.5">RegisterRequest</code> in{' '}
-                  <code className="rounded bg-amber-100 px-0.5">openapi.yaml</code> — backend
-                  schema must be updated before this field can be sent.
+                  <code className="rounded bg-amber-100 px-0.5">openapi.yaml</code> — field is
+                  visible but not sent until backend schema is updated.
                 </li>
                 <li>
-                  <strong>409 duplicate email</strong> response not defined in{' '}
+                  <strong>Duplicate email (409)</strong> is not defined in{' '}
                   <code className="rounded bg-amber-100 px-0.5">openapi.yaml</code> — backend owns
-                  unique-email enforcement; frontend will surface the{' '}
-                  <code className="rounded bg-amber-100 px-0.5">detail</code> field once the 409
-                  shape is documented.
-                </li>
-                <li>
-                  <strong>Password/temp-password</strong> behaviour unconfirmed — backend
-                  auto-generate vs. admin-set not yet documented.
+                  enforcement; frontend surfaces the{' '}
+                  <code className="rounded bg-amber-100 px-0.5">detail</code> field when the error
+                  is returned.
                 </li>
                 <li>
                   <strong>Slack onboarding lookup</strong> by email is backend-owned; no frontend
@@ -308,30 +375,46 @@ export default function UsersPage() {
               </ul>
             </div>
 
-            {/* Form fields */}
-            <div className="flex-1 px-6 py-5">
+            {/* Create error panel */}
+            {inviteError && (
+              <div
+                role="alert"
+                aria-live="assertive"
+                className="mx-6 mt-4 shrink-0 rounded-md border border-red-200 bg-red-50 p-3"
+              >
+                <p className="text-sm font-medium text-red-800">Could not create user</p>
+                <p className="mt-1 text-xs text-red-700">{inviteError.message}</p>
+                <p className="mt-1 text-xs text-red-400">{inviteError.detail}</p>
+              </div>
+            )}
+
+            {/* Form */}
+            <form
+              id="invite-form"
+              onSubmit={(e) => { void handleInviteSubmit(e); }}
+              className="flex-1 px-6 py-5"
+            >
               <div className="space-y-5">
 
                 {/* Email */}
                 <div>
-                  <label
-                    htmlFor="invite-email"
-                    className="block text-xs font-medium text-slate-700"
-                  >
+                  <label htmlFor="invite-email" className="block text-xs font-medium text-slate-700">
                     Email <span className="text-red-500" aria-hidden="true">*</span>
                   </label>
                   <input
                     id="invite-email"
                     type="email"
                     autoComplete="off"
+                    required
                     placeholder="user@example.com"
                     value={inviteEmail}
                     onChange={(e) => setInviteEmail(e.target.value)}
-                    className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    disabled={inviteLoading}
+                    className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-60"
                   />
                 </div>
 
-                {/* Phone number — required by team, blocked at schema level */}
+                {/* Phone number — visible, disabled, not submitted */}
                 <div>
                   <label
                     htmlFor="invite-phone"
@@ -350,7 +433,7 @@ export default function UsersPage() {
                     className="mt-1 w-full cursor-not-allowed rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-400 disabled:opacity-50"
                   />
                   <p className="mt-1 text-xs text-slate-500">
-                    Required by team spec. Disabled until{' '}
+                    Not sent to backend until{' '}
                     <code className="rounded bg-slate-100 px-0.5">phone_number</code> is added to{' '}
                     <code className="rounded bg-slate-100 px-0.5">RegisterRequest</code> in
                     openapi.yaml.
@@ -359,17 +442,15 @@ export default function UsersPage() {
 
                 {/* Role */}
                 <div>
-                  <label
-                    htmlFor="invite-role"
-                    className="block text-xs font-medium text-slate-700"
-                  >
+                  <label htmlFor="invite-role" className="block text-xs font-medium text-slate-700">
                     Role <span className="text-red-500" aria-hidden="true">*</span>
                   </label>
                   <select
                     id="invite-role"
                     value={inviteRole}
                     onChange={(e) => setInviteRole(e.target.value as InviteRole)}
-                    className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-800 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    disabled={inviteLoading}
+                    className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-800 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-60"
                   >
                     <option value="user">User</option>
                     <option value="admin">Admin</option>
@@ -378,28 +459,22 @@ export default function UsersPage() {
 
                 {/* Tenant — read-only, derived from JWT */}
                 <div>
-                  <label className="block text-xs font-medium text-slate-700">
-                    Tenant
-                  </label>
+                  <label className="block text-xs font-medium text-slate-700">Tenant</label>
                   <input
                     type="text"
                     readOnly
-                    value={currentUser?.tenant_id ?? 'derived from your JWT'}
+                    value={tenantId || 'derived from your JWT'}
                     aria-readonly="true"
                     className="mt-1 w-full cursor-default rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-400"
                   />
                   <p className="mt-1 text-xs text-slate-400">
-                    <code>tenant_id</code> in <code>RegisterRequest</code> is populated from your
-                    JWT — not editable here.
+                    <code>tenant_id</code> is populated from your JWT — not editable here.
                   </p>
                 </div>
 
-                {/* Password / Temp password */}
+                {/* Password */}
                 <div>
-                  <label
-                    htmlFor="invite-password"
-                    className="block text-xs font-medium text-slate-700"
-                  >
+                  <label htmlFor="invite-password" className="block text-xs font-medium text-slate-700">
                     Password / Temp password{' '}
                     <span className="text-red-500" aria-hidden="true">*</span>
                   </label>
@@ -407,33 +482,38 @@ export default function UsersPage() {
                     id="invite-password"
                     type="password"
                     autoComplete="new-password"
-                    placeholder="••••••••"
+                    required
+                    minLength={8}
+                    placeholder="Min. 8 characters"
                     value={invitePassword}
                     onChange={(e) => setInvitePassword(e.target.value)}
-                    className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    disabled={inviteLoading}
+                    className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-60"
                   />
-                  <p className="mt-1 text-xs text-amber-700">
-                    Required by <code>RegisterRequest</code>. Confirm with the backend team whether
-                    the backend auto-generates a temporary password or the admin sets one here.
-                    Frontend never stores or logs passwords; backend owns hashing.
+                  <p className="mt-1 text-xs text-slate-500">
+                    Sent to backend only; cleared after success. Backend owns hashing — frontend
+                    never stores passwords.
                   </p>
                 </div>
 
               </div>
-            </div>
+            </form>
 
             {/* Drawer footer */}
             <div className="shrink-0 border-t border-slate-200 px-6 py-4">
               <button
-                type="button"
-                disabled
-                aria-disabled="true"
+                type="submit"
+                form="invite-form"
+                disabled={!canSubmitInvite}
+                aria-disabled={!canSubmitInvite}
                 className="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
               >
-                Send invite — API pending
+                {inviteLoading ? 'Creating user…' : 'Create user'}
               </button>
               <p className="mt-2 text-center text-xs text-slate-400">
-                <code>POST /admin/users/invite</code> wired in Phase 5 once blockers are cleared.
+                Calls{' '}
+                <code className="rounded bg-slate-100 px-0.5">POST /auth/register</code>
+                {' '}with Bearer token · backend persists user in DB.
               </p>
             </div>
           </div>
