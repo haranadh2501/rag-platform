@@ -32,6 +32,7 @@ All routes are protected by `AuthGuard`. Unauthenticated requests redirect to `/
 │ Users    │                                              │
 │ Tenants 🔒│                                              │
 │ Settings │                                              │
+│ Chat ───►│  (links to /chat/new; Chat UI is M9-owned)  │
 │          │                                              │
 │ Knowledge│                                              │
 │ Base ───►│                                              │
@@ -40,7 +41,13 @@ All routes are protected by `AuthGuard`. Unauthenticated requests redirect to `/
 
 - Sidebar width: 240 px. Collapses to hamburger on < 768 px.
 - Active nav item: `indigo-600` left border + background tint.
-- Sidebar bottom shows a "Knowledge Base" descriptor footer (static text — no Chat nav link).
+- **Chat nav item**: links to `/chat/new`; active state matches `/chat/*`; chat-bubble icon. M8 adds this navigation access point only — Chat UI is M9-owned. Users page does not embed chat.
+- Sidebar bottom shows a "Knowledge Base" descriptor footer.
+
+**Login redirect behavior (role-aware):**
+- Safe `?next=<path>` param present → redirect to `next` (all roles).
+- No safe `next` + `role === 'user'` → redirect to `/chat/new`.
+- No safe `next` + `role === 'admin'` or `'super_admin'` → redirect to `/admin/documents`.
 
 ---
 
@@ -178,9 +185,19 @@ uploaded → validated → parsed/OCR → chunked → embedded → stored
 
 ## Users Page (`/admin/users`)
 
-> **Current state — mock data, fully interactive table, API wiring blocked.**
-> `MOCK_USERS: UserOut[]` (4 users: super_admin, admin, user, inactive user) replaces the backend call.
-> `GET /admin/users` wiring is Phase 5.
+> **Current state — `GET /admin/users` + `POST /auth/register` wired; deactivate pending.**
+> `listUsersApi()` → `GET /admin/users`; `createUserApi(input)` → `POST /auth/register`.
+> Both in `src/lib/userApi.ts`; Bearer token attached automatically by `apiClient` (no hardcoded
+> JWT; no direct DB access from frontend; backend persists user in DB).
+> `tenant_id` sourced from `authContext.user.tenant_id`; never a form field.
+> `phone_number` visible in drawer but disabled and never sent — absent from `RegisterRequest`.
+> Password sent to backend only; cleared after success; backend owns hashing.
+> On success: returned `UserOut` prepended to table; drawer closes; form cleared.
+> On create failure: inline red error panel in drawer; `classifyCreateError()` maps all status codes.
+> Duplicate handling is best-effort — 409 not documented in `openapi.yaml`; frontend also checks
+> "already exists"/"duplicate" keywords in `detail` for 400/422 responses.
+> Slack onboarding is backend-owned; no frontend action.
+> Deactivate remains pending.
 
 ### User Table
 

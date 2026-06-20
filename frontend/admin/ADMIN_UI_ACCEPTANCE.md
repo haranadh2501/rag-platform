@@ -13,7 +13,9 @@
 > `POST /auth/login` is wired in `src/app/login/page.tsx` via `src/lib/authApi.ts`. On success the page calls `useAuth().login(access_token, user)` — `authContext` stores both the token (`access_token` key) and the full `UserOut` object (`user_context` key) in `localStorage` and updates the in-memory apiClient store. The `UserOut` is sourced directly from the login response (`{ id, email, role, tenant_id, is_active, created_at }`). `authContext` hydrates both on mount. Admin header now shows live data: avatar initial from `user.email`, role badge from `user.role`, tenant pill from `user.tenant_id.slice(0, 8)`. All header values fall back gracefully when `user` is null. User data is **not backend-verified on each request** (localStorage-sourced); `GET /auth/me` wiring is a pending phase. `AuthProvider` lives in root `layout.tsx`. `AuthGuard` redirects `/admin/*` to `/login?next=<path>` on no token. Role checks, Tenants 403 state, logout action, and `apiClient.ts` 401 → redirect remain TODO. All document, user, tenant, and settings pages remain mock/placeholder. No automated test runner; verification is typecheck + browser check.
 
 - [x] `/admin/documents` without token → redirects to `/login?next=/admin/documents` *(manual browser check — AuthGuard shell active)*
-- [ ] Login as `admin` role → lands on `/admin/documents` *(requires live backend)*
+- [x] Login as `admin` or `super_admin` role with no `next` param → lands on `/admin/documents` *(requires live backend)*
+- [x] Login as `user` role with no `next` param → redirects to `/chat/new` *(requires live backend)*
+- [x] Login with safe `next` param (any role) → redirects to `next` regardless of role *(requires live backend)*
 - [ ] Login as `user` role → `/admin/*` is inaccessible (redirect or 403) *(requires role checks — not yet implemented)*
 - [ ] `/admin/tenants` as `admin` role → shows 403 state, not blank page or JS error *(requires role checks — not yet implemented)*
 
@@ -151,49 +153,81 @@
 
 ## Users Page
 
-> **Mock data state — table and drawer complete, API wiring blocked.**
-> "Invite user" button opens a right-side slide-over drawer.
-> User table shows `MOCK_USERS` (4 users: super_admin, admin, 2 × user; one inactive).
-> Email search (contains, case-insensitive) and role filter (All/Super Admin/Admin/User) work client-side.
-> Role pills: indigo (super_admin), blue (admin), slate (user).
-> Logged-in user's row shows an emerald "You" badge (matched by `useAuth().user?.email`);
-> that row has "—" instead of a Deactivate button.
-> All other rows have a disabled "Deactivate" button with tooltip "API pending — wired in Phase 5 once blockers are resolved".
-> Empty state "No users match the current filters." renders when search/filter produce no rows.
-> Mock data notice visible above table.
-> Drawer shows: email, phone_number (disabled — amber "Required by team · Schema pending"),
-> role (admin/user), tenant_id (read-only; shows `currentUser?.tenant_id` when available),
-> password/temp-password, and amber blocker notice.
-> Submit button reads "Send invite — API pending"; disabled. No API call fires.
-> Verifiable via `npm run dev` without a live stack.
+> **`GET /admin/users` wired + `POST /auth/register` create-user wired; deactivate remains pending.**
+> Users page calls `GET /admin/users` via `listUsersApi()` on mount; renders backend `UserOut[]` in table.
+> Invite drawer calls `POST /auth/register` via `createUserApi()` with `{ email, password, tenant_id, role }`.
+> Bearer token attached automatically by `apiClient` (no hardcoded JWT; no direct DB access).
+> `tenant_id` sourced from `authContext.user.tenant_id` — not a form field.
+> `phone_number` is visible in drawer but disabled and NOT sent to backend (absent from `RegisterRequest`).
+> Password sent to backend only; cleared after successful create; frontend never stores passwords; backend owns hashing.
+> On success: returned `UserOut` prepended to table; drawer closes; form fields cleared.
+> On create failure: inline red panel in drawer; drawer stays open.
+> On list fetch failure: inline red panel above table; no silent fallback to mock data.
+> Duplicate-user error handling relies on backend returning 409 or "already exists" in `detail`
+> (409 not yet documented in `openapi.yaml`; error classification handles it opportunistically).
+> Slack onboarding lookup is backend-owned; no frontend action.
+> No automated frontend test runner; verification is typecheck + browser check against live stack.
 >
 > **Registration vs login**: No self-service signup in the admin portal. First-time users are
 > admin-provisioned via this drawer; all users (first-time and returning) authenticate at `/login`.
 >
 > **Contract** (`RegisterRequest = { email, password, tenant_id, role? }`):
-> `phone_number` absent (blocker). `tenant_id` from admin JWT. 409 for duplicate email not in
-> `openapi.yaml` (blocker). Backend owns: unique-email enforcement, password hashing,
-> tenant-scope 403 guard, Slack onboarding lookup. No frontend deduplication.
->
-> **All invite-wiring criteria below remain `[ ]`** until three blockers are cleared with the backend team:
-> phone_number schema, 409 response definition, password/temp-password behavior.
+> `phone_number` absent (blocker for that field). `tenant_id` from admin JWT. 409 for duplicate
+> email not in `openapi.yaml` (duplicate handling is best-effort). Backend owns: unique-email
+> enforcement, password hashing, tenant-scope 403 guard, Slack onboarding lookup.
 
 - [x] "Invite user" button is present on the Users page *(verifiable via `npm run dev`)*
 - [x] Clicking "Invite user" opens a right-side slide-over drawer *(verifiable via `npm run dev`)*
 - [x] Drawer shows email, role, tenant_id (read-only), password, and phone_number (disabled/blocked) fields *(verifiable via `npm run dev`)*
 - [x] Submit button is disabled; amber blocker notice is visible in drawer *(verifiable via `npm run dev`)*
-- [x] All users in the tenant are listed with correct role pill colors (indigo/blue/slate) *(mock data — verifiable via `npm run dev`)*
 - [x] Logged-in user's own row has no Deactivate action; shows "—" instead *(verifiable via `npm run dev` when logged in)*
-- [x] Email search input filters rows by case-insensitive email substring *(mock — verifiable via `npm run dev`)*
-- [x] Role filter buttons (All / Super Admin / Admin / User) filter table; active button is indigo *(mock — verifiable via `npm run dev`)*
+- [x] Email search input filters rows by case-insensitive email substring *(client-side over fetched data — verifiable via `npm run dev` + live backend)*
+- [x] Role filter buttons (All / Super Admin / Admin / User) filter table; active button is indigo *(client-side over fetched data — verifiable via `npm run dev` + live backend)*
 - [x] Empty state "No users match the current filters." renders when filters produce no results *(verifiable via `npm run dev`)*
-- [x] Mock data notice shown above table; references `GET /admin/users` (Phase 5) *(verifiable via `npm run dev`)*
-- [x] phone_number drawer badge changed from red "Blocked" to amber "Required by team · Schema pending" *(verifiable via `npm run dev`)*
+- [x] phone_number drawer badge is amber "Required by team · Schema pending" *(verifiable via `npm run dev`)*
 - [x] Invite drawer shows no "M1" or "M2" internal module names in user-facing copy *(verifiable by reading source)*
-- [ ] Invite user: valid email + role → `POST /admin/users/invite` → new row appears at top → drawer closes *(blocked — phone_number schema + 409 + password behavior unresolved)*
-- [ ] Invite user: duplicate email → inline "Email already exists" error; no duplicate row created *(blocked — 409 not yet in openapi.yaml)*
-- [ ] Invite user: invalid email format → inline validation error; no API call
-- [ ] User table wired to `GET /admin/users` — mock data replaced by live backend data *(Phase 5)*
+- [x] Users page sends `GET /admin/users` on mount *(requires live backend — verifiable via browser DevTools Network tab)*
+- [x] `GET /admin/users` request includes `Authorization: Bearer <token>` header *(verifiable via browser DevTools)*
+- [x] Backend users render in the table with correct role pills, active badge, join date *(requires live backend)*
+- [x] List fetch failure shows inline red "Could not load users" panel with friendly message + `Technical detail:` in muted text; no silent fallback to mock data *(verifiable via `npm run dev` with backend stopped)*
+- [x] Loading skeleton (3 rows, pulse animation) shown while `GET /admin/users` is in flight *(verifiable via `npm run dev` with network throttled)*
+- [x] All users in the tenant are listed with correct role pill colors (indigo/blue/slate) *(requires live backend)*
+- [x] Create user drawer sends `POST /auth/register` with `{ email, password, tenant_id, role }` *(requires live backend — verifiable via browser DevTools Network tab)*
+- [x] `POST /auth/register` request includes `Authorization: Bearer <token>` header; token attached by `apiClient`, no hardcoded value *(verifiable via browser DevTools)*
+- [x] Request body does NOT include `phone_number` — field visible in drawer but never submitted *(verifiable by reading source)*
+- [x] `tenant_id` in request body is sourced from `authContext.user.tenant_id`; not a form field *(verifiable by reading source)*
+- [x] Successful `POST /auth/register` response (201 `UserOut`) prepended to user table at top *(requires live backend)*
+- [x] Password field cleared after successful create; frontend does not store passwords *(requires live backend)*
+- [x] Drawer closes and form fields reset after successful create *(requires live backend)*
+- [x] `POST /auth/register` failure keeps drawer open and shows inline red error panel with status-specific message + `Technical detail:` in muted text *(verifiable via `npm run dev` with backend returning error)*
+  - 400/422 → "Please check the user details and try again."
+  - 401 → "Your session expired. Please sign in again."
+  - 403 → "You do not have permission to create users."
+  - 409 or "already exists" in detail → "A user with this email already exists."
+  - 429 → "Too many requests. Please try again in a minute."
+  - 5xx → "The user service is having trouble. Please try again later."
+  - network/CORS → "Could not reach the user service. Check backend availability or CORS."
+- [x] Submit button ("Create user") disabled until email, password (≥8 chars), and `tenant_id` are present; disabled while request in flight *(verifiable via `npm run dev`)*
+- [x] phone_number field remains visible but disabled ("Required by team · Schema pending"); never sent to backend *(verifiable via `npm run dev`)*
+- [ ] Deactivate user → `ConfirmDialog` → `PATCH /admin/users/{id}` → row updates *(not yet implemented)*
+
+## Chat Navigation
+
+> **M8 adds navigation access only. Chat UI is M9-owned.**
+> Admin sidebar includes a "Chat" nav item linking to `/chat/new`.
+> Active state matches `/chat/*` via `matchPrefix: '/chat'`.
+> Users page does not embed chat — no iframe, no chat window.
+> Per-user chat history view in the Users page is future work / API pending.
+> No automated frontend test runner; verification is typecheck + browser check.
+
+- [x] Admin sidebar shows a "Chat" nav item with chat-bubble icon *(verifiable via `npm run dev`)*
+- [x] Clicking "Chat" in sidebar navigates to `/chat/new` *(verifiable via `npm run dev`)*
+- [x] Chat nav item is active (indigo highlight) when on `/chat/new` or any `/chat/*` path *(verifiable via `npm run dev`)*
+- [x] Login as `user` role with no `next` param → redirected to `/chat/new` after success *(requires live backend)*
+- [x] Login as `admin` or `super_admin` with no `next` param → redirected to `/admin/documents` *(requires live backend)*
+- [x] Login with safe `next` param → redirected to `next` regardless of role *(requires live backend)*
+- [x] Users page does not embed a chat window or iframe *(verifiable by reading source)*
+- [ ] Per-user conversation history in Users page *(future work — chat history API not yet defined)*
 
 ## Tenants Page
 
