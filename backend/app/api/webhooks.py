@@ -6,9 +6,11 @@ import hashlib
 import hmac
 import json
 import logging
+from uuid import UUID
 
 import uuid as _uuid
 
+import httpx
 from fastapi import (
     APIRouter,
     BackgroundTasks,
@@ -20,15 +22,16 @@ from fastapi import (
 from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
+from twilio.request_validator import RequestValidator
 
-from app.bots import slack
+from app.bots import slack, whatsapp
 from app.bots.slack import SlackAPIError, SlackUserNotFoundError
 from app.core.config import settings
 from app.core.database import AsyncSessionLocal, get_db
 from app.core.dependencies import require_role
 from app.models.models import Document, User
 from app.schemas.webhook import SlackOnboardRequest, SlackOnboardResponse
-from app.services import message_service, pipeline_client
+from app.services import file_validator, message_service, n8n_client, pipeline_client
 from app.services.types import MessageContext
 
 logger = logging.getLogger(__name__)
@@ -36,22 +39,160 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _twiml_ack() -> str:
+    """Empty TwiML response — we reply via Twilio REST API in the background task."""
+    return '<?xml version="1.0"?><Response></Response>'
+
+
+async def _handle_whatsapp_media(
+    media_url: str,
+    media_type: str,
+    from_number: str,
+    conversation_id: UUID
+) -> None:
+    """Download, validate, and ingest ephemeral media from WhatsApp."""
+    try:
+        # Download with Twilio auth
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.get(
+                media_url,
+                auth=(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
+            )
+            resp.raise_for_status()
+            content = resp.content
+
+        # Validate
+        extension = media_type.split('/')[-1] if '/' in media_type else 'bin'
+        validated = file_validator.validate_upload(
+            filename=f"whatsapp_upload.{extension}",
+            content=content,
+            declared_mime=media_type,
+            max_bytes=settings.MAX_WHATSAPP_UPLOAD_BYTES,
+        )
+
+        # Send to n8n ephemeral ingestion
+        await n8n_client.ingest_ephemeral(
+            validated.content,
+            str(conversation_id),
+            validated.mime_type
+        )
+        await whatsapp.post_text(
+            from_number,
+            "Indexed ✓ — ask me anything about this file for the next 60 minutes."
+        )
+    except HTTPException as exc:
+        await whatsapp.post_text(from_number, f"File upload failed: {exc.detail}")
+    except Exception as exc:
+        logger.exception("WhatsApp media processing failed: %s", exc)
+        await whatsapp.post_text(from_number, "Sorry, failed to process your file.")
+
+
+async def _process_whatsapp_message(
+    message_sid: str,
+    from_number: str,
+    query: str,
+    media_url: str | None = None,
+    media_type: str | None = None,
+) -> None:
+    """Background task — runs Steps 2-8 with its own DB session."""
+    async with AsyncSessionLocal() as db:
+        ctx = MessageContext(
+            request_id=message_sid,
+            source="whatsapp",
+            query=query or ".",  # Placeholder if only media
+            whatsapp_from=from_number,
+        )
+        try:
+            # Resolve identity and find/create conversation first
+            await message_service._resolve_identity(ctx, db)
+            await message_service._find_or_create_conversation(ctx, db)
+
+            # Handle media upload if present
+            if media_url and media_type:
+                await _handle_whatsapp_media(
+                    media_url,
+                    media_type,
+                    from_number,
+                    ctx.conversation_id
+                )
+                # If there's also a text query, process it
+                if query:
+                    await whatsapp.post_text(from_number, "🤔 Thinking...")
+                    await message_service.process_message(ctx, db)
+            elif query:
+                # Text-only message
+                await whatsapp.post_text(from_number, "🤔 Thinking...")
+                await message_service.process_message(ctx, db)
+
+        except message_service.IdentityResolutionError:
+            await whatsapp.post_text(from_number,
+                "This number isn't registered. Please ask your admin to add you.")
+        except pipeline_client.PipelineError:
+            await whatsapp.post_text(from_number, message_service.FALLBACK_MESSAGE)
+        except Exception:  # noqa: BLE001 — never let a bg task crash silently
+            logger.exception("WhatsApp processing failed (sid=%s)", message_sid)
+
+
 @router.post("/whatsapp", summary="Twilio WhatsApp incoming message")
-async def whatsapp_webhook(request: Request):
-    """
-    M4: Implement:
-    1. Validate Twilio signature (Day 5)
-    2. Parse form: Body (message text), From (phone number)
-    3. Lookup tenant from phone number (M12's tenant_map)
-    4. Call chat_query_internal(body, tenant_id)
-    5. Return TwiML XML response
-    """
+async def whatsapp_webhook(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+):
+    """Verify → ACK 200 fast; heavy work runs in a BackgroundTask."""
+    raw = await request.body()
+
+    # Verify Twilio signature (skip in development mode)
+    if settings.APP_ENV != "development":
+        validator = RequestValidator(settings.TWILIO_AUTH_TOKEN)
+        form_data = {k: v for k, v in (await request.form()).items()}
+        url = str(request.url)
+        signature = request.headers.get("X-Twilio-Signature", "")
+        if not validator.validate(url, form_data, signature):
+            raise HTTPException(status_code=403, detail="Invalid Twilio signature")
+
+    # Parse form data
     form = await request.form()
-    message_body = form.get("Body", "")
-    from_number = form.get("From", "")
-    # M4: implement real logic
-    twiml = f'<?xml version="1.0"?><Response><Message>M4: implement WhatsApp handler. Received: {message_body[:50]}</Message></Response>'
-    return Response(content=twiml, media_type="application/xml")
+    message_body = form.get("Body", "").strip()
+    from_number = form.get("From", "")        # "whatsapp:+919876543210"
+    message_sid = form.get("MessageSid", "")   # Dedup key
+    num_media = int(form.get("NumMedia", "0"))
+    media_url = form.get("MediaUrl0", "") if num_media > 0 else None
+    media_type = form.get("MediaContentType0", "") if num_media > 0 else None
+
+    # Dedup on MessageSid (same pattern as Slack event_id)
+    if message_sid:
+        result = await db.execute(
+            text("INSERT INTO processed_requests (request_id) VALUES (:rid) ON CONFLICT DO NOTHING"),
+            {"rid": message_sid}
+        )
+        await db.commit()
+        if result.rowcount == 0:
+            return Response(content=_twiml_ack(), media_type="application/xml")
+
+    # Build MessageContext and fire background task
+    if not message_body and num_media == 0:
+        return Response(content=_twiml_ack(), media_type="application/xml")
+
+    if not message_sid or not from_number:
+        logger.warning(
+            "WhatsApp webhook missing required fields: message_sid=%s from_number=%s",
+            message_sid, from_number,
+        )
+        return Response(content=_twiml_ack(), media_type="application/xml")
+
+    # Fire background task with media info
+    background_tasks.add_task(
+        _process_whatsapp_message,
+        message_sid,
+        from_number,
+        message_body,
+        media_url,
+        media_type
+    )
+
+    # ACK immediately with empty TwiML
+    return Response(content=_twiml_ack(), media_type="application/xml")
 
 
 def _verify_slack_signature(raw_body: bytes, timestamp: str, signature: str) -> bool:

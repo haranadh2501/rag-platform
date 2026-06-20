@@ -21,3 +21,4 @@ class MessageContext:
     slack_thread_ts: str | None = None
     slack_team_id: str | None = None      # Slack team_id → tenant resolution
     slack_user_id: str | None = None      # Slack user id → internal user resolution
+    whatsapp_from: str | None = None      # Twilio "From" number (e.g. "whatsapp:+919876543210")
