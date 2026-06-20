@@ -6,7 +6,9 @@ import logging
 import uuid
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from pathlib import Path
+
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Response, UploadFile
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,6 +23,20 @@ from app.services import file_validator, n8n_client, storage
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+async def _trigger_ingest(document_id: str, tenant_id: str, source_url: str, source_type: str, title: str) -> None:
+    """Background task: call n8n ingest webhook. n8n responds via /webhooks/n8n/ingestion-status."""
+    try:
+        await n8n_client.ingest(
+            document_id=document_id,
+            tenant_id=tenant_id,
+            source_url=source_url,
+            source_type=source_type,
+            title=title,
+        )
+    except Exception:
+        logger.exception("n8n ingestion trigger failed for document %s", document_id)
 
 # MIME type → document source_type (matches openapi.yaml enum)
 _MIME_TO_SOURCE_TYPE: dict[str, str] = {
@@ -68,6 +84,7 @@ async def list_documents(
 
 @router.post("/documents/upload", status_code=202, response_model=DocumentOut, summary="Upload document file")
 async def upload_document(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     title: str | None = Form(None),
     db: AsyncSession = Depends(get_db),
@@ -110,6 +127,9 @@ async def upload_document(
     # Persist file via storage backend (local path today, cloud URL later)
     location = await storage.store_upload(validated.filename, content)
 
+    # For R2, location IS a public URL — expose it as source_url so clients can see it
+    r2_url = location if settings.STORAGE_BACKEND == "r2" else None
+
     # Insert document record and audit entry in one transaction
     doc = Document(
         id=uuid.uuid4(),
@@ -118,6 +138,7 @@ async def upload_document(
         title=title or validated.filename,
         source_type=_MIME_TO_SOURCE_TYPE.get(validated.mime_type, "pdf"),
         file_path=location,
+        source_url=r2_url,
         status="pending",
     )
     db.add(doc)
@@ -125,24 +146,23 @@ async def upload_document(
     await db.commit()
     await db.refresh(doc)
 
-    # Trigger n8n ingestion — best-effort, document is saved regardless
-    try:
-        await n8n_client.ingest(
-            document_id=str(doc.id),
-            tenant_id=str(doc.tenant_id),
-            file_path=location,
-            source_type=doc.source_type,
-            title=doc.title,
-        )
-    except Exception:
-        logger.exception("n8n ingestion trigger failed for document %s", doc.id)
-
+    # Fire n8n ingestion in the background — returns 202 immediately;
+    # n8n calls back to /webhooks/n8n/ingestion-status when processing is done.
+    # R2: store_upload already returned a public CDN URL; local: serve via download endpoint.
+    if settings.STORAGE_BACKEND == "r2":
+        source_url = location
+    else:
+        source_url = f"{settings.APP_BASE_URL}/admin/documents/{doc.id}/download"
+    background_tasks.add_task(
+        _trigger_ingest, str(doc.id), str(doc.tenant_id), source_url, doc.source_type, doc.title,
+    )
     return DocumentOut.model_validate(doc)
 
 
 @router.post("/documents/url", status_code=202, response_model=DocumentOut, summary="Ingest from URL")
 async def ingest_url(
     body: UrlIngestRequest,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_role("admin")),
 ):
@@ -159,18 +179,35 @@ async def ingest_url(
     await db.commit()
     await db.refresh(doc)
 
-    try:
-        await n8n_client.ingest(
-            document_id=str(doc.id),
-            tenant_id=str(doc.tenant_id),
-            file_path=body.url,
-            source_type="url",
-            title=doc.title,
-        )
-    except Exception:
-        logger.exception("n8n ingestion trigger failed for document %s", doc.id)
-
+    background_tasks.add_task(
+        _trigger_ingest, str(doc.id), str(doc.tenant_id), body.url, "url", doc.title,
+    )
     return DocumentOut.model_validate(doc)
+
+
+_SOURCE_TYPE_MIME: dict[str, str] = {
+    "pdf":   "application/pdf",
+    "docx":  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "txt":   "text/plain",
+    "image": "image/png",
+}
+
+
+@router.get("/documents/{document_id}/download", summary="Download stored document file (used by n8n)")
+async def download_document(
+    document_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    doc = await db.get(Document, document_id)
+    if doc is None or not doc.file_path:
+        raise HTTPException(status_code=404, detail="File not found")
+
+    file_path = Path(doc.file_path)
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found on disk")
+
+    media_type = _SOURCE_TYPE_MIME.get(doc.source_type, "application/octet-stream")
+    return Response(content=file_path.read_bytes(), media_type=media_type)
 
 
 @router.get("/documents/{document_id}", response_model=DocumentOut, summary="Get document detail")
