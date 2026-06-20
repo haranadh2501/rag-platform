@@ -98,6 +98,22 @@ async def retrieve(query, tenant_id, conversation_history, max_chunks=5): ...
 ### Day 6 — Tests
 12. `tests/test_chat.py`: query returns sources, conversation history persisted, tenant isolation (user A cannot read user B's docs).
 
+## Unit Test Coverage
+
+> Full test plan in `specs/PLAN_M3.md §7`. Summary below.
+
+| Test file | Type | Cases | Coverage |
+|---|---|---|---|
+| `tests/test_m3_units.py` | Pure unit (no DB) | 14 | `storage.py`, `file_validator.py`, all M3 schemas |
+| `tests/test_m3_admin.py` | Integration (DB + monkeypatch) | 30 | All document endpoints, tenant endpoints, n8n callback |
+| `tests/test_m3_conversations.py` | Integration (DB + monkeypatch) | 12 | Conversation list, detail, delete |
+
+Key testing decisions:
+- **Pure unit tests** use `pytest tmp_path` for storage; no DB required
+- **Integration tests** follow the same pattern as `tests/test_auth.py` — real Postgres, auto-skip if DB unreachable, self-seeding fixtures with teardown
+- **External services** (`n8n_client`, `storage`) are monkeypatched in integration tests so no network calls or filesystem side-effects
+- `POST /chat/query` is already tested in `tests/test_m4_chat.py` — not duplicated here
+
 ## Learning Resources
 - FastAPI file uploads: https://fastapi.tiangolo.com/tutorial/request-files/
 - httpx async: https://www.python-httpx.org/async/
