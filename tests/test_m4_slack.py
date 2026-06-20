@@ -157,6 +157,9 @@ async def slack_user():
 
     async with AsyncSessionLocal() as db:
         await db.execute(text("DELETE FROM slack_workspace_map WHERE team_id = :t"), {"t": team_id})
+        # Drop conversations (cascades to chat_messages) before users: conversations.user_id
+        # has no ON DELETE CASCADE, so deleting users first violates the FK.
+        await db.execute(text("DELETE FROM conversations WHERE tenant_id = :t"), {"t": tenant_id})
         await db.execute(text("DELETE FROM users WHERE tenant_id = :t"), {"t": tenant_id})
         await db.execute(text("DELETE FROM tenants WHERE id = :t"), {"t": tenant_id})
         await db.commit()
