@@ -34,4 +34,5 @@ htmlcov/
 # n8n data
 n8n_data/
 postgres_data/
-.github/instructions/wmt-copilot.instructions.md
+
+# Developer-specific

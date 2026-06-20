@@ -1,5 +1,5 @@
 {
-  "name": "Ingestion Pipeline (persistent)",
+  "name": "My workflow 2",
   "nodes": [
     {
       "parameters": {
@@ -8,75 +8,790 @@
         "responseMode": "responseNode",
         "options": {}
       },
-      "id": "wh-ingest",
+      "id": "667dbbab-040c-48fc-a6c7-0d120dc0b7c7",
       "name": "Webhook /ingest",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1.1,
-      "position": [240, 300]
+      "position": [
+        -448,
+        192
+      ],
+      "webhookId": "ingest-persistent-v1"
     },
     {
       "parameters": {
-        "functionCode": "// M5: 1) Read file at $json.file_path  2) extract text (pypdf/docx/txt)\n// 3) if scanned PDF (no text layer) → call OpenAI gpt-4o vision OCR\n// 4) Return { text, page_count, used_ocr }\nreturn [{ json: { text: 'TODO M5: extract text', page_count: 0, used_ocr: false, ...$json } }];"
-      },
-      "id": "extract",
-      "name": "Extract + OCR",
-      "type": "n8n-nodes-base.function",
-      "typeVersion": 1,
-      "position": [460, 300]
-    },
-    {
-      "parameters": {
-        "functionCode": "// M5: chunk into ~512-token windows, 50-token overlap.\n// Return array of {content, chunk_index, page_number, token_count}.\nreturn [{ json: { chunks: [], ...$json } }];"
-      },
-      "id": "chunk",
-      "name": "Chunk (512/50)",
-      "type": "n8n-nodes-base.function",
-      "typeVersion": 1,
-      "position": [680, 300]
-    },
-    {
-      "parameters": {
-        "url": "https://api.voyageai.com/v1/embeddings",
-        "authentication": "headerAuth",
-        "method": "POST",
-        "sendBody": true,
-        "bodyContentType": "json",
-        "jsonBody": "={\n  \"model\": \"voyage-4-large\",\n  \"input\": $json.chunks.map(c => c.content),\n  \"input_type\": \"document\"\n}",
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cond-is-url",
+              "leftValue": "={{ $json.body.source_type }}",
+              "rightValue": "url",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
         "options": {}
       },
-      "id": "embed",
-      "name": "Voyage embed",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [900, 300]
+      "id": "322357f5-9b8d-48ff-8a08-0670a5ccc2d0",
+      "name": "Switch: URL vs File",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -224,
+        192
+      ]
     },
     {
       "parameters": {
-        "functionCode": "// M5: bulk INSERT into document_chunks(tenant_id,document_id,content,embedding,...)\n// then POST /webhooks/n8n/ingestion-status with {document_id, status:'completed', chunk_count}.\nreturn [{ json: { status: 'TODO M5: bulk insert + callback' } }];"
+        "url": "={{ $json.body.source_url }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          },
+          "timeout": 30000
+        }
       },
-      "id": "store",
-      "name": "Store + Callback",
-      "type": "n8n-nodes-base.function",
-      "typeVersion": 1,
-      "position": [1120, 300]
+      "id": "51f3728e-f955-42a2-9809-c6237e1e7800",
+      "name": "Fetch URL",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        0,
+        0
+      ],
+      "onError": "continueErrorOutput"
     },
     {
-      "parameters": { "respondWith": "json", "responseBody": "={{ $json }}" },
-      "id": "respond",
-      "name": "Respond",
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst { source_type, file_path } = item;\nlet text = '';\nlet page_count = 1;\n\nif (source_type === 'txt') {\n  const fs = require('fs');\n  text = fs.readFileSync(file_path, 'utf-8');\n\n} else if (source_type === 'pdf') {\n  try {\n    const pdfParse = require('pdf-parse');\n    const fs = require('fs');\n    const buf = fs.readFileSync(file_path);\n    const data = await pdfParse(buf);\n    text = data.text || '';\n    page_count = data.numpages || 1;\n  } catch(e) {\n    text = '';\n  }\n\n} else if (source_type === 'docx') {\n  try {\n    const mammoth = require('mammoth');\n    const result = await mammoth.extractRawText({ path: file_path });\n    text = result.value || '';\n  } catch(e) {\n    const fs = require('fs');\n    const buf = fs.readFileSync(file_path);\n    text = buf.toString('latin1').replace(/<[^>]+>/g, ' ').replace(/\\s+/g, ' ').trim();\n  }\n}\n\nreturn [{\n  json: {\n    document_id: item.document_id,\n    tenant_id:   item.tenant_id,\n    title:       item.title,\n    file_path:   item.file_path,\n    source_type,\n    text,\n    page_count,\n    used_ocr:    false\n  }\n}];"
+      },
+      "id": "bb4b372e-696c-4f43-a5d4-6f83efe13a68",
+      "name": "Extract File Text",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        368
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "cond-is-pdf",
+              "leftValue": "={{ $json.source_type }}",
+              "rightValue": "pdf",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "cond-empty-text",
+              "leftValue": "={{ ($json.text || '').trim().length }}",
+              "rightValue": 100,
+              "operator": {
+                "type": "number",
+                "operation": "smallerEqual"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "3095ecfd-d5ed-4cef-8b0a-059ff4768681",
+      "name": "IF: Needs OCR",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        672,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.OPENAI_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"gpt-4o-mini\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": [\n        { \"type\": \"text\", \"text\": \"Extract ALL text verbatim from this document. Return only the raw text.\" },\n        { \"type\": \"image_url\", \"image_url\": { \"url\": \"data:image/jpeg;base64,{{ require('fs').readFileSync($json.file_path).toString('base64') }}\", \"detail\": \"high\" } }\n      ]\n    }\n  ],\n  \"max_tokens\": 4096\n}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "c501bb9d-9bce-47ff-8936-c1a1d15f0d00",
+      "name": "OpenAI Vision OCR",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        48
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const ocrResp = $input.first().json;\nconst orig = $('IF: Needs OCR').first().json;\nconst ocrText = ocrResp.choices?.[0]?.message?.content || '';\nreturn [{\n  json: {\n    document_id: orig.document_id,\n    tenant_id:   orig.tenant_id,\n    title:       orig.title,\n    file_path:   orig.file_path,\n    source_type: orig.source_type,\n    text:        ocrText,\n    page_count:  orig.page_count || 1,\n    used_ocr:    true\n  }\n}];"
+      },
+      "id": "37c13b5e-e8fc-4cb9-ab16-c3e0a363091e",
+      "name": "Parse OCR Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1104,
+        48
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.voyageai.com/v1/embeddings",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ {\"model\": \"voyage-4-large\", \"input\": [$json.content], \"input_type\": \"document\"} }}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 20000
+            }
+          },
+          "timeout": 120000
+        }
+      },
+      "id": "349e55af-a661-4e0b-8c8c-0289eeb07ff5",
+      "name": "Voyage Embed",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1872,
+        192
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "eshTF0DJBA2XVPHI",
+          "name": "VoyageAuth"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "{{ (() => {\n    const raw = String($json.embedding || '');\n    const emb = raw.replace(/^=\\s*/, '').trim();\n    const content = String($json.content || '').replace(/'/g, \"''\");\n    return `INSERT INTO document_chunks (tenant_id, document_id, content, embedding, chunk_index, page_number, token_count, metadata) VALUES ('${$json.tenant_id}', '${$json.document_id}',\n  '${content}', '${emb}'::vector, ${Number($json.chunk_index)}, NULL, ${Number($json.token_count)}, '{}'::jsonb)`;\n  })() }}",
+        "options": {}
+      },
+      "id": "3d292cf5-1399-44e6-8893-4b06910a1135",
+      "name": "Insert Chunk",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2432,
+        192
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "jCtf30fImTn8vRdL",
+          "name": "ragplatform-pg"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.BACKEND_BASE_URL }}/webhooks/n8n/ingestion-status",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"document_id\": \"{{ $('Webhook /ingest').first().json.body.document_id }}\",\n  \"status\": \"completed\",\n  \"chunk_count\": 0,\n  \"callback_token\": \"{{ $env.N8N_CALLBACK_TOKEN }}\"\n}",
+        "options": {}
+      },
+      "id": "aa2a0b97-4145-4f72-9b79-3bc8934075b2",
+      "name": "Callback: Success",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2640,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'accepted', document_id: $json.document_id, chunk_count: $json._total_chunks }) }}",
+        "options": {}
+      },
+      "id": "d960c285-7a7b-49fc-a02a-e93dc0616e06",
+      "name": "Respond to Webhook",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [1340, 300]
+      "position": [
+        2864,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.BACKEND_BASE_URL }}/webhooks/n8n/ingestion-status",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"document_id\": \"{{ $json.document_id }}\",\n  \"status\": \"failed\",\n  \"error_message\": \"{{ $json.error_message }}\",\n  \"callback_token\": \"{{ $env.N8N_CALLBACK_TOKEN }}\"\n}",
+        "options": {}
+      },
+      "id": "a4baf47b-8882-454b-a817-b94158c7ecaf",
+      "name": "Callback: Failed",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1104,
+        432
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "396e0bc3-2c6f-40c8-927b-9717f498b12e",
+              "name": "text",
+              "value": "={{ $json.data.replace(/<script[\\s\\S]*?<\\/script>/gi, '').replace(/<style[\\s\\S]*?<\\/style>/gi, '').replace(/<[^>]+>/g, ' ').replace(/\\s+/g, ' ').trim() }}",
+              "type": "string"
+            },
+            {
+              "id": "47ab4985-1acf-4940-afd1-897da4cfebf6",
+              "name": "document_id",
+              "value": "={{ $('Webhook /ingest').first().json.body.document_id }}",
+              "type": "string"
+            },
+            {
+              "id": "efa07771-d604-4d16-81ed-0937135ced8b",
+              "name": "tenant_id",
+              "value": "={{ $('Webhook /ingest').first().json.body.tenant_id }}",
+              "type": "string"
+            },
+            {
+              "id": "c86983b8-5f70-4c33-8c63-b8a2aaafa3ba",
+              "name": "title",
+              "value": "={{ $('Webhook /ingest').first().json.body.title }}",
+              "type": "string"
+            },
+            {
+              "id": "ad503abb-35e9-432c-90de-fd663a9edf64",
+              "name": "source_type",
+              "value": "={{ $('Webhook /ingest').first().json.body.source_type }}",
+              "type": "string"
+            },
+            {
+              "id": "18d30dc8-94e4-46b8-ab83-f43833e06681",
+              "name": "page_count",
+              "value": 1,
+              "type": "number"
+            },
+            {
+              "id": "5bdf2a4d-5bed-4843-8631-a5451078489f",
+              "name": "used_ocr",
+              "value": false,
+              "type": "boolean"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        208,
+        -48
+      ],
+      "id": "3e68335c-458c-4fe2-9b5a-e340e953958e",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "44004430-90ae-4799-a14e-ea5d33c674b6",
+              "name": "chunks",
+              "value": "={{ (() => { const words = $json.text.split(/\\s+/).filter(w => w.length > 0); const CHUNK_WORDS = 512; const OVERLAP_WORDS = 50; const chunks = []; let i = 0; while (i < words.length) {\n  const slice = words.slice(i, i + CHUNK_WORDS); const content = slice.join(' '); chunks.push({ content, chunk_index: chunks.length, page_number: null, token_count: Math.ceil(content.length\n  / 4) }); if (i + CHUNK_WORDS >= words.length) break; i += CHUNK_WORDS - OVERLAP_WORDS; } if (chunks.length === 0) chunks.push({ content: $json.text, chunk_index: 0, page_number: null,\n  token_count: Math.ceil($json.text.length / 4) }); return chunks; })() }}",
+              "type": "array"
+            },
+            {
+              "id": "27e18b4b-4d2e-450b-8b27-624e5d26ba67",
+              "name": "document_id",
+              "value": "={{ $json.document_id }}",
+              "type": "string"
+            },
+            {
+              "id": "69026a91-3e3d-46f6-b968-1ee4c98fe467",
+              "name": "tenant_id",
+              "value": "={{ $json.tenant_id }}",
+              "type": "string"
+            },
+            {
+              "id": "a7dd8a51-3613-49e7-93d4-846d3f8e61ba",
+              "name": "used_ocr",
+              "value": "={{ $json.used_ocr }}",
+              "type": "string"
+            },
+            {
+              "id": "6edfc632-2ca5-454a-ac6a-2cf334a834a0",
+              "name": "chunk_count",
+              "value": "={{ $json.text.split(/\\s+/).filter(w => w.length > 0).length }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1232,
+        192
+      ],
+      "id": "71436cb8-b325-4a55-9436-2b0434867241",
+      "name": "chunk node"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "chunks",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        1440,
+        192
+      ],
+      "id": "60140f06-56d8-4c6e-9a32-63a32c6109a6",
+      "name": "Split Out"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cc0f1d3d-8403-464e-a6b9-069e37918f0d",
+              "name": "content",
+              "value": "={{ $json.content }}",
+              "type": "string"
+            },
+            {
+              "id": "bcce2e7a-4152-4889-a819-650db6763ebe",
+              "name": "chunk_index",
+              "value": "={{ $json.chunk_index }}",
+              "type": "string"
+            },
+            {
+              "id": "cbd7bfe6-1d75-436e-af92-6132e063935f",
+              "name": "token_count",
+              "value": "={{ $json.token_count }}",
+              "type": "string"
+            },
+            {
+              "id": "aef5130b-8e64-449e-8b4d-9235d1a96d12",
+              "name": "document_id",
+              "value": "={{ $('Webhook /ingest').first().json.body.document_id }}",
+              "type": "string"
+            },
+            {
+              "id": "692dfd16-c0a2-4e4e-b07e-5ad3a7de514b",
+              "name": "tenant_id",
+              "value": "={{ $('Webhook /ingest').first().json.body.tenant_id }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1648,
+        240
+      ],
+      "id": "835e1744-081c-4d61-9c29-013da0999119",
+      "name": "Prep Chunk"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cb791e40-b2e4-4fc7-aff9-f22aa0b953e2",
+              "name": "embedding",
+              "value": "=={{ '[' + $json.data[0].embedding.join(',') + ']' }}",
+              "type": "string"
+            },
+            {
+              "id": "4d546e37-b17d-492f-84e6-8667aa354860",
+              "name": "document_id",
+              "value": "={{ $('Prep Chunk').item.json.document_id }}",
+              "type": "string"
+            },
+            {
+              "id": "ad4837b7-f20e-4b1a-8a63-4f578a5fc734",
+              "name": "tenant_id",
+              "value": "={{ $('Prep Chunk').item.json.tenant_id }}",
+              "type": "string"
+            },
+            {
+              "id": "b31ef2fa-251c-45fa-a3e7-f80247247ab2",
+              "name": "content",
+              "value": "={{ $('Prep Chunk').item.json.content }}",
+              "type": "string"
+            },
+            {
+              "id": "41597b86-a3c9-4852-858d-9cfcaa46fe76",
+              "name": "chunk_index",
+              "value": "={{ $('Prep Chunk').item.json.chunk_index }}",
+              "type": "string"
+            },
+            {
+              "id": "9116946c-0eb0-4030-9902-361fedfc80fa",
+              "name": "token_count",
+              "value": "={{ $('Prep Chunk').item.json.token_count }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2080,
+        192
+      ],
+      "id": "869f72db-4873-4a56-8042-df2c02f51773",
+      "name": "Prep Insert"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "27878c2d-3f6e-4e66-a5c3-ae786405a6e2",
+              "name": "document_id",
+              "value": "={{ $('Webhook /ingest').first().json.body.document_id }}",
+              "type": "string"
+            },
+            {
+              "id": "14a929f5-5357-47f2-a229-2d6211ce7397",
+              "name": "error_message",
+              "value": "={{ $json.message || 'Ingestion pipeline error' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        384,
+        400
+      ],
+      "id": "60a6811c-4b78-4958-8a80-4be43e643c24",
+      "name": "Format Error"
     }
   ],
+  "pinData": {},
   "connections": {
-    "Webhook /ingest":   { "main": [[{ "node": "Extract + OCR",  "type": "main", "index": 0 }]] },
-    "Extract + OCR":     { "main": [[{ "node": "Chunk (512/50)", "type": "main", "index": 0 }]] },
-    "Chunk (512/50)":    { "main": [[{ "node": "Voyage embed",   "type": "main", "index": 0 }]] },
-    "Voyage embed":      { "main": [[{ "node": "Store + Callback","type": "main", "index": 0 }]] },
-    "Store + Callback":  { "main": [[{ "node": "Respond",         "type": "main", "index": 0 }]] }
+    "Webhook /ingest": {
+      "main": [
+        [
+          {
+            "node": "Switch: URL vs File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch: URL vs File": {
+      "main": [
+        [
+          {
+            "node": "Fetch URL",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Extract File Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch URL": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract File Text": {
+      "main": [
+        [
+          {
+            "node": "IF: Needs OCR",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: Needs OCR": {
+      "main": [
+        [
+          {
+            "node": "OpenAI Vision OCR",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "chunk node",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Vision OCR": {
+      "main": [
+        [
+          {
+            "node": "Parse OCR Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Callback: Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse OCR Response": {
+      "main": [
+        [
+          {
+            "node": "chunk node",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Voyage Embed": {
+      "main": [
+        [
+          {
+            "node": "Prep Insert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Callback: Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert Chunk": {
+      "main": [
+        [
+          {
+            "node": "Callback: Success",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Callback: Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Callback: Success": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "IF: Needs OCR",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "chunk node": {
+      "main": [
+        [
+          {
+            "node": "Split Out",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out": {
+      "main": [
+        [
+          {
+            "node": "Prep Chunk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep Chunk": {
+      "main": [
+        [
+          {
+            "node": "Voyage Embed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep Insert": {
+      "main": [
+        [
+          {
+            "node": "Insert Chunk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Error": {
+      "main": [
+        [
+          {
+            "node": "Callback: Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
   "active": false,
-  "settings": { "executionOrder": "v1" },
-  "tags": ["rag-platform", "ingestion"]
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "3a8b00e9-8760-4978-9486-f7e4cb35095e",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "feef0b6ee87dcd39ec5fcc0e79b366a9f7ff3edd17efc049d248155895cb4e3f"
+  },
+  "nodeGroups": [],
+  "id": "COhRUuFmEwCTAfbl",
+  "tags": []
 }
