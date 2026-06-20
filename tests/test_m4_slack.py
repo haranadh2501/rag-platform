@@ -156,6 +156,8 @@ async def slack_user():
     yield {"team_id": team_id, "slack_user_id": slack_uid, "tenant_id": tenant_id, "user_id": user_id}
 
     async with AsyncSessionLocal() as db:
+        # Delete in order: conversations (child) → users (child) → tenant (parent)
+        await db.execute(text("DELETE FROM conversations WHERE user_id = :u"), {"u": user_id})
         await db.execute(text("DELETE FROM slack_workspace_map WHERE team_id = :t"), {"t": team_id})
         # Drop conversations (cascades to chat_messages) before users: conversations.user_id
         # has no ON DELETE CASCADE, so deleting users first violates the FK.
