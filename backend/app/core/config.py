@@ -15,6 +15,7 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     # ── App ──────────────────────────────────────────────────────────
     APP_ENV: str = "development"
+    APP_BASE_URL: str = "http://localhost:8000"  # override to Railway public URL in prod
     SECRET_KEY: str = "change-me-in-production"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
@@ -28,7 +29,7 @@ class Settings(BaseSettings):
     LOGIN_RATE_LIMIT: str = "5/minute"   # per client IP on POST /auth/login
 
     # ── Database ─────────────────────────────────────────────────────
-    DATABASE_URL: str = "postgresql+asyncpg://raguser:changeme@localhost:5432/ragplatform"
+    DATABASE_URL: str = "postgresql+asyncpg://neondb_owner:npg_pZfyDjkngM74@ep-plain-shadow-aowguhj1.c-2.ap-southeast-1.aws.neon.tech/neondb?ssl=require"
 
     @property
     def SYNC_DATABASE_URL(self) -> str:
@@ -37,12 +38,12 @@ class Settings(BaseSettings):
         return (
             self.DATABASE_URL
             .replace("+asyncpg", "+psycopg2")
-            .replace("ssl=require", "sslmode=require")
+            .replace("?ssl=require", "?sslmode=require")
         )
 
     # ── n8n ──────────────────────────────────────────────────────────
     N8N_BASE_URL: str = "http://localhost:5678"
-    N8N_INGEST_WEBHOOK_URL: str = "http://localhost:5678/webhook/ingest"
+    N8N_INGEST_WEBHOOK_URL: str = "https://n8n-production-c637.up.railway.app/webhook/ingest"
     N8N_RETRIEVE_WEBHOOK_URL: str = "http://localhost:5678/webhook/retrieve"
     N8N_EPHEMERAL_INGEST_WEBHOOK_URL: str = "http://localhost:5678/webhook/ingest-ephemeral"
     N8N_CALLBACK_TOKEN: str = "change-me-shared-secret-with-n8n"
@@ -75,6 +76,13 @@ class Settings(BaseSettings):
     # ── Slack (stretch) ──────────────────────────────────────────────
     SLACK_BOT_TOKEN: str = ""
     SLACK_SIGNING_SECRET: str = ""
+
+    # ── Cloudflare R2 (file storage) ─────────────────────────────────
+    R2_ACCOUNT_ID: str = "c248caff93b57e6b28730410a4e34ca3"
+    R2_ACCESS_KEY_ID: str = ""
+    R2_SECRET_ACCESS_KEY: str = ""
+    R2_BUCKET_NAME: str = "rag-platform"
+    R2_PUBLIC_URL: str = "https://pub-a9bb7d7b516244eaacc47d9cab962786.r2.dev"
 
     # ── File upload limits ───────────────────────────────────────────
     UPLOAD_DIR: str = "/uploads"

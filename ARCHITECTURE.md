@@ -72,9 +72,9 @@ flowchart TB
     subgraph Admin["Admin Persistent Upload"]
         A1[Admin uploads PDF<br/>≤ 25 MB] --> A2[POST /admin/documents/upload]
         A2 --> A3[FastAPI: validate MIME + magic bytes<br/>+ tenant quota check]
-        A3 --> A4[Save to /uploads]
-        A4 --> A5[Trigger n8n /webhook/ingest]
-        A5 --> A6[Chunks land in<br/>document_chunks]
+        A3 --> A4[Upload to Cloudflare R2<br/>INSERT Document row]
+        A4 --> A5[Trigger n8n /webhook/ingest<br/>source_url = R2 public URL]
+        A5 --> A6[n8n fetches file from R2<br/>Chunks land in document_chunks]
         A6 --> A7[Available to ALL users<br/>in tenant FOREVER]
     end
 
@@ -124,9 +124,9 @@ flowchart TB
 ## 4. Component Map
 
 ### FastAPI Gateway (`backend/`)
-- **Does**: auth (JWT), file upload validation, webhook receipt, DB CRUD, MCP server, rate-limit (slowapi, in-process)
+- **Does**: auth (JWT), file upload validation, upload to R2, webhook receipt, DB CRUD, MCP server, rate-limit (slowapi, in-process)
 - **Does NOT**: call LLMs, embed text, chunk documents
-- **Key files**: `app/main.py`, `app/api/`, `app/services/file_validator.py`, `app/mcp/`
+- **Key files**: `app/main.py`, `app/api/`, `app/services/file_validator.py`, `app/services/storage.py`, `app/mcp/`
 
 ### n8n RAG Engine (`n8n-workflows/`)
 - **Ingestion** (`ingestion-pipeline.json`) — parse → OCR (scanned PDFs via gpt-4o vision) → chunk → Voyage embed → INSERT into `document_chunks`
@@ -159,6 +159,7 @@ flowchart TB
 | Frontend         | Vercel (Hobby)        | Free                            |
 | Backend + n8n    | Railway               | ~$5/mo (single project)         |
 | Postgres+pgvector| Neon                  | Free (10 GB storage)            |
+| File storage     | Cloudflare R2         | Free (10 GB storage, 0 egress)  |
 | Embeddings       | Voyage                | Free (200M tokens)              |
 | Rerank           | Voyage                | Free (200M tokens)              |
 | Generation       | DeepSeek V4 Flash     | ~$0 (cheap pay-as-you-go)       |
@@ -178,12 +179,16 @@ No Redis. JWT is stateless; rate-limit is in-process slowapi.
 {
   "document_id": "uuid",
   "tenant_id": "uuid",
-  "file_path": "/uploads/filename.pdf",
   "source_type": "pdf",
-  "title": "Document title",
-  "callback_token": "<settings.N8N_CALLBACK_TOKEN>"
+  "source_url": "https://<api-host>/admin/documents/<id>/download",
+  "title": "Document title"
 }
 ```
+`source_url` is always a URL reachable by n8n:
+- **File uploads**: `https://pub-a9bb7d7b516244eaacc47d9cab962786.r2.dev/<uuid_filename>` — file stored in Cloudflare R2 bucket `rag-platform`; n8n fetches directly from R2
+- **URL ingestion**: the original URL passed by the admin (e.g. `https://en.wikipedia.org/wiki/...`)
+
+> **Note**: `callback_token` is NOT sent in the ingest trigger. n8n sends it back to FastAPI in the ingestion-status callback so FastAPI can authenticate the result.
 
 ### POST `/webhook/ingest-ephemeral` (FastAPI → n8n)
 ```json
@@ -218,6 +223,55 @@ Response:
   "metadata": {"model": "deepseek-v4-flash", "retrieval_time_ms": 1100, "chunks_retrieved": 5}
 }
 ```
+
+### POST `/webhook/retrieve-ephemeral` (FastAPI → n8n)
+> **Separate lean workflow** for conversation-scoped Q&A over `ephemeral_chunks`.
+> Deliberate deviation from the unified `search_ephemeral` agent tool above
+> (`include_ephemeral`) — flagged for M1 to unify later. v1 omits the Gemini
+> self-check / DeepSeek-Pro fallback (`faithfulness` is `null`).
+```json
+{
+  "query": "What is the refund window?",
+  "tenant_id": "uuid",
+  "conversation_id": "uuid",
+  "max_chunks": 5,
+  "conversation_history": [...]
+}
+```
+Response:
+```json
+{
+  "answer": "Refunds are accepted within 30 days [1].",
+  "sources": [{"chunk_text": "...", "source_name": "refund-policy.txt", "chunk_index": 0, "score": 0.94}],
+  "follow_up_questions": ["...", "...", "..."],
+  "faithfulness": null,
+  "requires_clarification": false,
+  "conversation_id": "uuid",
+  "metadata": {"model": "deepseek-v4-flash", "chunks_retrieved": 3}
+}
+```
+SQL filters `tenant_id` **and** `conversation_id` **and** `expires_at > NOW()`. An
+empty session returns HTTP 200 with a graceful "no documents in this session"
+answer and `sources: []` (no DeepSeek call).
+
+### POST `/webhook/purge-ephemeral` (FastAPI → n8n)
+> Session-end signal (e.g. WhatsApp session closed) → immediate
+> conversation-scoped delete. Complements the hourly TTL cron
+> (`cleanup_expired_ephemeral_chunks()`), which remains the lifetime safety net.
+```json
+{
+  "conversation_id": "uuid",
+  "tenant_id": "uuid",
+  "token": "<settings.N8N_PURGE_TOKEN>"
+}
+```
+Response:
+```json
+{ "status": "purged", "conversation_id": "uuid", "deleted_count": 3 }
+```
+`DELETE ... WHERE tenant_id=$1 AND conversation_id=$2` — `tenant_id` is mandatory
+(cross-tenant purge defense). Destructive: enable the shared-secret `token` before
+exposing beyond localhost.
 
 ### POST `/webhooks/n8n/ingestion-status` (n8n → FastAPI)
 ```json

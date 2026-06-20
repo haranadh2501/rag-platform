@@ -1,0 +1,30 @@
+   Session                                                                                                                                                                                                                                         
+   Total cost:            $9.09
+   Total duration (API):  38m 48s
+   Total duration (wall): 1h 21m 7s
+ Total code changes:    9 lines added, 1 line removed
+ Usage by model:
+     claude-haiku-4-5:  843 input, 21 output, 0 cache read, 0 cache write ($0.0009)
+      claude-opus-4-8:  11.3k input, 149.3k output, 7.9m cache read, 217.9k cache write ($9.09)
+
+ Current session
+ █████████████████████████▌                         51% used
+ Resets 7:40pm (Asia/Calcutta)
+
+ Current week (all models)
+ ███                                                6% used
+ Resets Jun 20 at 5:30am (Asia/Calcutta)                                                                                                                                                                                                                                                                                                                                                                                                                                           What's contributing to your limits usage?
+ Approximate, based on local sessions on this machine — does not include other devices or claude.ai
+
+   Last 24h · these are independent characteristics of your usage, not a breakdown
+
+   46% of your usage was at >150k context
+    Longer sessions are more expensive even when cached. /compact mid-task, /clear when switching to new tasks.
+
+   Skills, subagents, plugins, and MCP servers
+   No attribution data yet · accumulates as you use Claude
+
+ d to day · w to week
+
+ Usage credits
+ Usage credits are off · /usage-credits to turn them on

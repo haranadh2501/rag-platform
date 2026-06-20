@@ -23,6 +23,7 @@ File upload endpoint, document management, chat proxy to n8n with MOCK mode.
 - `backend/app/api/admin.py`
 - `backend/app/api/chat.py`
 - `backend/app/services/n8n_client.py`
+- `backend/app/services/storage.py` (local + Cloudflare R2 backends)
 
 ## MOCK_N8N Implementation (Day 2 priority)
 ```python
@@ -51,11 +52,12 @@ async def chat_query(request: ChatQueryRequest, current_user=Depends(get_current
 ## n8n Client Service
 ```python
 # backend/app/services/n8n_client.py
-async def ingest(document_id, tenant_id, file_path, source_type): ...
+async def ingest(document_id, tenant_id, source_url, source_type, title): ...
 async def retrieve(query, tenant_id, conversation_history, max_chunks=5): ...
 ```
 - Uses `httpx.AsyncClient`
 - Reads `N8N_RETRIEVE_WEBHOOK_URL`, `N8N_INGEST_WEBHOOK_URL` from config
+- `source_url` for file uploads = R2 public URL (`https://pub-a9bb7d7b516244eaacc47d9cab962786.r2.dev/<key>`) when `STORAGE_BACKEND=r2`; falls back to `APP_BASE_URL/admin/documents/{id}/download` for local backend. For URL ingestion = the original URL.
 - Raises `HTTPException(502)` if n8n returns non-200
 
 ## Acceptance Criteria
