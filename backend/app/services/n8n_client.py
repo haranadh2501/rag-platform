@@ -82,3 +82,30 @@ async def retrieve(
         resp = await client.post(settings.N8N_RETRIEVE_WEBHOOK_URL, json=payload)
         resp.raise_for_status()
         return resp.json()
+
+
+async def ingest_ephemeral(
+    content: bytes,
+    conversation_id: str,
+    mime_type: str,
+) -> dict:
+    """Trigger n8n ephemeral ingestion workflow for WhatsApp/chat uploads.
+
+    Files are indexed temporarily (1-hour TTL) and scoped to a conversation_id.
+    """
+    if settings.MOCK_N8N:
+        logger.info(f"[MOCK] Ephemeral ingest for conversation={conversation_id}")
+        return {"status": "mock_indexed"}
+
+    # Send multipart form data with the file
+    files = {"file": ("upload", content, mime_type)}
+    data = {"conversation_id": conversation_id}
+
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        resp = await client.post(
+            settings.N8N_EPHEMERAL_INGEST_WEBHOOK_URL,
+            files=files,
+            data=data
+        )
+        resp.raise_for_status()
+        return resp.json()
