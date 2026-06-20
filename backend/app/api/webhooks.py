@@ -7,6 +7,8 @@ import hmac
 import json
 import logging
 
+import uuid as _uuid
+
 from fastapi import (
     APIRouter,
     BackgroundTasks,
@@ -15,6 +17,7 @@ from fastapi import (
     Request,
     Response,
 )
+from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,7 +26,7 @@ from app.bots.slack import SlackAPIError, SlackUserNotFoundError
 from app.core.config import settings
 from app.core.database import AsyncSessionLocal, get_db
 from app.core.dependencies import require_role
-from app.models.models import User
+from app.models.models import Document, User
 from app.schemas.webhook import SlackOnboardRequest, SlackOnboardResponse
 from app.services import message_service, pipeline_client
 from app.services.types import MessageContext
@@ -215,16 +218,31 @@ async def slack_onboard(
     return SlackOnboardResponse(slack_user_id=slack_user_id, email=body.email)
 
 
+class _IngestionStatusBody(BaseModel):
+    document_id: _uuid.UUID
+    status: str                         # completed | failed
+    chunk_count: int | None = None
+    error_message: str | None = None
+    callback_token: str | None = None
+
+
 @router.post("/n8n/ingestion-status", summary="n8n ingestion pipeline callback")
-async def n8n_ingestion_callback(request: Request):
-    """
-    M4: Implement:
-    1. Parse: {document_id, status, chunk_count, error_message}
-    2. UPDATE documents SET status=?, chunk_count=? WHERE id=?
-    3. Return 200
-    """
-    body = await request.json()
-    document_id = body.get("document_id")
-    status = body.get("status")
-    # M4/M3: update document status in DB
-    return {"message": f"Status update received: document_id={document_id} status={status}"}
+async def n8n_ingestion_callback(
+    body: _IngestionStatusBody,
+    db: AsyncSession = Depends(get_db),
+):
+    if body.callback_token != settings.N8N_CALLBACK_TOKEN:
+        raise HTTPException(status_code=401, detail="Invalid callback token")
+
+    doc = await db.get(Document, body.document_id)
+    if doc is None:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    doc.status = body.status
+    doc.chunk_count = body.chunk_count or 0
+    doc.error_message = body.error_message
+    await db.commit()
+
+    logger.info("Ingestion status updated: document=%s status=%s chunks=%s",
+                body.document_id, body.status, body.chunk_count)
+    return {"ok": True}
