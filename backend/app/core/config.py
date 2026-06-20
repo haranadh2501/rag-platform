@@ -78,6 +78,7 @@ class Settings(BaseSettings):
 
     # ── File upload limits ───────────────────────────────────────────
     UPLOAD_DIR: str = "/uploads"
+    STORAGE_BACKEND: str = "local"     # "local" | "gcs" | "s3" — see PLAN_M3 §6
     MAX_UPLOAD_BYTES: int = 26_214_400               # 25 MB
     MAX_WHATSAPP_UPLOAD_BYTES: int = 10_485_760      # 10 MB
     MAX_PAGES_PER_DOC: int = 500
