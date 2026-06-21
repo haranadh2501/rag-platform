@@ -1,0 +1,10 @@
+Hydraulic Press Safety Guide
+
+Section: Lockout
+Maintenance inside the guarded area requires electrical and hydraulic lockout, stored-pressure release, and zero-energy verification by the technician.
+
+Section: Overheating
+Stop the press when hydraulic fluid exceeds 75 degrees Celsius. Check the cooler fan and oil level, and resume only below 60 degrees Celsius.
+
+Section: Service records
+Record operating hours, inspection findings, parts replaced, technician name, and return-to-service checks after maintenance.

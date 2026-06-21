@@ -1,0 +1,10 @@
+CloudDesk Product Guide
+
+Section: Plans
+CloudDesk Standard supports up to 100 users and 500 GB storage. CloudDesk Enterprise supports unlimited users, 5 TB storage, SSO, audit export, and a dedicated success manager.
+
+Section: Trial
+The trial lasts 14 days and includes Standard features for up to 20 users. Trial data is retained for 30 days after expiration.
+
+Section: Positioning
+CloudDesk is positioned for regulated teams needing controlled document collaboration. Sales must not claim that the product guarantees regulatory compliance.

@@ -1,0 +1,10 @@
+IT Helpdesk Access Guide
+
+Section: Password reset
+Employees reset a forgotten password at access.example.test/reset. The reset link expires after 20 minutes. After five failed attempts, the account is locked for 30 minutes.
+
+Section: VPN troubleshooting
+For VPN error 720, restart the SecureLink service, remove any saved VPN profile, and import the current profile from the IT portal. Escalate if the error remains after one retry.
+
+Section: MFA device replacement
+A user replacing a phone must keep the old authenticator until the new device is enrolled. If the old phone is unavailable, the service desk verifies identity with the manager and issues a 15-minute recovery code.

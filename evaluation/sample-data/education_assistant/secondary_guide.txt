@@ -1,0 +1,10 @@
+Laboratory Handbook
+
+Section: Lab access
+GPU lab access is available from 8 AM to 10 PM. Students authenticate with the course account and may reserve at most four GPU hours per day.
+
+Section: Reproducibility
+Every experiment submission must include a random seed, environment file, training command, dataset version, and metric definition.
+
+Section: Academic integrity
+Students may discuss concepts but must write their own code and report. Reusing public code requires attribution and license compliance.

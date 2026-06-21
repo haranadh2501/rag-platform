@@ -1,0 +1,10 @@
+NovaHub Troubleshooting
+
+Section: Factory reset
+To reset NovaHub, hold the rear reset button for 10 seconds until the status light flashes amber. The reset removes local settings but does not cancel the subscription.
+
+Section: Offline status
+If NovaHub shows offline, verify power, restart the router, and move the device within eight metres of the access point. If still offline, collect the diagnostic code.
+
+Section: Escalation
+Escalate when three resets fail, the device overheats, or a diagnostic code begins with HW-. Overheating devices must be unplugged immediately.

@@ -1,0 +1,10 @@
+Recovery and Review
+
+Section: Rollback
+Prefer rollback when a recent deployment correlates with impact and rollback is tested. Record the deployment identifier and validation checks before execution.
+
+Section: Evidence preservation
+Preserve logs, traces, alerts, command history, and configuration snapshots. Do not edit original evidence; store analysis in a separate document.
+
+Section: Post-incident review
+A review is due within five business days for SEV-1 and SEV-2 incidents. It must include contributing factors, timeline, corrective actions, owners, and due dates.
