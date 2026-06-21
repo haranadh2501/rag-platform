@@ -153,19 +153,24 @@
 
 ## Users Page
 
-> **`GET /admin/users` wired + `POST /auth/register` create-user wired; deactivate remains pending.**
-> Users page calls `GET /admin/users` via `listUsersApi()` on mount; renders backend `UserOut[]` in table.
+> **`GET /admin/users` + `POST /auth/register` wired; RBAC UX guard active; deactivate pending.**
+> Users page is `admin` and `super_admin` only. `role === 'user'` sees "Access restricted" state;
+> `GET /admin/users` is NOT called; no table, no Invite button, no drawer rendered.
+> Admin sidebar hides the Users nav item for `role === 'user'` (UX only — backend enforces RBAC).
+> This is a frontend UX guard only; backend must independently reject unauthorized requests.
+> Role is sourced from the `POST /auth/login` response; `GET /auth/me` wiring is still pending.
+>
+> For `admin`/`super_admin`: Users page calls `GET /admin/users` on mount via `listUsersApi()`.
 > Invite drawer calls `POST /auth/register` via `createUserApi()` with `{ email, password, tenant_id, role }`.
 > Bearer token attached automatically by `apiClient` (no hardcoded JWT; no direct DB access).
 > `tenant_id` sourced from `authContext.user.tenant_id` — not a form field.
-> `phone_number` is visible in drawer but disabled and NOT sent to backend (absent from `RegisterRequest`).
-> Password sent to backend only; cleared after successful create; frontend never stores passwords; backend owns hashing.
-> On success: returned `UserOut` prepended to table; drawer closes; form fields cleared.
+> `phone_number` visible but disabled — NOT sent to backend (absent from `RegisterRequest`).
+> Password sent to backend only; cleared after success; frontend never stores passwords; backend owns hashing.
+> On success: returned `UserOut` prepended to table; drawer closes; form cleared.
 > On create failure: inline red panel in drawer; drawer stays open.
 > On list fetch failure: inline red panel above table; no silent fallback to mock data.
-> Duplicate-user error handling relies on backend returning 409 or "already exists" in `detail`
-> (409 not yet documented in `openapi.yaml`; error classification handles it opportunistically).
-> Slack onboarding lookup is backend-owned; no frontend action.
+> Backend must enforce: unique-email, password hashing, tenant-scope 403, Slack onboarding lookup.
+> `GET /auth/me` for backend-verified role refresh remains pending.
 > No automated frontend test runner; verification is typecheck + browser check against live stack.
 >
 > **Registration vs login**: No self-service signup in the admin portal. First-time users are
@@ -210,6 +215,18 @@
 - [x] Submit button ("Create user") disabled until email, password (≥8 chars), and `tenant_id` are present; disabled while request in flight *(verifiable via `npm run dev`)*
 - [x] phone_number field remains visible but disabled ("Required by team · Schema pending"); never sent to backend *(verifiable via `npm run dev`)*
 - [ ] Deactivate user → `ConfirmDialog` → `PATCH /admin/users/{id}` → row updates *(not yet implemented)*
+
+**Users RBAC UX guard** (frontend UX only — backend must independently enforce):
+- [x] Admin sidebar does NOT show "Users" nav item when logged in as `role === 'user'` *(requires live backend — verifiable via browser DevTools + role: user account)*
+- [x] Navigating directly to `/admin/users` as `role === 'user'` shows "Access restricted" heading and "User management is available only to admins." message *(requires live backend)*
+- [x] "Access restricted" page includes "Go to Chat" link to `/chat/new` *(verifiable via `npm run dev` by mocking role)*
+- [x] `GET /admin/users` is NOT called when `role === 'user'` — no Network request visible in browser DevTools *(requires live backend)*
+- [x] No users table, no search/filter, no Invite user button, and no drawer render for `role === 'user'` *(verifiable by reading source)*
+- [x] `admin` role sees the full users table, search/filter, and Invite user button *(requires live backend)*
+- [x] `super_admin` role sees the full users table, search/filter, and Invite user button *(requires live backend)*
+- [x] Create-user action (`POST /auth/register`) is only reachable by `admin`/`super_admin` — drawer not rendered for `user` role *(verifiable by reading source)*
+- [x] Role is sourced from `POST /auth/login` response user object; `GET /auth/me` wiring for backend-verified role refresh remains pending *(expected behavior)*
+- [ ] Backend independently rejects `GET /admin/users` and `POST /auth/register` for `role === 'user'` *(backend RBAC — not yet verified; frontend guard is UX only)*
 
 ## Chat Navigation
 
