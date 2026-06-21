@@ -14,7 +14,7 @@ from datetime import datetime
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.bots import slack, whatsapp
+from app.bots import slack, teams, whatsapp
 from app.services import pipeline_client
 from app.services.types import MessageContext
 
@@ -34,6 +34,31 @@ _TITLE_PREFIXES = sorted([
     "tell me about", "describe",
     "how do i", "how to", "how does",
 ], key=len, reverse=True)
+
+
+def _flatten(text: str) -> str:
+    """Collapse all whitespace (incl. newlines) into single spaces.
+
+    The n8n webhook returns an empty 200 body when the query contains newline
+    characters. Stored assistant answers contain `\\n`, so replaying them into
+    the query re-introduces newlines — every char of the query must be flattened,
+    not just the delimiter between history turns.
+    """
+    return " ".join(text.split())
+
+
+def _format_query_with_history(history: list[dict], query: str) -> str:
+    """Compose history + current query into a single-line string for n8n.
+
+    Both the history turns and the current query are flattened to a single line
+    (see `_flatten`) and joined with ' | ' as a delimiter.
+    """
+    query = _flatten(query)
+    if not history:
+        return query
+    parts = [f"{msg['role']}: {_flatten(msg['content'])}" for msg in history]
+    context = " | ".join(parts)
+    return f"Context: {context} | User Query: {query}"
 
 
 def _derive_title(query: str) -> str:
@@ -85,26 +110,30 @@ async def process_message(ctx: MessageContext, db: AsyncSession) -> dict:
 
     history = await _load_history(ctx, db)                 # Step 5
 
-    response = await pipeline_client.call_pipeline({       # Step 6 (raises PipelineError)
-        "request_id": ctx.request_id,
-        "tenant_id": str(ctx.tenant_id),
-        "conversation_id": str(ctx.conversation_id),
-        "current_message": ctx.query,
-        "history": history,
-    })
+    formatted_query = _format_query_with_history(history, ctx.query)
+    response = await pipeline_client.call_pipeline(        # Step 6 (raises PipelineError)
+        {"query": formatted_query}
+    )
     answer = response.get("answer", "")
-    sources = response.get("sources", []) or []
+    sources: list = []           # n8n does not return sources
+    follow_up_questions: list = []  # n8n does not return follow_up_questions
 
     if ctx.source == "slack":                              # Step 7
         await slack.post_reply(ctx.slack_channel, ctx.slack_thread_ts, answer, sources)
     elif ctx.source == "whatsapp":
         await whatsapp.post_reply(ctx.whatsapp_from, answer, sources)
+    elif ctx.source == "teams":
+        await teams.post_reply(ctx.teams_service_url, ctx.teams_conversation_id, answer, sources)
 
     await _save_messages(ctx, db, ctx.query, answer, sources)  # Step 8
 
-    response["conversation_id"] = str(ctx.conversation_id)
-    response.setdefault("request_id", ctx.request_id)
-    return response
+    return {
+        "request_id": ctx.request_id,
+        "conversation_id": str(ctx.conversation_id),
+        "answer": answer,
+        "sources": sources,
+        "follow_up_questions": follow_up_questions,
+    }
 
 
 async def _resolve_identity(ctx: MessageContext, db: AsyncSession) -> None:
@@ -157,6 +186,38 @@ async def _resolve_identity(ctx: MessageContext, db: AsyncSession) -> None:
         else:
             ctx.user_id = row.user_id
 
+    elif ctx.source == "teams":
+        # Look up tenant via teams_tenant_map (Azure AD tenant id), user via teams_user_id.
+        row = (await db.execute(text("""
+            SELECT m.tenant_id, u.id AS user_id
+            FROM teams_tenant_map m
+            LEFT JOIN users u ON u.tenant_id = m.tenant_id AND u.teams_user_id = :tuid
+            WHERE m.teams_tenant_id = :ttid
+        """), {"ttid": ctx.teams_tenant_id, "tuid": ctx.teams_user_id})).first()
+
+        if row is None:
+            raise IdentityResolutionError(
+                f"Teams tenant {ctx.teams_tenant_id} not in teams_tenant_map"
+            )
+
+        ctx.tenant_id = row.tenant_id
+
+        if row.user_id is None:
+            # Auto-create a "teams" user for this Teams identity in the tenant.
+            safe_id = "".join(c for c in (ctx.teams_user_id or "") if c.isalnum())[:40]
+            ctx.user_id = (await db.execute(text("""
+                INSERT INTO users (tenant_id, email, hashed_password, role, teams_user_id)
+                VALUES (:tid, :email, 'teams-no-login', 'user', :tuid)
+                RETURNING id
+            """), {
+                "tid": ctx.tenant_id,
+                "email": f"teams-{safe_id}@teams.local",
+                "tuid": ctx.teams_user_id,
+            })).scalar_one()
+            await db.commit()
+        else:
+            ctx.user_id = row.user_id
+
 
 async def _find_or_create_conversation(ctx: MessageContext, db: AsyncSession) -> None:
     """Step 3 — one conversation per (user_id, channel); validate web ownership."""
@@ -203,6 +264,8 @@ async def _handle_reset(ctx: MessageContext, db: AsyncSession) -> dict:
         await slack.post_text(ctx.slack_channel, ctx.slack_thread_ts, RESET_CONFIRMATION)
     elif ctx.source == "whatsapp":
         await whatsapp.post_text(ctx.whatsapp_from, RESET_CONFIRMATION)
+    elif ctx.source == "teams":
+        await teams.post_text(ctx.teams_service_url, ctx.teams_conversation_id, RESET_CONFIRMATION)
 
     return {
         "request_id": ctx.request_id,

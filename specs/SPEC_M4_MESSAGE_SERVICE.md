@@ -104,7 +104,7 @@ Request
   - **STOP** — do not call pipeline, do not save to history.
 - Partial matches (e.g., `/newer`) do NOT trigger reset.
 
-### Step 5 — Load History
+### Step 5 — Load History and Format History
 
 ```sql
 SELECT role, content FROM chat_messages
@@ -113,30 +113,45 @@ ORDER BY created_at DESC
 LIMIT 10
 ```
 - Reverse result to oldest-first.
-- Format as: `[{"role": "user", "content": "..."}, {"role": "assistant", "content": "..."}, ...]`
+- Format as a plain-text block to be prepended to the current query:
+
+Context:
+user: <message>
+assistant: <message>
+...
+
+User Query: <current query>
+
+- If no history exists, send only `User Query: <current query>` (no Context block).
+
 
 ### Step 6 — Call Pipeline
 
 - `POST` to `PIPELINE_URL` env var (defaults to mock endpoint during dev):
-```json
 {
-  "request_id": "...",
-  "tenant_id": "...",
-  "conversation_id": "...",
-  "current_message": "...",
-  "history": [{"role": "user", "content": "..."}, ...]
+  "query": "Context:\nuser: What is RAG?\nassistant: RAG stands for...\n\nUser Query: Can you give an example?"
 }
+
+
 ```
+- The `query` field contains the full formatted context string (history + current message).
+- Plain text only — no JSON nesting, no role arrays.
+
+
 - Expected response:
 ```json
 {
   "answer": "...",
-  "sources": [{"title": "...", "url": "...", "chunk_id": "..."}],
-  "follow_up_questions": ["..."]
+  "model_used": "..."
 }
+
 ```
+- - `sources` and `follow_up_questions` are not returned by n8n; the gateway defaults both to `[]` before responding to the client.
 - Timeout: `PIPELINE_TIMEOUT_SECONDS` = 120
 - On timeout or non-2xx → deliver fallback error to user, do NOT save to history, log error.
+- History formatting is the gateway's responsibility — n8n receives a single pre-composed string.
+- Cap history at last 10 messages (HISTORY_LIMIT) to avoid oversized payloads.
+
 
 ### Step 7 — Deliver Response
 
@@ -351,7 +366,7 @@ Constraint: `UNIQUE(user_id, channel)` — enforces one conversation per user pe
 |---|---|---|---|
 | `SLACK_SIGNING_SECRET` | Yes (Slack) | `""` | HMAC verification |
 | `SLACK_BOT_TOKEN` | Yes (Slack) | `""` | chat.postMessage |
-| `PIPELINE_URL` | No | `http://localhost:8000/mock/pipeline` | Mock in dev; real n8n URL in prod |
+| `PIPELINE_URL` | No | `http://localhost:8000/mock/pipeline` | Mock in dev; set to `https://n8n-production-c637.up.railway.app/webhook/retrieve` in prod |
 | `PIPELINE_TIMEOUT_SECONDS` | No | `120` | HTTP timeout for pipeline calls |
 
 ---

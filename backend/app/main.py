@@ -52,12 +52,13 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # ── Routers — wired up by M2 ──────────────────────────
-from app.api import auth, admin, chat, webhooks, onboarding  # noqa: E402
-app.include_router(auth.router,        prefix="/auth",        tags=["Auth"])
-app.include_router(admin.router,       prefix="/admin",       tags=["Admin"])
-app.include_router(chat.router,        prefix="/chat",        tags=["Chat"])
-app.include_router(webhooks.router,    prefix="/webhooks",    tags=["Webhooks"])
-app.include_router(onboarding.router,  prefix="/onboarding",  tags=["Onboarding"])
+from app.api import auth, admin, chat, webhooks, onboarding, mock_pipeline  # noqa: E402
+app.include_router(auth.router,           prefix="/auth",        tags=["Auth"])
+app.include_router(admin.router,          prefix="/admin",       tags=["Admin"])
+app.include_router(chat.router,           prefix="/chat",        tags=["Chat"])
+app.include_router(webhooks.router,       prefix="/webhooks",    tags=["Webhooks"])
+app.include_router(onboarding.router,     prefix="/onboarding",  tags=["Onboarding"])
+app.include_router(mock_pipeline.router,  prefix="/mock",        tags=["Mock"])
 
 # ── MCP server (optional) ─────────────────────────────
 # Exposes /chat/query as MCP tools for Claude Desktop & other MCP clients.
