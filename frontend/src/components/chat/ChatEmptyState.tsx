@@ -31,7 +31,7 @@ export default function ChatEmptyState({ onSelectPrompt }: ChatEmptyStateProps) 
               key={prompt}
               type="button"
               onClick={() => onSelectPrompt?.(prompt)}
-              className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700"
+              className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 transition hover:border-[var(--accent-200)] hover:bg-[var(--accent-50)] hover:text-[var(--accent-700)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-600)] focus-visible:ring-offset-2"
             >
               {prompt}
             </button>

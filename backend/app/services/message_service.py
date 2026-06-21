@@ -9,6 +9,7 @@ column are accessed via raw SQL — no ORM model changes (see migration 0002_m4_
 """
 import json
 import logging
+from datetime import datetime
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,6 +24,43 @@ RESET_COMMANDS = {"/new", "/reset", "/clear"}
 HISTORY_LIMIT = 10
 RESET_CONFIRMATION = "Conversation reset ✓"
 FALLBACK_MESSAGE = "Sorry, something went wrong — please try again."
+
+DEFAULT_TITLE = "New Conversation"
+TITLE_MAX_LEN = 40
+_TITLE_PREFIXES = sorted([
+    "what is", "what are", "what's",
+    "explain", "can you explain", "could you explain",
+    "summarize", "summarise",
+    "tell me about", "describe",
+    "how do i", "how to", "how does",
+], key=len, reverse=True)
+
+
+def _derive_title(query: str) -> str:
+    """Deterministic short title from a user's first query — no LLM call.
+
+    Strips trailing punctuation and a leading question/instruction phrase
+    (e.g. "what is", "summarize"), title-cases the remainder, and caps it at
+    TITLE_MAX_LEN chars on a word boundary.
+    """
+    text_ = query.strip().rstrip("?!.,;: ").strip()
+    if not text_:
+        return DEFAULT_TITLE
+
+    lowered = text_.lower()
+    for prefix in _TITLE_PREFIXES:
+        if lowered.startswith(prefix):
+            text_ = text_[len(prefix):].strip()
+            break
+
+    text_ = text_.rstrip("?!.,;: ").strip()
+    if not text_:
+        return DEFAULT_TITLE
+
+    title = text_.title()
+    if len(title) > TITLE_MAX_LEN:
+        title = title[:TITLE_MAX_LEN].rsplit(" ", 1)[0].rstrip() or title[:TITLE_MAX_LEN]
+    return title
 
 
 class ConversationOwnershipError(Exception):
@@ -71,6 +109,9 @@ async def process_message(ctx: MessageContext, db: AsyncSession) -> dict:
 
 async def _resolve_identity(ctx: MessageContext, db: AsyncSession) -> None:
     """Step 2 — web is already resolved from JWT; Slack maps team + user via raw SQL."""
+    if ctx.user_id is not None and ctx.tenant_id is not None:
+        return  # already resolved (e.g. WhatsApp pre-resolves before media handling)
+
     if ctx.source == "slack":
         row = (await db.execute(text("""
             SELECT u.id AS user_id, m.tenant_id AS tenant_id
@@ -138,9 +179,9 @@ async def _find_or_create_conversation(ctx: MessageContext, db: AsyncSession) ->
         return
 
     ctx.conversation_id = (await db.execute(
-        text("""INSERT INTO conversations (tenant_id, user_id, channel)
-                VALUES (:tid, :uid, :ch) RETURNING id"""),
-        {"tid": ctx.tenant_id, "uid": ctx.user_id, "ch": ctx.source},
+        text("""INSERT INTO conversations (tenant_id, user_id, channel, title)
+                VALUES (:tid, :uid, :ch, :title) RETURNING id"""),
+        {"tid": ctx.tenant_id, "uid": ctx.user_id, "ch": ctx.source, "title": _derive_title(ctx.query)},
     )).scalar_one()
     await db.commit()
 
@@ -186,13 +227,19 @@ async def _load_history(ctx: MessageContext, db: AsyncSession) -> list[dict]:
 async def _save_messages(
     ctx: MessageContext, db: AsyncSession, query: str, answer: str, sources: list
 ) -> None:
-    """Step 8 — persist user + assistant rows in a single transaction."""
+    """Step 8 — persist user + assistant rows in a single transaction.
+
+    created_at is set explicitly rather than left to the column's `now()`
+    default: Postgres's `now()` is transaction-scoped, so both rows in this
+    same transaction would otherwise get an identical timestamp, making
+    _load_history's `ORDER BY created_at` non-deterministic between them.
+    """
     await db.execute(text("""
-        INSERT INTO chat_messages (conversation_id, role, content, sources)
-        VALUES (:cid, 'user', :content, CAST(:sources AS JSONB))
-    """), {"cid": ctx.conversation_id, "content": query, "sources": "[]"})
+        INSERT INTO chat_messages (conversation_id, role, content, sources, created_at)
+        VALUES (:cid, 'user', :content, CAST(:sources AS JSONB), :ts)
+    """), {"cid": ctx.conversation_id, "content": query, "sources": "[]", "ts": datetime.utcnow()})
     await db.execute(text("""
-        INSERT INTO chat_messages (conversation_id, role, content, sources)
-        VALUES (:cid, 'assistant', :content, CAST(:sources AS JSONB))
-    """), {"cid": ctx.conversation_id, "content": answer, "sources": json.dumps(sources)})
+        INSERT INTO chat_messages (conversation_id, role, content, sources, created_at)
+        VALUES (:cid, 'assistant', :content, CAST(:sources AS JSONB), :ts)
+    """), {"cid": ctx.conversation_id, "content": answer, "sources": json.dumps(sources), "ts": datetime.utcnow()})
     await db.commit()
