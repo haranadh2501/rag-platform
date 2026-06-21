@@ -290,7 +290,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"document_id\": \"{{ $json.document_id }}\",\n  \"status\": \"failed\",\n  \"error_message\": \"{{ $json.error_message }}\",\n  \"callback_token\": \"{{ $env.N8N_CALLBACK_TOKEN }}\"\n}",
+        "jsonBody": "={\n  \"document_id\": \"{{ $('Webhook /ingest').first().json.body.document_id }}\",\n  \"status\": \"failed\",\n  \"error_message\": \"{{ $json.message || $json.error_message || 'Ingestion pipeline error' }}\",\n  \"callback_token\": \"{{ $env.N8N_CALLBACK_TOKEN }}\"\n}",
         "options": {}
       },
       "id": "a4baf47b-8882-454b-a817-b94158c7ecaf",
