@@ -18,6 +18,11 @@ export default function ConversationList({ activeConversationId }: ConversationL
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
 
+  // /chat/new renders this with no id until the first message resolves —
+  // that's the only caller that omits the prop, so its absence unambiguously
+  // means "draft, not yet a real conversation" (no fetch/persistence involved).
+  const isDraft = activeConversationId === undefined;
+
   function load() {
     setIsLoading(true);
     setHasError(false);
@@ -58,12 +63,20 @@ export default function ConversationList({ activeConversationId }: ConversationL
       {!isLoading && hasError && (
         <p className="px-4 text-xs text-slate-400 dark:text-slate-500">We couldn&apos;t load your conversations. Please try again shortly.</p>
       )}
-      {!isLoading && !hasError && conversations.length === 0 && (
+      {!isLoading && !hasError && !isDraft && conversations.length === 0 && (
         <p className="px-4 text-xs text-slate-400 dark:text-slate-500">Your conversations will appear here.</p>
       )}
 
-      {!isLoading && !hasError && conversations.length > 0 && (
+      {!isLoading && !hasError && (isDraft || conversations.length > 0) && (
         <ul className="flex flex-col gap-0.5 px-2">
+          {isDraft && (
+            <li>
+              <div className="block truncate rounded-md bg-slate-100 px-2 py-2 text-xs text-slate-800 dark:bg-slate-800 dark:text-slate-100">
+                <span className="block truncate font-medium">New conversation</span>
+                <span className="block text-[10px] text-slate-400 dark:text-slate-500">Draft</span>
+              </div>
+            </li>
+          )}
           {conversations.map((conversation) => {
             const isActive = conversation.id === activeConversationId;
             return (

@@ -77,7 +77,8 @@ function PipelineStepper({ doc }: { doc: DocumentOut }) {
 
   return (
     <div className="border-t border-slate-100 bg-slate-50 px-4 py-3">
-      <div className="flex items-start">
+      {/* Desktop: horizontal stepper */}
+      <div className="hidden items-start md:flex">
         {INGESTION_STAGES.map((stage, i) => {
           const dotSt = getDotState(i, state, doc.status);
           return (
@@ -112,8 +113,33 @@ function PipelineStepper({ doc }: { doc: DocumentOut }) {
         })}
       </div>
 
+      {/* Mobile: compact vertical stepper — same data, no horizontal overflow */}
+      <div className="flex flex-col gap-1.5 md:hidden">
+        {INGESTION_STAGES.map((stage, i) => {
+          const dotSt = getDotState(i, state, doc.status);
+          return (
+            <div key={stage} className="flex items-center gap-2">
+              <DotIcon state={dotSt} />
+              <span
+                className={`text-xs font-medium ${
+                  dotSt === 'failed'
+                    ? 'text-red-500'
+                    : dotSt === 'done'
+                      ? 'text-emerald-600'
+                      : dotSt === 'running'
+                        ? 'text-blue-500'
+                        : 'text-slate-400'
+                }`}
+              >
+                {STAGE_LABELS[stage]}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
       {failedStage && state.errorMessage && (
-        <p className="mt-2 text-xs text-red-500">
+        <p className="mt-2 break-words text-xs text-red-500">
           Failed at: {STAGE_LABELS[failedStage]} — {state.errorMessage}
         </p>
       )}
@@ -391,7 +417,7 @@ function UploadSourcePanel({ onAccepted }: UploadSourcePanelProps) {
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
-              className={`rounded-lg border-2 border-dashed p-8 text-center transition-colors ${
+              className={`rounded-lg border-2 border-dashed p-6 text-center transition-colors sm:p-8 ${
                 isDragOver ? 'border-indigo-400 bg-indigo-50' : 'border-slate-300 bg-slate-50'
               }`}
             >
@@ -416,7 +442,7 @@ function UploadSourcePanel({ onAccepted }: UploadSourcePanelProps) {
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={fileLoading}
-                className="mt-2 rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
+                className="mt-2 w-full rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto"
               >
                 Browse files
               </button>
@@ -481,7 +507,7 @@ function UploadSourcePanel({ onAccepted }: UploadSourcePanelProps) {
               type="submit"
               disabled={!selectedFile || fileLoading}
               aria-disabled={!selectedFile || fileLoading}
-              className="flex items-center gap-1.5 rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
+              className="flex w-full items-center justify-center gap-1.5 rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto sm:justify-start"
             >
               {fileLoading && (
                 <span
@@ -570,7 +596,7 @@ function UploadSourcePanel({ onAccepted }: UploadSourcePanelProps) {
               type="submit"
               disabled={!canSubmitUrl}
               aria-disabled={!canSubmitUrl}
-              className="flex items-center gap-1.5 rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
+              className="flex w-full items-center justify-center gap-1.5 rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto sm:justify-start"
             >
               {urlLoading && (
                 <span
@@ -682,7 +708,7 @@ export default function DocumentsPage() {
   }
 
   return (
-    <main className="p-6">
+    <main className="p-4 sm:p-6">
       <div className="mb-6">
         <h1 className="text-xl font-semibold text-slate-900">Documents</h1>
         <p className="mt-1 text-sm text-slate-500">
@@ -725,91 +751,165 @@ export default function DocumentsPage() {
         </div>
       )}
 
-      {/* Document table */}
-      <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-        <table className="min-w-full divide-y divide-slate-200">
-          <thead className="bg-slate-50">
-            <tr>
-              {['Title', 'Type', 'Status', 'Chunks', 'Uploaded', 'Actions'].map(
-                (col) => (
-                  <th
-                    key={col}
-                    className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500"
-                  >
-                    {col}
-                  </th>
-                ),
-              )}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {loading ? (
-              Array.from({ length: 5 }).map((_, i) => (
-                <tr key={`doc-skeleton-${i}`} className="animate-pulse">
-                  <td colSpan={6} className="px-4 py-3">
-                    <div className="h-4 w-full rounded bg-slate-100" />
-                  </td>
-                </tr>
-              ))
-            ) : filteredDocs.length === 0 ? (
+      {/* Document table — desktop/tablet (md+) only; mobile uses stacked cards below */}
+      <div className="hidden overflow-hidden rounded-lg border border-slate-200 bg-white md:block">
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-slate-200">
+            <thead className="bg-slate-50">
               <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-sm text-slate-400">
-                  No {activeFilter === 'all' ? '' : `${activeFilter} `}documents.
-                </td>
+                {['Title', 'Type', 'Status', 'Chunks', 'Uploaded', 'Actions'].map(
+                  (col) => (
+                    <th
+                      key={col}
+                      className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500"
+                    >
+                      {col}
+                    </th>
+                  ),
+                )}
               </tr>
-            ) : filteredDocs.map((doc) => (
-              <Fragment key={doc.id}>
-                <tr className="hover:bg-slate-50">
-                  <td className="max-w-xs truncate px-4 py-3 text-sm font-medium text-slate-800">
-                    {doc.title}
-                  </td>
-                  <td className="px-4 py-3 text-xs uppercase tracking-wide text-slate-500">
-                    {doc.source_type}
-                  </td>
-                  <td className="px-4 py-3">
-                    <StatusBadge status={doc.status} errorMessage={doc.error_message} />
-                  </td>
-                  <td className="px-4 py-3 text-sm text-slate-600">
-                    {doc.status === 'completed' ? doc.chunk_count : '—'}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-slate-500">
-                    {formatDate(doc.created_at)}
-                  </td>
-                  <td className="px-4 py-3 text-sm">
-                    {doc.status === 'completed' || doc.status === 'failed' ? (
-                      <Link
-                        href={`/admin/documents/${doc.id}`}
-                        className="text-indigo-600 hover:text-indigo-800"
-                      >
-                        Detail
-                      </Link>
-                    ) : (
-                      <span className="text-slate-400">—</span>
-                    )}
-                  </td>
-                </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {loading ? (
+                Array.from({ length: 5 }).map((_, i) => (
+                  <tr key={`doc-skeleton-${i}`} className="animate-pulse">
+                    <td colSpan={6} className="px-4 py-3">
+                      <div className="h-4 w-full rounded bg-slate-100" />
+                    </td>
+                  </tr>
+                ))
+              ) : filteredDocs.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="p-0">
-                    <PipelineStepper doc={doc} />
-                    {optimisticIds.has(doc.id) && (doc.status === 'pending' || doc.status === 'processing') && (
-                      <p className="border-t border-slate-100 bg-slate-50 px-4 pb-2.5 pt-0 text-xs text-slate-400">
-                        Status preview — live updates require{' '}
-                        <code className="rounded bg-slate-100 px-0.5">GET /admin/documents</code>{' '}
-                        polling.
-                      </p>
-                    )}
+                  <td colSpan={6} className="px-4 py-10 text-center text-sm text-slate-400">
+                    No {activeFilter === 'all' ? '' : `${activeFilter} `}documents.
                   </td>
                 </tr>
-              </Fragment>
-            ))}
-          </tbody>
-        </table>
+              ) : filteredDocs.map((doc) => (
+                <Fragment key={doc.id}>
+                  <tr className="hover:bg-slate-50">
+                    <td className="max-w-xs truncate px-4 py-3 text-sm font-medium text-slate-800">
+                      {doc.title}
+                    </td>
+                    <td className="px-4 py-3 text-xs uppercase tracking-wide text-slate-500">
+                      {doc.source_type}
+                    </td>
+                    <td className="px-4 py-3">
+                      <StatusBadge status={doc.status} errorMessage={doc.error_message} />
+                    </td>
+                    <td className="px-4 py-3 text-sm text-slate-600">
+                      {doc.status === 'completed' ? doc.chunk_count : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-slate-500">
+                      {formatDate(doc.created_at)}
+                    </td>
+                    <td className="px-4 py-3 text-sm">
+                      {doc.status === 'completed' || doc.status === 'failed' ? (
+                        <Link
+                          href={`/admin/documents/${doc.id}`}
+                          className="text-indigo-600 hover:text-indigo-800"
+                        >
+                          Detail
+                        </Link>
+                      ) : (
+                        <span className="text-slate-400">—</span>
+                      )}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td colSpan={6} className="p-0">
+                      <PipelineStepper doc={doc} />
+                      {optimisticIds.has(doc.id) && (doc.status === 'pending' || doc.status === 'processing') && (
+                        <p className="border-t border-slate-100 bg-slate-50 px-4 pb-2.5 pt-0 text-xs text-slate-400">
+                          Status preview — live updates require{' '}
+                          <code className="rounded bg-slate-100 px-0.5">GET /admin/documents</code>{' '}
+                          polling.
+                        </p>
+                      )}
+                    </td>
+                  </tr>
+                </Fragment>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Document cards — mobile (< md) only; same data as the table above */}
+      <div className="space-y-3 md:hidden">
+        {loading ? (
+          Array.from({ length: 3 }).map((_, i) => (
+            <div
+              key={`doc-skeleton-card-${i}`}
+              className="animate-pulse rounded-lg border border-slate-200 bg-white p-4"
+            >
+              <div className="h-4 w-2/3 rounded bg-slate-100" />
+              <div className="mt-2 h-3 w-1/3 rounded bg-slate-100" />
+            </div>
+          ))
+        ) : filteredDocs.length === 0 ? (
+          <div className="rounded-lg border border-slate-200 bg-white px-4 py-10 text-center text-sm text-slate-400">
+            No {activeFilter === 'all' ? '' : `${activeFilter} `}documents.
+          </div>
+        ) : filteredDocs.map((doc) => (
+          <div key={doc.id} className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+            <div className="p-4">
+              <div className="flex items-start justify-between gap-3">
+                <p className="break-words text-sm font-medium text-slate-800">{doc.title}</p>
+                <span className="shrink-0 text-xs uppercase tracking-wide text-slate-500">
+                  {doc.source_type}
+                </span>
+              </div>
+              <div className="mt-2">
+                <StatusBadge status={doc.status} errorMessage={doc.error_message} />
+              </div>
+              <dl className="mt-3 space-y-1 text-xs text-slate-500">
+                <div className="flex items-center justify-between gap-2">
+                  <dt>Chunks</dt>
+                  <dd className="text-slate-700">
+                    {doc.status === 'completed' ? doc.chunk_count : '—'}
+                  </dd>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <dt>Uploaded</dt>
+                  <dd className="text-slate-700">{formatDate(doc.created_at)}</dd>
+                </div>
+                {doc.source_url && (
+                  <div className="flex items-center justify-between gap-2">
+                    <dt className="shrink-0">Source</dt>
+                    <dd className="min-w-0 flex-1 truncate text-right text-slate-700">
+                      {doc.source_url}
+                    </dd>
+                  </div>
+                )}
+              </dl>
+              <div className="mt-3">
+                {doc.status === 'completed' || doc.status === 'failed' ? (
+                  <Link
+                    href={`/admin/documents/${doc.id}`}
+                    className="text-sm text-indigo-600 hover:text-indigo-800"
+                  >
+                    View detail →
+                  </Link>
+                ) : (
+                  <span className="text-xs text-slate-400">Detail available once processing finishes</span>
+                )}
+              </div>
+            </div>
+            <PipelineStepper doc={doc} />
+            {optimisticIds.has(doc.id) && (doc.status === 'pending' || doc.status === 'processing') && (
+              <p className="border-t border-slate-100 bg-slate-50 px-4 pb-2.5 pt-2 text-xs text-slate-400">
+                Status preview — live updates require{' '}
+                <code className="rounded bg-slate-100 px-0.5">GET /admin/documents</code> polling.
+              </p>
+            )}
+          </div>
+        ))}
       </div>
 
       {/* Pagination controls */}
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-sm text-slate-600">
+      <div className="mt-3 flex flex-col gap-3 text-sm text-slate-600 sm:flex-row sm:items-center sm:justify-between">
         <p>{total === 0 ? 'No documents' : `${rangeStart}-${rangeEnd} of ${total}`}</p>
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           <label htmlFor="documents-per-page" className="text-xs text-slate-500">
             Rows per page
           </label>
