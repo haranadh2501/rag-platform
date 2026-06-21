@@ -36,16 +36,29 @@ _TITLE_PREFIXES = sorted([
 ], key=len, reverse=True)
 
 
+def _flatten(text: str) -> str:
+    """Collapse all whitespace (incl. newlines) into single spaces.
+
+    The n8n webhook returns an empty 200 body when the query contains newline
+    characters. Stored assistant answers contain `\\n`, so replaying them into
+    the query re-introduces newlines — every char of the query must be flattened,
+    not just the delimiter between history turns.
+    """
+    return " ".join(text.split())
+
+
 def _format_query_with_history(history: list[dict], query: str) -> str:
-    """Compose history + current query into the plain-text string n8n expects."""
+    """Compose history + current query into a single-line string for n8n.
+
+    Both the history turns and the current query are flattened to a single line
+    (see `_flatten`) and joined with ' | ' as a delimiter.
+    """
+    query = _flatten(query)
     if not history:
-        return f"User Query: {query}"
-    lines = ["Context:"]
-    for msg in history:
-        lines.append(f"{msg['role']}: {msg['content']}")
-    lines.append("")
-    lines.append(f"User Query: {query}")
-    return "\n".join(lines)
+        return query
+    parts = [f"{msg['role']}: {_flatten(msg['content'])}" for msg in history]
+    context = " | ".join(parts)
+    return f"Context: {context} | User Query: {query}"
 
 
 def _derive_title(query: str) -> str:

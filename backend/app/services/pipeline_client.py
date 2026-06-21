@@ -3,13 +3,11 @@
 POSTs to `PIPELINE_URL` (the n8n production URL in prod, mock in dev) and
 returns the parsed response.
 
-Uses asyncio.to_thread + httpx.Client (sync) to avoid a Windows ProactorEventLoop
-bug where chunked+gzip responses return an empty body inside uvicorn's event loop.
+Uses httpx sync client in asyncio.to_thread — the async client returns empty
+bodies for some external endpoints when running inside uvicorn's event loop.
 """
 import asyncio
 import logging
-
-import httpx
 
 from app.core.config import settings
 
@@ -24,20 +22,13 @@ class PipelineError(Exception):
 
 
 def _sync_call(payload: dict) -> dict:
-    """Synchronous HTTP call using urllib — avoids httpx/event-loop issues."""
-    import json as jsonlib
-    import urllib.request
-    data = jsonlib.dumps(payload).encode("utf-8")
-    req = urllib.request.Request(
-        PIPELINE_URL,
-        data=data,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-    with urllib.request.urlopen(req, timeout=int(PIPELINE_TIMEOUT_SECONDS)) as resp:
-        raw = resp.read()
-        logger.info("Pipeline raw response: %r", raw[:300])
-        return jsonlib.loads(raw.decode("utf-8"))
+    """Synchronous HTTP POST via requests — runs in a thread pool."""
+    import requests
+    logger.info("Pipeline calling %s", PIPELINE_URL)
+    resp = requests.post(PIPELINE_URL, json=payload, timeout=PIPELINE_TIMEOUT_SECONDS)
+    logger.info("Pipeline response status=%s len=%s", resp.status_code, len(resp.content))
+    resp.raise_for_status()
+    return resp.json()
 
 
 async def call_pipeline(payload: dict) -> dict:
@@ -47,6 +38,6 @@ async def call_pipeline(payload: dict) -> dict:
     """
     try:
         return await asyncio.to_thread(_sync_call, payload)
-    except (httpx.HTTPError, ValueError, OSError) as exc:
+    except Exception as exc:
         logger.exception("Pipeline call to %s failed", PIPELINE_URL)
         raise PipelineError(str(exc)) from exc
