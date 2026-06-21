@@ -54,7 +54,7 @@
 
 ## Documents Page — Upload
 
-> **URL ingestion wired (demo mode) with accepted-state UX; file upload remains disabled.**
+> **URL ingestion wired with accepted-state UX; file upload also wired — see "File upload" below.**
 > Add by URL tab posts `{ document_id, tenant_id, source_type: "url", source_url, title }` to
 > `NEXT_PUBLIC_N8N_INGEST_WEBHOOK_URL` via `src/lib/n8nIngestionApi.ts`.
 > On submit: button shows spinner + "Submitting…" (disabled). On accepted response: "Request
@@ -66,7 +66,7 @@
 > sub-text (aria-live="assertive"); button returns to normal. Optimistic row is local/demo-only —
 > never persisted, does not survive page refresh, does NOT confirm successful ingestion. Actual
 > persistence depends on n8n writing to the backend DB. `GET /admin/documents` list API wiring is
-> implemented — see "Documents Page — List & Pagination" below. File upload disabled. No automated test runner.
+> implemented — see "Documents Page — List & Pagination" below. File upload is wired — see "File upload" criteria below. No automated test runner.
 
 **Add by URL — verifiable via `npm run dev` + live backend:**
 - [x] Invalid URL (e.g. `not-a-url`) → "Add source" button disabled; no network request *(verifiable via `npm run dev`)*
@@ -96,11 +96,37 @@
 - [x] No JWT or backend URL is hardcoded anywhere in `documentApi.ts` or `page.tsx` — token comes from `apiClient`'s in-memory store, base URL comes from `NEXT_PUBLIC_API_URL` *(verifiable by reading source)*
 - [x] After a successful submit, the page sets `page` to 1 and triggers a refetch of `GET /admin/documents?page=1&per_page=<perPage>` rather than relying only on the local optimistic row *(verifiable via `npm run dev` + live backend, browser DevTools Network tab)*
 
-**File upload — all criteria blocked (Phase 3):**
-- [ ] Upload a PDF ≤ 25 MB → row appears immediately with `pending` badge (no page refresh)
-- [ ] Upload a file > 25 MB → rejected client-side; no network request fires
-- [ ] Upload a `.exe` or other disallowed type → rejected client-side with error message
-- [ ] XHR progress bar advances during upload; does not jump straight to 100 %
+**File upload — wired via `POST /admin/documents/upload`:**
+
+> `uploadDocumentApi({ file, title?, onProgress? })` in `src/lib/documentApi.ts` builds a
+> `FormData` and POSTs via `XMLHttpRequest` (not `fetch`/`apiRequest`) so `xhr.upload.onprogress`
+> drives the progress bar. `Authorization: Bearer` is set manually from `getAuthToken()` — the
+> same in-memory token store `apiClient` uses; base URL comes from `NEXT_PUBLIC_API_URL`. No JWT
+> or backend URL is hardcoded. "Browse files" opens a hidden `<input type="file" accept=".pdf,.docx,.txt">`;
+> the dropzone also accepts drag-and-drop. On 202 success the page calls the same `onAccepted()`
+> used by Add by URL — inserting the optimistic `pending` row and triggering a refetch of
+> `GET /admin/documents?page=1&per_page=<perPage>`.
+
+- [x] "Browse files" opens the native file picker; dropping a file onto the dropzone also selects it *(verifiable via `npm run dev`)*
+- [x] Selecting a `.pdf`, `.docx`, or `.txt` file shows the file name in the dropzone and an optional Title field *(verifiable via `npm run dev`)*
+- [x] Selecting a disallowed type (e.g. `.exe`) → rejected client-side with "Unsupported file type. Upload PDF, DOCX, or TXT." inline hint; no network request fires *(verifiable via `npm run dev`)*
+- [x] Selecting a file > 25 MB → rejected client-side with "Upload limit exceeded. Please choose a smaller file or free up storage." inline hint; no network request fires *(verifiable via `npm run dev`)*
+- [x] Submit button disabled until a valid file is selected; disabled again while uploading *(verifiable via `npm run dev`)*
+- [ ] Clicking "Upload file" sends `POST /admin/documents/upload` as `multipart/form-data` with fields `file` and optional `title`, including `Authorization: Bearer <token>` *(requires live backend — verifiable via browser DevTools Network tab)*
+- [ ] XHR progress bar advances during upload from `xhr.upload.onprogress`; does not jump straight to 100% *(requires live backend with a large enough file/slow enough network to observe — verifiable via `npm run dev` + DevTools network throttling)*
+- [ ] Successful response (202 `DocumentOut`, `status: "pending"`) shows "Upload accepted" panel, clears the selected file, and the document appears via the `GET /admin/documents?page=1&per_page=<perPage>` refetch *(requires live backend)*
+- [ ] API failure shows "Could not upload file" panel with status-specific friendly message + `Technical detail:` in muted text; no row inserted; selection retained for retry *(requires live backend)*
+  - 400 → "Please check the selected file."
+  - 401 → "Your session expired. Please sign in again."
+  - 403 → "You do not have permission to upload documents."
+  - 413 → "Upload limit exceeded. Please choose a smaller file or free up storage."
+  - 415 → "Unsupported file type. Upload PDF, DOCX, or TXT."
+  - 422 → "The uploaded file is invalid."
+  - 429 → "Upload limit reached. Please try again later."
+  - 5xx → "The document service is having trouble. Please try again later."
+- [x] Network error / CORS block → "Could not reach the document service. Check backend availability or CORS." + technical detail *(verifiable via `npm run dev` with backend stopped)*
+- [x] No JWT or backend URL is hardcoded in `documentApi.ts` or `page.tsx` — token from `getAuthToken()`, base URL from `NEXT_PUBLIC_API_URL` *(verifiable by reading source)*
+- [x] The amber "File upload disabled" placeholder notice no longer renders *(verifiable by reading source / `npm run dev`)*
 
 ## Documents Page — List & Pagination
 
@@ -117,9 +143,10 @@
 > an optional 10/20/50 per-page `<select>`) driving the backend's paginated response; default
 > `page=1`, `perPage=20`; changing the per-page selector resets `page` to 1 and refetches. Status
 > filters apply to the currently fetched page only — backend `?status=` filtering remains a future
-> enhancement. 5 s polling/auto-refresh for in-progress rows remains pending. File upload remains
-> disabled. Document detail, delete, and retry remain pending. No automated test runner;
-> verification is typecheck + browser check against a live stack.
+> enhancement. 5 s polling/auto-refresh for in-progress rows remains pending. File upload is wired
+> (see "File upload" criteria above). Document detail is wired (see "Document Detail Page" below).
+> Delete and retry remain pending. No automated test runner; verification is typecheck + lint +
+> browser check against a live stack.
 
 - [x] Documents page sends `GET /admin/documents?page=1&per_page=20` on initial mount *(requires live backend — verifiable via browser DevTools Network tab)*
 - [x] Request includes `Authorization: Bearer <token>` header; token attached by `apiClient`, no hardcoded value *(verifiable via browser DevTools)*

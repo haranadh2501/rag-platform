@@ -76,9 +76,26 @@ Poll `GET /admin/documents` every 5 s for rows in `pending` or `processing` stat
 │      Max 25 MB · 20 uploads/hour                    │
 └─────────────────────────────────────────────────────┘
 ```
-- Client-side MIME + size validation before sending. Reject > 25 MB immediately.
+- Client-side extension validation (`.pdf`/`.docx`/`.txt` only) + size validation before sending. Reject > 25 MB immediately.
 - Use `XMLHttpRequest` (not `fetch`) to stream upload progress as a progress bar per file.
-- On submit: `POST /admin/documents/upload` (multipart). New row appears at table top with `pending` status.
+- On submit: `POST /admin/documents/upload` (multipart) through `apiClient`'s shared auth approach. New document appears via the same refetch used by Add by URL.
+
+> **Upload wiring (implemented)**: `uploadDocumentApi({ file, title?, onProgress? })` in
+> `src/lib/documentApi.ts` builds a `FormData` (`file` required, `title` optional) and POSTs to
+> `${NEXT_PUBLIC_API_URL}/admin/documents/upload` via `XMLHttpRequest` (not `apiRequest`/`fetch`,
+> so `xhr.upload.onprogress` is available for the progress bar). The `Authorization: Bearer`
+> header is set manually from `getAuthToken()` — same in-memory token store `apiClient` uses, no
+> hardcoded JWT or backend URL. "Browse files" triggers a hidden `<input type="file">`; the
+> dropzone also accepts drag-and-drop. Client-side validation rejects non-`.pdf/.docx/.txt`
+> extensions and files over 25 MB before any request fires, mirroring the backend's own
+> `MAX_UPLOAD_BYTES`/MIME checks. Title is optional (unlike Add by URL, where title is required).
+> On 202 `DocumentOut`: "Upload accepted" panel, selection cleared, and the page calls the same
+> `onAccepted()` callback Add by URL uses — inserting the optimistic `pending` row and triggering
+> a refetch of `GET /admin/documents?page=1&per_page=<perPage>`. On failure: "Could not upload
+> file" panel (`aria-live="assertive"`) with a status-specific message (400/401/403/413/415/422/
+> 429/5xx/network via `classifyFileUploadError()`) plus `Technical detail: <message>` in muted
+> text; no optimistic row inserted. The amber "File upload disabled" notice has been removed.
+> Polling, delete, retry, and live chunk preview remain unimplemented/out of scope for this phase.
 
 **Add by URL tab** — required URL field + required Title field → sends `POST /admin/documents/url` to backend through `apiClient` via `src/lib/documentApi.ts`. "Add source" disabled when URL is invalid, title is empty, or a request is in flight. Bearer token attached automatically by `apiClient` from the in-memory store; no hardcoded JWT or backend URL.
 
@@ -365,7 +382,7 @@ Calls `POST /admin/users/invite` (Phase 5, blocked). On success: new row inserte
 
 All requests send `Authorization: Bearer <token>`. 401 → logout + redirect to `/login`. 429 → toast: "Upload limit reached (20/hour). Try again later."
 
-> **Auth + user context + logout wired; URL ingestion wired (demo mode) with accepted-state UX; document list/detail/file-upload remain mock.**
+> **Auth + user context + logout wired; URL ingestion, document list/pagination, document detail, and file upload all wired to the backend.**
 > `POST /auth/login` wired in `src/app/login/page.tsx` via `src/lib/authApi.ts`.
 > Login calls `useAuth().login(access_token, user)` — `authContext` stores both `access_token` and
 > the full `UserOut` (`user_context` key) in `localStorage`. Admin header shows live data from that
@@ -397,11 +414,15 @@ All requests send `Authorization: Bearer <token>`. 401 → logout + redirect to 
 > page-of-total display, optional 10/20/50 per-page selector that resets to page 1) driving the
 > backend's paginated response. Status filters apply to the currently fetched page only — backend
 > `?status=` filtering is a future enhancement. 5 s polling/auto-refresh for in-progress rows
-> remains pending. File upload remains disabled. Document detail, delete, and retry remain pending.
-> No automated test runner; verified via typecheck + browser check against live backend.
+> remains pending. **File upload (implemented)**: `uploadDocumentApi()` in `src/lib/documentApi.ts`
+> POSTs multipart `FormData` to `/admin/documents/upload` via `XMLHttpRequest` (progress events),
+> Bearer token from `getAuthToken()` — see "Upload wiring" note above. Document detail
+> (`GET /admin/documents/{document_id}`) is also wired — see "Detail wiring" note further below.
+> Delete and retry remain pending.
+> No automated test runner; verified via typecheck + lint + browser check against live backend.
 > User data is localStorage-sourced only — `GET /auth/me` wiring pending.
 > `AuthGuard` protects `/admin/*` by localStorage token presence (no backend verification per request).
-> Document detail, file upload, delete, retry, and all user/tenant/settings pages remain
+> Delete, retry, and all user/tenant/settings live-data pages beyond what's noted above remain
 > mock/placeholder. `401 → logout + redirect` in `apiClient.ts` remains a TODO. `GET /auth/me`,
 > role guards, and Tenants 403 remain pending.
 > No automated test runner; verified via typecheck + browser check.
