@@ -71,24 +71,30 @@
 **Add by URL — verifiable via `npm run dev` + live backend:**
 - [x] Invalid URL (e.g. `not-a-url`) → "Add source" button disabled; no network request *(verifiable via `npm run dev`)*
 - [x] Partially typed URL → inline "Must be a valid http:// or https:// URL" error shown *(verifiable via `npm run dev`)*
-- [ ] Valid URL → clicking "Add source" shows spinner + "Submitting…" and sends `POST /admin/documents/url` to backend *(requires live backend + .env.local `NEXT_PUBLIC_API_URL`)*
-- [ ] Request includes `Authorization: Bearer <token>` header; no direct n8n request appears in browser Network tab *(requires live backend + browser DevTools Network)*
-- [ ] Backend accepts request → "Request accepted" panel appears; URL and title fields cleared; row inserted from returned `DocumentOut` fields *(requires live backend)*
-- [ ] Invalid/expired token → backend returns 401 → "Unauthorized" error shown in error panel; no row inserted *(requires live backend)*
-- [x] Accepted URL appears as a row at the top of the document table using backend-returned `id`, `title`, `source_type`, `status`, `created_at` *(verifiable via `npm run dev` with mock response)*
-- [x] If backend returns `pending`, row shows stage-0 pipeline stepper; after ~1500 ms row advances locally to Processing *(verifiable via `npm run dev`)*
-- [x] Optimistic row labelled "Status preview — live updates require GET /admin/documents polling." only while pending/processing *(verifiable via `npm run dev`)*
+- [x] Empty Title with a valid URL → "Add source" button stays disabled; "Required." hint shown; no network request *(verifiable via `npm run dev`)*
+- [x] Submit URL + title → clicking "Add source" sends `POST /admin/documents/url` with `{ url, title }` through `apiClient` (`ingestDocumentUrlApi()`); no hardcoded JWT or backend URL *(requires live backend + `.env.local` `NEXT_PUBLIC_API_URL` — verifiable via browser DevTools Network tab)*
+- [x] Form shows loading state while submitting — spinner + "Submitting…"; button disabled for the duration of the request *(verifiable via `npm run dev`)*
+- [x] Request includes `Authorization: Bearer <token>` header attached automatically by `apiClient`; no direct n8n request appears in browser Network tab *(requires live backend + browser DevTools Network)*
+- [x] Successful response (202 `DocumentOut`, `status: "pending"`) shows a `pending` document — never claimed as `completed` — and "Request accepted" panel appears; URL and title fields cleared *(requires live backend)*
+- [ ] Invalid/expired token → backend returns 401 → "Your session expired. Please sign in again." shown in error panel; no row inserted *(requires live backend)*
+- [x] Accepted URL appears as a row at the top of the document table using backend-returned `id`, `title`, `source_type`, `status`, `created_at`, while a refetch of `GET /admin/documents?page=1&per_page=<perPage>` runs in the background and replaces it with the persisted row once it resolves *(verifiable via `npm run dev` with mock response)*
+- [x] If backend returns `pending`, row shows stage-0 pipeline stepper; after ~1500 ms the (still-optimistic) row advances locally to Processing if the refetch has not yet resolved *(verifiable via `npm run dev`)*
+- [x] Optimistic row labelled "Status preview — live updates require GET /admin/documents polling." only while pending/processing, and only until the refetch dedupes it against the persisted row *(verifiable via `npm run dev`)*
 - [x] Row does not claim completion unless backend returned `completed` status *(verifiable via `npm run dev` — expected behaviour)*
 - [x] If current filter would hide the new row, filter switches to All after accepted submit *(verifiable via `npm run dev`)*
-- [ ] Backend returns 4xx/5xx → "Could not submit URL" panel shown with status-specific friendly message + `Technical detail: <message>` in muted text; no row inserted; button re-enables *(requires live backend)*
+- [ ] Friendly error panel/message appears on API failure with status-specific copy + `Technical detail: <message>` in muted text; no row inserted; button re-enables *(requires live backend)*
+  - 400 → "Please check the URL and title."
   - 401 → "Your session expired. Please sign in again."
   - 403 → "You do not have permission to add documents."
-  - 404 → "The URL ingestion endpoint is not available yet. Please try again after the backend URL ingestion API is deployed." (no internal module names exposed to users)
+  - 404 → "The Add by URL endpoint is not available yet."
+  - 409 → "This document may already exist."
+  - 422 → "The submitted URL or title is invalid."
   - 429 → "Too many requests. Please try again in a minute."
   - 5xx → "The document service is having trouble. Please try again later."
 - [x] Network error / CORS block / "Failed to fetch" → "Could not reach the document service. Check backend availability or CORS." + technical detail *(verifiable via `npm run dev` with backend stopped or CORS misconfigured)*
 - [x] No direct n8n request appears in browser Network tab — `documents/page.tsx` does not import `n8nIngestionApi` *(verifiable by reading source)*
-- [x] Document table does NOT automatically refetch immediately after an Add-by-URL submit (no polling trigger yet) — the optimistic row stays until the next `GET /admin/documents` fetch (page change or page reload) returns a persisted row with the same `id`, at which point the optimistic copy is dropped in favor of the real row; the optimistic row itself does not survive a page refresh *(verifiable — expected behaviour)*
+- [x] No JWT or backend URL is hardcoded anywhere in `documentApi.ts` or `page.tsx` — token comes from `apiClient`'s in-memory store, base URL comes from `NEXT_PUBLIC_API_URL` *(verifiable by reading source)*
+- [x] After a successful submit, the page sets `page` to 1 and triggers a refetch of `GET /admin/documents?page=1&per_page=<perPage>` rather than relying only on the local optimistic row *(verifiable via `npm run dev` + live backend, browser DevTools Network tab)*
 
 **File upload — all criteria blocked (Phase 3):**
 - [ ] Upload a PDF ≤ 25 MB → row appears immediately with `pending` badge (no page refresh)

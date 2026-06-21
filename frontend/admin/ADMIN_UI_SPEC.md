@@ -80,41 +80,38 @@ Poll `GET /admin/documents` every 5 s for rows in `pending` or `processing` stat
 - Use `XMLHttpRequest` (not `fetch`) to stream upload progress as a progress bar per file.
 - On submit: `POST /admin/documents/upload` (multipart). New row appears at table top with `pending` status.
 
-**Add by URL tab** — URL field + optional Title → sends `POST /admin/documents/url` to backend via `src/lib/documentApi.ts`. "Add source" disabled when URL is invalid or request is in flight. Bearer token attached automatically by `apiClient` from the in-memory store.
+**Add by URL tab** — required URL field + required Title field → sends `POST /admin/documents/url` to backend through `apiClient` via `src/lib/documentApi.ts`. "Add source" disabled when URL is invalid, title is empty, or a request is in flight. Bearer token attached automatically by `apiClient` from the in-memory store; no hardcoded JWT or backend URL.
 
-> **Backend wiring** (`src/lib/documentApi.ts → apiRequest<DocumentOut>()`):
-> Request body: `{ url: string, title?: string }` (matches `UrlIngestRequest` in openapi.yaml).
-> Backend validates the JWT, enforces tenant isolation, and triggers the n8n ingestion pipeline
-> server-side. No direct browser → n8n call; no webhook URL in the browser bundle.
-> Response: 202 `DocumentOut` — `id`, `title`, `source_type`, `source_url`, `status`,
-> `chunk_count`, `error_message`, `created_at` all come from the backend.
+> **Backend wiring** (`src/lib/documentApi.ts → ingestDocumentUrlApi() → apiRequest<DocumentOut>()`):
+> Request body: `{ url: string, title: string }` (UI now requires both fields; `UrlIngestRequest`
+> in openapi.yaml marks `title` optional at the schema level — frontend applies a stricter UX
+> requirement, not a contract change). Backend validates the JWT, enforces tenant isolation, and
+> triggers the n8n ingestion pipeline server-side. No direct browser → n8n call; no webhook URL in
+> the browser bundle. Response: 202 `DocumentOut` — `id`, `tenant_id`, `title`, `source_type`,
+> `source_url`, `status` (`"pending"`), `chunk_count`, `error_message`, `created_at` all come from
+> the backend.
 >
-> **Accepted-state UX** (implemented): while the request is in flight, "Add source" button
-> shows a spinner + "Submitting…" (disabled). On 202 response: "Request accepted" inline panel
+> **Accepted-state UX** (implemented): while the request is in flight, "Add source" button shows
+> a spinner + "Submitting…" (disabled). On 202 response: "Request accepted" inline panel
 > (`aria-live="polite"`) — "We have started ingesting this URL. It may take a few minutes before
-> it appears as searchable knowledge." URL and title fields cleared. The returned `DocumentOut`
-> is prepended to the document table as an optimistic row. Row starts with the backend-returned
-> status; if that is `pending`, a local `setTimeout` (1500 ms) advances it to `processing` for
-> demo feedback — this is NOT correlated with actual n8n pipeline progress. The existing
-> `pipelineStateFromDocument` helper drives the stepper automatically: pending shows stage 0
-> (uploaded) filled; processing shows the parsed_ocr stage (index 2) spinning. Row shows
-> "Status preview — live updates require GET /admin/documents polling." only while pending or
-> processing. If the current filter would hide the new row, filter auto-switches to All on
-> submit. On failure: "Could not submit URL" panel (`aria-live="assertive"`); no optimistic row
-> inserted; button re-enables. Friendly message is status-specific via `classifyUrlError()` in
-> `page.tsx`: 401 → "session expired"; 403 → "no permission"; 404 → "URL ingestion endpoint
-> not available yet — please try again after the backend URL ingestion API is deployed" (no
-> internal module names exposed to users);
-> 429 → "too many requests"; 5xx → "service trouble"; network/CORS/no-response (`TypeError`) →
-> "Could not reach the document service. Check backend availability or CORS." All cases include
-> `Technical detail: <original message>` in muted sub-text. Direct n8n browser call is not
-> part of the UI path; backend/CORS availability can block URL ingestion.
+> it appears as searchable knowledge." URL and title fields cleared. The returned `DocumentOut` is
+> prepended to the table as an optimistic row (status always `pending` per the contract — never
+> claimed as `completed`) while the page triggers a real refetch of `GET /admin/documents?page=1&per_page=<perPage>`
+> (preferred over relying solely on the optimistic row, since the list API is already wired); once
+> that refetch returns a persisted row with the same `id`, the optimistic copy is dropped. If the
+> current filter would hide the new row, filter auto-switches to All on submit. On failure: "Could
+> not submit URL" panel (`aria-live="assertive"`); no optimistic row inserted; button re-enables.
+> Friendly message is status-specific via `classifyUrlError()` in `page.tsx`: 400 → "check the URL
+> and title"; 401 → "session expired"; 403 → "no permission"; 404 → "Add by URL endpoint not
+> available yet"; 409 → "document may already exist"; 422 → "URL or title invalid"; 429 → "too many
+> requests"; 5xx → "service trouble"; network/CORS/no-response (`TypeError`) → "Could not reach the
+> document service. Check backend availability or CORS." All cases include
+> `Technical detail: <original message>` in muted sub-text. Direct n8n browser call is not part of
+> the UI path; backend/CORS availability can block URL ingestion.
 >
 > **Optimistic row does not survive page refresh.** Row never auto-completes; completed status
-> requires real backend data from `GET /admin/documents`. `GET /admin/documents` list API wiring is
-> implemented — see "List wiring" note under Document Table below; once the list refetches, an
-> optimistic row with a matching `id` is replaced by the persisted row. `n8nIngestionApi.ts` is
-> kept for reference but is no longer imported by `documents/page.tsx`.
+> requires real backend data from `GET /admin/documents`. `n8nIngestionApi.ts` is kept for
+> reference but is no longer imported by `documents/page.tsx`.
 
 ### Storage Quota Bar
 ```

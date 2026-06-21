@@ -187,9 +187,12 @@ interface UrlSubmitError {
 function classifyUrlError(err: unknown): UrlSubmitError {
   const technical = `Technical detail: ${err instanceof Error ? err.message : String(err)}`;
   if (err instanceof ApiError) {
+    if (err.status === 400) return { message: 'Please check the URL and title.', detail: technical };
     if (err.status === 401) return { message: 'Your session expired. Please sign in again.', detail: technical };
     if (err.status === 403) return { message: 'You do not have permission to add documents.', detail: technical };
-    if (err.status === 404) return { message: 'The URL ingestion endpoint is not available yet. Please try again after the backend URL ingestion API is deployed.', detail: technical };
+    if (err.status === 404) return { message: 'The Add by URL endpoint is not available yet.', detail: technical };
+    if (err.status === 409) return { message: 'This document may already exist.', detail: technical };
+    if (err.status === 422) return { message: 'The submitted URL or title is invalid.', detail: technical };
     if (err.status === 429) return { message: 'Too many requests. Please try again in a minute.', detail: technical };
     if (err.status >= 500) return { message: 'The document service is having trouble. Please try again later.', detail: technical };
     return { message: 'The document service did not respond. Please try again in a moment.', detail: technical };
@@ -234,7 +237,8 @@ function UploadSourcePanel({ onAccepted }: UploadSourcePanelProps) {
   const [urlError, setUrlError] = useState<UrlSubmitError | null>(null);
 
   const urlValid = isValidUrl(urlInput);
-  const canSubmitUrl = urlValid && !urlLoading;
+  const titleValid = titleInput.trim().length > 0;
+  const canSubmitUrl = urlValid && titleValid && !urlLoading;
 
   async function handleUrlSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -247,7 +251,7 @@ function UploadSourcePanel({ onAccepted }: UploadSourcePanelProps) {
     try {
       const doc = await ingestDocumentUrlApi({
         url: trimmedUrl,
-        title: trimmedTitle || undefined,
+        title: trimmedTitle,
       });
       setUrlInput('');
       setTitleInput('');
@@ -338,7 +342,7 @@ function UploadSourcePanel({ onAccepted }: UploadSourcePanelProps) {
                 htmlFor="url-title-input"
                 className="mb-1 block text-xs font-medium text-slate-700"
               >
-                Title <span className="font-normal text-slate-400">(optional)</span>
+                Title <span className="text-red-500" aria-hidden="true">*</span>
               </label>
               <input
                 id="url-title-input"
@@ -349,9 +353,9 @@ function UploadSourcePanel({ onAccepted }: UploadSourcePanelProps) {
                 disabled={urlLoading}
                 className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-60"
               />
-              <p className="mt-1 text-xs text-slate-400">
-                Defaults to the URL hostname if left blank.
-              </p>
+              {titleInput.length === 0 && (
+                <p className="mt-1 text-xs text-slate-400">Required.</p>
+              )}
             </div>
 
             {urlError && (
@@ -410,6 +414,9 @@ export default function DocumentsPage() {
   const [perPage, setPerPage] = useState(20);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<ListFetchError | null>(null);
+  // Bumped after a successful "Add by URL" submit to force a refetch of page 1
+  // even when `page` is already 1 (and therefore wouldn't otherwise change).
+  const [refetchToken, setRefetchToken] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -431,7 +438,7 @@ export default function DocumentsPage() {
     return () => {
       cancelled = true;
     };
-  }, [page, perPage]);
+  }, [page, perPage, refetchToken]);
 
   // Optimistic rows from "Add by URL" disappear once GET /admin/documents
   // returns the same id as a persisted row, avoiding a duplicate entry.
@@ -454,8 +461,14 @@ export default function DocumentsPage() {
     if (activeFilter !== 'all' && activeFilter !== doc.status) {
       setActiveFilter('all');
     }
+    // Prefer a real refetch of page 1 (where a newly created document appears)
+    // over the local optimistic row now that GET /admin/documents is wired.
+    // The optimistic row above covers the brief gap until this refetch resolves
+    // and is then deduped once the persisted row with the same id is returned.
+    setPage(1);
+    setRefetchToken((t) => t + 1);
     // If backend returned pending, advance locally to processing after 1500 ms for
-    // demo feedback. Real status requires GET /admin/documents polling (a later phase).
+    // demo feedback in case the refetch above is still in flight.
     if (doc.status === 'pending') {
       setTimeout(() => {
         setOptimisticDocs((prev) =>
