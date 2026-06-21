@@ -70,8 +70,8 @@
 
 ## Phase 4 — Document Detail Page
 - [x] `src/app/admin/documents/[id]/page.tsx` — placeholder shell: back link, amber dev notice, mock title / type / status / chunks / uploaded / source, failed-state red alert, disabled Delete button (mock; no backend, no ConfirmDialog)
-- [ ] `src/app/admin/documents/[id]/page.tsx` — wire to `GET /admin/documents/{id}`; replace mock with real fetched document
-- [ ] `status === 'failed'`: red alert box with `error_message` above delete button (live data)
+- [x] `src/app/admin/documents/[id]/page.tsx` — wire to `GET /admin/documents/{id}`; replaced mock with real fetched document — `getDocumentApi(documentId)` added to `src/lib/documentApi.ts` (`apiRequest<DocumentOut>('GET', '/admin/documents/{document_id}')`); Bearer token attached automatically by `apiClient`, no hardcoded JWT/URL; page fetches on mount/route param via `useEffect`; pulsing skeleton while loading; inline red error panel with friendly message (`classifyDetailError()`: 400/401/403/404/429/5xx/network) + `Technical detail:` on failure; no mock fallback. Renders `title`, `status` (`StatusBadge`), `source_type`, `source_url` (link only when non-null, `—` when null), `chunk_count` (`—` unless `completed`), `error_message`, `created_at`, `id`, `tenant_id`. `pending`/`processing` show a blue in-progress notice. Existing "Detail" link on the list page already targets `/admin/documents/{doc.id}`, matching this `[id]` route — no route change needed
+- [x] `status === 'failed'`: red alert box with `error_message` above delete button (live data)
 - [ ] Delete → `ConfirmDialog` → `DELETE /admin/documents/{id}` → redirect to `/admin/documents` + success toast
 
 ## Phase 5 — Users Page

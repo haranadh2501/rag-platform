@@ -199,9 +199,25 @@ uploaded → validated → parsed/OCR → chunked → embedded → stored
 └──────────────────────────────────────────────────┘
 ```
 
-- Fetched via `GET /admin/documents/{document_id}`.
-- Delete button opens `ConfirmDialog`: "This will remove all N chunks from the knowledge base." On confirm: `DELETE /admin/documents/{document_id}` → redirect to `/admin/documents` with success toast.
+- Fetched via `GET /admin/documents/{document_id}` (implemented — see "Detail wiring" note below).
+- Delete button opens `ConfirmDialog`: "This will remove all N chunks from the knowledge base." On confirm: `DELETE /admin/documents/{document_id}` → redirect to `/admin/documents` with success toast. *(Remains pending — button stays disabled.)*
 - If `status === 'failed'`: show `error_message` in a red alert box above the delete button.
+
+> **Detail wiring (implemented)**: `src/app/admin/documents/[id]/page.tsx` calls
+> `getDocumentApi(params.id)` (`src/lib/documentApi.ts` →
+> `apiRequest<DocumentOut>('GET', '/admin/documents/{document_id}')`) through `apiClient` on
+> mount/route param load — Bearer token attached automatically, no hardcoded JWT or backend URL.
+> The "Detail" link on the document list (`documents/page.tsx`) already pointed at
+> `/admin/documents/{doc.id}`, matching the existing `[id]` route — no route change was needed.
+> While fetching, a pulsing skeleton replaces the page body. On failure, an inline red panel shows
+> a status-specific friendly message (400/401/403/404/429/5xx/network via `classifyDetailError()`)
+> plus `Technical detail: <message>` in muted text — no mock fallback. On success, all `DocumentOut`
+> fields render: `title`, `status` (via `StatusBadge`), `source_type`, `source_url` (rendered as a
+> link only when non-null; `—` when `null` — never a clickable link for a null value), `chunk_count`
+> (`—` unless `completed`), `error_message` (red alert when `failed`), `created_at`, `id`, and
+> `tenant_id` (shown for admin debugging). `pending`/`processing` show a blue "still in progress"
+> notice; `failed` shows the red error alert; `completed` shows the real `chunk_count`. Delete,
+> retry, live chunk preview, and polling remain pending/unimplemented.
 
 ---
 

@@ -165,10 +165,10 @@
 > **API filter (future enhancement)**: re-fetches `GET /admin/documents?status=` on each selection.
 > Update the filter criteria below to remove this note once backend `?status=` filtering is wired.
 >
-> **Actions column — current state**: "Detail" link is navigable (routes to the placeholder
-> detail page) but the detail page itself always shows hardcoded mock data regardless of which row
-> was clicked — detail wiring is a separate pending phase (see "Document Detail Page" below).
-> "Delete" and "Retry" are not yet implemented; completed/failed rows show only `Detail`, while pending/processing rows show `—`.
+> **Actions column — current state**: "Detail" link is navigable and opens the now-wired detail
+> page at `/admin/documents/{document_id}`, which fetches the real document by id (see "Document
+> Detail Page" below). "Delete" and "Retry" are not yet implemented; completed/failed rows show
+> only `Detail`, while pending/processing rows show `—`.
 
 - [x] Filter by `failed` (client-side over fetched page) → table shows only failed documents; other statuses hidden *(requires live backend)*
 - [ ] Filter by `failed` (backend `?status=`) → `GET /admin/documents?status=failed` fires; only failed rows returned from backend *(future enhancement — not yet wired)*
@@ -179,16 +179,30 @@
 
 ## Document Detail Page
 
-> **Placeholder state**: The "Detail" link in the table now navigates to `/admin/documents/[id]`,
-> but the detail page always renders hardcoded mock data (a `failed` document) regardless of which
-> row was clicked — `params.id` from the URL is displayed in the amber notice only.
-> The red failed-state alert is always visible — this does **not** count as passing that criterion.
-> The Delete button is disabled. All criteria below require Phase 4 backend wiring
-> (`GET /admin/documents/{id}`, `DELETE /admin/documents/{id}`) and `ConfirmDialog` implementation.
+> **`GET /admin/documents/{document_id}` wired.** `getDocumentApi(documentId)` in
+> `src/lib/documentApi.ts` calls `apiRequest<DocumentOut>('GET', '/admin/documents/{document_id}')`
+> through `apiClient` — Bearer token attached automatically; no hardcoded JWT or backend URL.
+> `src/app/admin/documents/[id]/page.tsx` fetches on mount/route param via `useEffect`; shows a
+> pulsing skeleton while loading; on failure shows an inline red panel with a status-specific
+> friendly message (`classifyDetailError()`: 400/401/403/404/429/5xx/network) plus
+> `Technical detail: <message>` in muted text — no mock fallback. On success renders `title`,
+> `status` (via `StatusBadge`), `source_type`, `source_url` (a real link only when non-null; `—`
+> when `null` — never a clickable link for a null value), `chunk_count` (`—` unless `completed`),
+> `error_message` (red alert when `failed`), `created_at`, `id`, and `tenant_id` (shown for admin
+> debugging). `pending`/`processing` show a blue "still in progress" notice instead of claiming
+> completion. The Delete button remains disabled — `ConfirmDialog` and `DELETE` wiring remain
+> pending. No automated test runner; verification is typecheck + browser check against a live stack.
 
-- [ ] Title, type, status badge, chunk count, upload timestamp, and source path all render (live data from `GET /admin/documents/{id}`)
-- [ ] `failed` status: red alert box with `error_message` is visible above the delete button (live data)
-- [ ] Delete → confirmation dialog → `DELETE /admin/documents/{id}` fires → redirect to `/admin/documents` → success toast
+- [x] Clicking "Detail" on the list page opens `/admin/documents/{document_id}` *(verifiable via `npm run dev`)*
+- [x] Detail page sends `GET /admin/documents/{document_id}` on mount/route param load *(requires live backend — verifiable via browser DevTools Network tab)*
+- [x] Request includes `Authorization: Bearer <token>` header attached automatically by `apiClient`; no hardcoded JWT or backend URL *(verifiable via browser DevTools / by reading source)*
+- [x] Title, type, status badge, chunk count, upload timestamp, source, id, and tenant id all render with live data from `GET /admin/documents/{document_id}` *(requires live backend)*
+- [x] `pending` status shows the blue "ingestion still in progress" notice *(requires live backend)*
+- [x] `failed` status shows the red alert box with `error_message` above the delete button *(requires live backend)*
+- [x] `completed` status shows the real `chunk_count` from the backend *(requires live backend)*
+- [x] `source_url: null` renders as `—`, never as a clickable link; a non-null `source_url` renders as a real link *(requires live backend)*
+- [x] API failure (e.g. 404 for an unknown id) shows the inline red "Could not load document" panel with friendly message + `Technical detail:` in muted text *(verifiable via `npm run dev` with backend stopped, or by visiting an unknown id with a live backend)*
+- [ ] Delete → confirmation dialog → `DELETE /admin/documents/{id}` fires → redirect to `/admin/documents` → success toast *(not yet implemented)*
 
 ## Users Page
 

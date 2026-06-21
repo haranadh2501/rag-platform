@@ -26,3 +26,7 @@ export async function listDocumentsApi({
     `/admin/documents?page=${page}&per_page=${perPage}`,
   );
 }
+
+export async function getDocumentApi(documentId: string): Promise<DocumentOut> {
+  return apiRequest<DocumentOut>('GET', `/admin/documents/${documentId}`);
+}
