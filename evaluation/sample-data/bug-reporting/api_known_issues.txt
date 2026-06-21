@@ -1,0 +1,13 @@
+API Known Issues and Troubleshooting
+
+Section: BUG-API-201 Rate limiting after token rotation
+BUG-API-201 affects API clients that rotate an access token while keeping HTTP/2 connections open. Requests may receive HTTP 429 for up to five minutes because the old and new token buckets are temporarily combined. Closing the connection pool after rotation is the recommended workaround. The server-side fix was deployed in API release 2026.06.2.
+
+Section: BUG-API-202 Duplicate webhook delivery
+BUG-API-202 can deliver the same webhook event twice when the first acknowledgement arrives after the ten-second timeout. Consumers must treat the event_id field as an idempotency key and return a 2xx response within ten seconds. Duplicate delivery does not indicate duplicate data was stored by the platform.
+
+Section: Webhook signature troubleshooting
+Webhook signatures use HMAC-SHA256 over the exact raw request body. Signature validation fails if middleware parses and reserializes JSON before verification, if the wrong tenant secret is used, or if the timestamp differs from server time by more than five minutes.
+
+Section: API evidence collection
+API bug reports should include the request method, redacted URL, response status, request_id response header, timestamp with timezone, SDK name and version, and a minimal reproducible request. Authorization headers and complete access tokens must be removed.

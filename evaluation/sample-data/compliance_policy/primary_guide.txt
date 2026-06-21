@@ -1,0 +1,10 @@
+Data Governance Policy
+
+Section: Classification
+Data is classified Public, Internal, Confidential, or Restricted. Customer identifiers, authentication data, and payment records are Restricted.
+
+Section: Retention
+Support tickets are retained for three years. Security audit logs are retained for seven years. Expired records are deleted through the approved disposal workflow.
+
+Section: Access review
+Owners review access to Restricted data quarterly. Removed users must lose access within four hours of the approved removal request.
