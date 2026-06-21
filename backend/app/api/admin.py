@@ -136,7 +136,7 @@ async def upload_document(
         tenant_id=current_user.tenant_id,
         uploaded_by=current_user.id,
         title=title or validated.filename,
-        source_type=_MIME_TO_SOURCE_TYPE.get(validated.mime_type, "pdf"),
+        source_type=settings.DEFAULT_SOURCE_TYPE,
         file_path=location,
         source_url=r2_url,
         status="pending",
