@@ -8,8 +8,12 @@ Locked model stack (see ARCHITECTURE.md):
     Hard fallback: DeepSeek V4 Pro
     Insurance    : OpenAI ($5 prepaid + $10 hard cap)
 """
+from pathlib import Path
 from typing import List
 from pydantic_settings import BaseSettings
+
+# Root .env is one level above the backend/ directory
+_ENV_FILE = Path(__file__).resolve().parent.parent.parent.parent / ".env"
 
 
 class Settings(BaseSettings):
@@ -108,12 +112,16 @@ class Settings(BaseSettings):
     SEED_TENANT_NAME: str = "IISc Demo"
     SEED_TENANT_SLUG: str = "iisc-demo"
 
+    # ── Pipeline (M4) ────────────────────────────────────────────────
+    PIPELINE_URL: str = "http://localhost:8000/mock/pipeline"
+    PIPELINE_TIMEOUT_SECONDS: float = 120.0
+
     # ── MCP server ───────────────────────────────────────────────────
     MCP_ENABLED: bool = True
     MCP_API_KEY: str = "change-me-mcp-shared-secret"
 
     class Config:
-        env_file = ".env"
+        env_file = str(_ENV_FILE)
         case_sensitive = True
         extra = "ignore"   # tolerate extra env vars without crashing
 

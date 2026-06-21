@@ -1,24 +1,43 @@
 """HTTP client for the RAG pipeline (M4).
 
-POSTs to `PIPELINE_URL` (the mock endpoint in dev, the real n8n URL in prod) and
-returns the parsed response. Config is read via `os.getenv` so this module stays
-self-contained and does not require changes to `app.core.config` (M2-owned).
+POSTs to `PIPELINE_URL` (the n8n production URL in prod, mock in dev) and
+returns the parsed response.
+
+Uses asyncio.to_thread + httpx.Client (sync) to avoid a Windows ProactorEventLoop
+bug where chunked+gzip responses return an empty body inside uvicorn's event loop.
 """
+import asyncio
 import logging
-import os
 
 import httpx
 
+from app.core.config import settings
+
 logger = logging.getLogger(__name__)
 
-PIPELINE_URL = os.getenv(
-    "PIPELINE_URL", "http://localhost:8000/webhooks/mock/pipeline"
-)
-PIPELINE_TIMEOUT_SECONDS = float(os.getenv("PIPELINE_TIMEOUT_SECONDS", "120"))
+PIPELINE_URL = settings.PIPELINE_URL
+PIPELINE_TIMEOUT_SECONDS = settings.PIPELINE_TIMEOUT_SECONDS
 
 
 class PipelineError(Exception):
     """Raised when the pipeline call fails, times out, or returns non-2xx."""
+
+
+def _sync_call(payload: dict) -> dict:
+    """Synchronous HTTP call using urllib — avoids httpx/event-loop issues."""
+    import json as jsonlib
+    import urllib.request
+    data = jsonlib.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(
+        PIPELINE_URL,
+        data=data,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=int(PIPELINE_TIMEOUT_SECONDS)) as resp:
+        raw = resp.read()
+        logger.info("Pipeline raw response: %r", raw[:300])
+        return jsonlib.loads(raw.decode("utf-8"))
 
 
 async def call_pipeline(payload: dict) -> dict:
@@ -27,10 +46,7 @@ async def call_pipeline(payload: dict) -> dict:
     Raises `PipelineError` on timeout, transport error, non-2xx, or bad JSON.
     """
     try:
-        async with httpx.AsyncClient(timeout=PIPELINE_TIMEOUT_SECONDS) as client:
-            resp = await client.post(PIPELINE_URL, json=payload)
-            resp.raise_for_status()
-            return resp.json()
-    except (httpx.HTTPError, ValueError) as exc:
+        return await asyncio.to_thread(_sync_call, payload)
+    except (httpx.HTTPError, ValueError, OSError) as exc:
         logger.exception("Pipeline call to %s failed", PIPELINE_URL)
         raise PipelineError(str(exc)) from exc
