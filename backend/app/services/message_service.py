@@ -36,6 +36,31 @@ _TITLE_PREFIXES = sorted([
 ], key=len, reverse=True)
 
 
+def _flatten(text: str) -> str:
+    """Collapse all whitespace (incl. newlines) into single spaces.
+
+    The n8n webhook returns an empty 200 body when the query contains newline
+    characters. Stored assistant answers contain `\\n`, so replaying them into
+    the query re-introduces newlines — every char of the query must be flattened,
+    not just the delimiter between history turns.
+    """
+    return " ".join(text.split())
+
+
+def _format_query_with_history(history: list[dict], query: str) -> str:
+    """Compose history + current query into a single-line string for n8n.
+
+    Both the history turns and the current query are flattened to a single line
+    (see `_flatten`) and joined with ' | ' as a delimiter.
+    """
+    query = _flatten(query)
+    if not history:
+        return query
+    parts = [f"{msg['role']}: {_flatten(msg['content'])}" for msg in history]
+    context = " | ".join(parts)
+    return f"Context: {context} | User Query: {query}"
+
+
 def _derive_title(query: str) -> str:
     """Deterministic short title from a user's first query — no LLM call.
 
@@ -85,15 +110,13 @@ async def process_message(ctx: MessageContext, db: AsyncSession) -> dict:
 
     history = await _load_history(ctx, db)                 # Step 5
 
-    response = await pipeline_client.call_pipeline({       # Step 6 (raises PipelineError)
-        "request_id": ctx.request_id,
-        "tenant_id": str(ctx.tenant_id),
-        "conversation_id": str(ctx.conversation_id),
-        "current_message": ctx.query,
-        "history": history,
-    })
+    formatted_query = _format_query_with_history(history, ctx.query)
+    response = await pipeline_client.call_pipeline(        # Step 6 (raises PipelineError)
+        {"query": formatted_query}
+    )
     answer = response.get("answer", "")
-    sources = response.get("sources", []) or []
+    sources: list = []           # n8n does not return sources
+    follow_up_questions: list = []  # n8n does not return follow_up_questions
 
     if ctx.source == "slack":                              # Step 7
         await slack.post_reply(ctx.slack_channel, ctx.slack_thread_ts, answer, sources)
@@ -104,9 +127,13 @@ async def process_message(ctx: MessageContext, db: AsyncSession) -> dict:
 
     await _save_messages(ctx, db, ctx.query, answer, sources)  # Step 8
 
-    response["conversation_id"] = str(ctx.conversation_id)
-    response.setdefault("request_id", ctx.request_id)
-    return response
+    return {
+        "request_id": ctx.request_id,
+        "conversation_id": str(ctx.conversation_id),
+        "answer": answer,
+        "sources": sources,
+        "follow_up_questions": follow_up_questions,
+    }
 
 
 async def _resolve_identity(ctx: MessageContext, db: AsyncSession) -> None:

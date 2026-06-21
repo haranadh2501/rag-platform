@@ -48,18 +48,18 @@ export default function ConversationList({ activeConversationId }: ConversationL
       <div className="px-4 py-3">
         <Link
           href="/chat/new"
-          className="block rounded-md bg-[var(--accent-600)] px-3 py-2 text-center text-xs font-medium text-white hover:bg-[var(--accent-700)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-600)] focus-visible:ring-offset-2"
+          className="block rounded-md bg-indigo-600 px-3 py-2 text-center text-xs font-medium text-white hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600 focus-visible:ring-offset-2"
         >
           New Chat
         </Link>
       </div>
 
-      {isLoading && <p className="px-4 text-xs text-slate-400">Loading conversations…</p>}
+      {isLoading && <p className="px-4 text-xs text-slate-400 dark:text-slate-500">Loading conversations…</p>}
       {!isLoading && hasError && (
-        <p className="px-4 text-xs text-slate-400">We couldn&apos;t load your conversations. Please try again shortly.</p>
+        <p className="px-4 text-xs text-slate-400 dark:text-slate-500">We couldn&apos;t load your conversations. Please try again shortly.</p>
       )}
       {!isLoading && !hasError && conversations.length === 0 && (
-        <p className="px-4 text-xs text-slate-400">Your conversations will appear here.</p>
+        <p className="px-4 text-xs text-slate-400 dark:text-slate-500">Your conversations will appear here.</p>
       )}
 
       {!isLoading && !hasError && conversations.length > 0 && (
@@ -71,17 +71,19 @@ export default function ConversationList({ activeConversationId }: ConversationL
                 <Link
                   href={`/chat/${conversation.id}`}
                   className={`flex-1 truncate rounded-md px-2 py-2 text-xs ${
-                    isActive ? 'bg-[var(--accent-50)] text-[var(--accent-700)]' : 'text-slate-600 hover:bg-slate-50'
+                    isActive
+                      ? 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-100'
+                      : 'text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800/60'
                   }`}
                 >
                   <span className="block truncate font-medium">{conversation.title ?? 'Untitled conversation'}</span>
-                  <span className="block text-[10px] text-slate-400">{formatDate(conversation.created_at)}</span>
+                  <span className="block text-[10px] text-slate-400 dark:text-slate-500">{formatDate(conversation.created_at)}</span>
                 </Link>
                 <button
                   type="button"
                   onClick={() => handleDelete(conversation.id)}
                   aria-label="Delete conversation"
-                  className="shrink-0 rounded-md px-1.5 py-1 text-[10px] text-slate-400 opacity-0 hover:bg-red-50 hover:text-red-600 group-hover:opacity-100"
+                  className="shrink-0 rounded-md px-1.5 py-1 text-[10px] text-slate-400 opacity-0 hover:bg-red-50 hover:text-red-600 group-hover:opacity-100 dark:text-slate-500 dark:hover:bg-red-950/40 dark:hover:text-red-400"
                 >
                   ✕
                 </button>

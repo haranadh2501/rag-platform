@@ -52,11 +52,13 @@ async def chat_query(
         return await message_service.process_message(ctx, db)
     except message_service.ConversationOwnershipError:
         raise HTTPException(status_code=403, detail="conversation_id belongs to another user")
-    except pipeline_client.PipelineError:
+    except pipeline_client.PipelineError as exc:
+        logger.error("PipelineError detail: %s", exc)
         return JSONResponse(status_code=502, content={
             "answer": message_service.FALLBACK_MESSAGE,
             "sources": [],
             "follow_up_questions": [],
+            "debug_error": str(exc),
         })
 
 
