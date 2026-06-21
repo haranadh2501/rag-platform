@@ -63,6 +63,7 @@ rag-platform/
 | `docs/`, `evaluation/sample-data/` | M11 |
 | `backend/app/bots/whatsapp.py`, `backend/app/bots/tenant_map.py` | M12 |
 | `backend/app/api/onboarding.py`, `frontend/src/app/onboarding/` | M13 |
+| `backend/app/bots/teams.py`, `backend/app/bots/teams_map.py`, `teams-app/` | M14 |
 
 ## Running Locally
 ```bash
