@@ -34,7 +34,8 @@ Next.js admin dashboard: login, document upload, document management, user manag
 | 5 | User management page: `GET /admin/users` + `POST /auth/register` wired; deactivate pending | ☑ |
 | 5 | Chat nav item in Admin sidebar → `/chat/new`; active on `/chat/*`; login redirects `user` role to `/chat/new` | ☑ |
 | 5 | Polish: loading states, error handling, toast notifications | ☐ |
-| 6 | Responsive design, final UI review | ☐ |
+| 6 | Documents page mobile responsiveness (~375px+): `<table>` renders only at `md:`+ (own `overflow-x-auto`); stacked document cards render below `md:` with the same data (title, type, `StatusBadge`, chunks, uploaded date, truncated `source_url`, Detail link); `PipelineStepper` adds a compact vertical variant below `md:` alongside the existing horizontal one at `md:`+; `StatusBadge` error text uses `break-words`; upload dropzone/buttons full-width below `sm:`; pagination row stacks below `sm:`. Layout/CSS only — `GET /admin/documents` pagination, Add by URL, file upload, and status filters unchanged. Verified via typecheck/lint/build; no live browser screenshot taken (`agent-browser` not installed) | ☑ |
+| 6 | Responsive design, final UI review — Documents page done (see row above); Login, Users, Tenants, and Settings pages not yet reviewed for mobile | ☐ |
 
 ## Files Owned
 - `frontend/src/app/admin/`

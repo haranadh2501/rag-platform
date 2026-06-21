@@ -204,6 +204,28 @@
 - [ ] Delete → cancel → row remains; no API call fired
 - [ ] Empty state renders when no documents exist
 
+## Documents Page — Mobile Responsiveness
+
+> **Implemented — layout/CSS only, no API or logic changes.** The document `<table>` now renders
+> only at `md:` (≥768px) and up, wrapped in its own `overflow-x-auto` (instead of clipping or
+> forcing page-wide horizontal scroll). Below `md:`, a stacked card list shows the same
+> `filteredDocs` data. `PipelineStepper` renders a compact vertical variant below `md:` and the
+> original horizontal variant at `md:`+. `StatusBadge` error text and the stepper's failure text
+> use `break-words`. The upload dropzone/buttons are full-width below `sm:`; the pagination row
+> stacks vertically below `sm:`. `GET /admin/documents` pagination, Add by URL, file upload, and
+> status filters all behave identically at every width. Verified via `npm run typecheck` + `lint`
+> + `build`; no live browser/screenshot check was performed in this environment (`agent-browser`
+> not installed) — a manual `npm run dev` + DevTools responsive-mode pass is recommended.
+
+- [ ] At 375px width, the page has no horizontal overflow/scrollbar *(requires manual check via `npm run dev` + browser responsive mode)*
+- [ ] At 375px width, document cards render in place of the table (title, type, status, chunks, uploaded date, source URL if present, Detail link) *(requires manual check)*
+- [ ] At desktop width (≥768px), the existing table renders in place of the cards, visually unchanged from before this phase *(requires manual check)*
+- [ ] At 375px width, the ingestion progress stepper renders as a vertical stacked list with no horizontal overflow, for `pending`/`processing`/`failed` rows *(requires manual check)*
+- [ ] At 375px width, status filter buttons remain visible and tappable (wrap cleanly, no clipped/cut-off buttons) *(requires manual check)*
+- [ ] At 375px width, pagination controls (per-page selector, page info, Previous/Next) stack cleanly and remain tappable, with Previous/Next disabled states still correct *(requires manual check)*
+- [ ] At 375px width, the Upload File / Add by URL forms are usable — full-width inputs and buttons, no overflow *(requires manual check)*
+- [ ] Long document titles and source URLs wrap or truncate without breaking the card/table layout *(requires manual check with a long title/URL document)*
+
 ## Document Detail Page
 
 > **`GET /admin/documents/{document_id}` wired.** `getDocumentApi(documentId)` in

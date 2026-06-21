@@ -169,6 +169,22 @@ Amber at 80 %, red at 95 %. Sourced from tenant metadata.
 - "Chunks" column shows `—` while not yet `completed`.
 - Actions column: "Detail" → `/admin/documents/[id]` for `completed`/`failed` rows (unchanged).
   "Delete" and "Retry" remain unwired/pending.
+
+> **Responsive layout (implemented)**: the 6-column `<table>` above renders only at `md:` (≥768px)
+> and up, wrapped in its own `overflow-x-auto` scroll container as a safety net (instead of
+> clipping or pushing the page width). Below `md:`, a stacked card list (`md:hidden`) renders the
+> same `filteredDocs` data: each card shows title (`break-words`), source type, `StatusBadge`,
+> chunk count, uploaded date, `source_url` (only when present, truncated with `min-w-0 truncate`
+> inside a flex row — never shown as a bare unbroken string), and a "View detail →" link for
+> `completed`/`failed` rows (matching desktop). `PipelineStepper` itself is responsive — it renders
+> the existing horizontal stage row at `md:` and up (`hidden md:flex`) and a compact vertical
+> stage list below `md:` (`flex flex-col md:hidden`), used by both the desktop table row and the
+> mobile card, so ingestion progress never overflows horizontally. `StatusBadge`'s `error_message`
+> line uses `break-words` so long failure messages wrap instead of overflowing. The upload dropzone,
+> "Browse files", and the Upload file/Add source submit buttons are `w-full` below `sm:` and
+> `w-auto` at `sm:` and up. The pagination row stacks vertically (`flex-col`) below `sm:` and
+> returns to a single row (`sm:flex-row sm:justify-between`) at `sm:` and up. `<main>` padding is
+> `p-4` below `sm:` and `p-6` at `sm:` and up. No API behavior changed — this is layout-only.
 - Add by URL remains a separate flow from the list fetch: a successful submit still prepends a
   local optimistic row labelled as a status preview; it is not claimed as persisted until
   `GET /admin/documents` returns a document with the same `id` (at which point the optimistic
