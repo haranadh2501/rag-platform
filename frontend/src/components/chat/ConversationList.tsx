@@ -29,7 +29,10 @@ export default function ConversationList({ activeConversationId }: ConversationL
 
   useEffect(() => {
     load();
-  }, []);
+    // Re-fetch when a new conversation_id appears (e.g. after the first
+    // message in /chat/new resolves) so its title shows up without a remount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeConversationId]);
 
   async function handleDelete(id: string) {
     try {
@@ -45,7 +48,7 @@ export default function ConversationList({ activeConversationId }: ConversationL
       <div className="px-4 py-3">
         <Link
           href="/chat/new"
-          className="block rounded-md bg-indigo-600 px-3 py-2 text-center text-xs font-medium text-white hover:bg-indigo-700"
+          className="block rounded-md bg-[var(--accent-600)] px-3 py-2 text-center text-xs font-medium text-white hover:bg-[var(--accent-700)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-600)] focus-visible:ring-offset-2"
         >
           New Chat
         </Link>
@@ -68,7 +71,7 @@ export default function ConversationList({ activeConversationId }: ConversationL
                 <Link
                   href={`/chat/${conversation.id}`}
                   className={`flex-1 truncate rounded-md px-2 py-2 text-xs ${
-                    isActive ? 'bg-indigo-50 text-indigo-700' : 'text-slate-600 hover:bg-slate-50'
+                    isActive ? 'bg-[var(--accent-50)] text-[var(--accent-700)]' : 'text-slate-600 hover:bg-slate-50'
                   }`}
                 >
                   <span className="block truncate font-medium">{conversation.title ?? 'Untitled conversation'}</span>

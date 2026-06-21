@@ -148,5 +148,69 @@ async def test_foreign_conversation_id_403(client, web_user, monkeypatch):
         await db.commit()
 
 
+async def test_new_conversation_gets_derived_title(client, web_user, monkeypatch):
+    monkeypatch.setattr(pipeline_client, "call_pipeline", _mock_pipeline)
+    r = await client.post("/chat/query", json={"query": "What is Kubernetes?"},
+                          headers={"Authorization": f"Bearer {web_user['token']}"})
+    assert r.status_code == 200, r.text
+    conversation_id = r.json()["conversation_id"]
+
+    async with AsyncSessionLocal() as db:
+        title = (await db.execute(
+            text("SELECT title FROM conversations WHERE id = :c"), {"c": conversation_id}
+        )).scalar_one()
+    assert title == "Kubernetes"
+
+
+async def test_existing_conversation_title_not_overwritten(client, web_user, monkeypatch):
+    monkeypatch.setattr(pipeline_client, "call_pipeline", _mock_pipeline)
+    async with AsyncSessionLocal() as db:
+        conv_id = (await db.execute(text("""
+            INSERT INTO conversations (tenant_id, user_id, channel, title)
+            VALUES (:t, :u, 'web', 'My Custom Title') RETURNING id
+        """), {"t": web_user["tenant_id"], "u": web_user["user_id"]})).scalar_one()
+        await db.commit()
+
+    r = await client.post(
+        "/chat/query",
+        json={"query": "What is Kubernetes?", "conversation_id": str(conv_id)},
+        headers={"Authorization": f"Bearer {web_user['token']}"},
+    )
+    assert r.status_code == 200, r.text
+
+    async with AsyncSessionLocal() as db:
+        title = (await db.execute(
+            text("SELECT title FROM conversations WHERE id = :c"), {"c": conv_id}
+        )).scalar_one()
+    assert title == "My Custom Title"
+
+
+async def test_conversation_history_passed_to_pipeline(client, web_user, monkeypatch):
+    """Step 5 (_load_history) feeds prior turns into the shared pipeline call payload."""
+    monkeypatch.setattr(pipeline_client, "call_pipeline", _mock_pipeline)
+    r1 = await client.post("/chat/query", json={"query": "first question"},
+                          headers={"Authorization": f"Bearer {web_user['token']}"})
+    conversation_id = r1.json()["conversation_id"]
+
+    captured = {}
+
+    async def capture_pipeline(payload):
+        captured.update(payload)
+        return {"answer": "second answer", "sources": [], "follow_up_questions": []}
+
+    monkeypatch.setattr(pipeline_client, "call_pipeline", capture_pipeline)
+    r2 = await client.post(
+        "/chat/query",
+        json={"query": "second question", "conversation_id": conversation_id},
+        headers={"Authorization": f"Bearer {web_user['token']}"},
+    )
+    assert r2.status_code == 200, r2.text
+
+    assert captured["history"] == [
+        {"role": "user", "content": "first question"},
+        {"role": "assistant", "content": "mock answer"},
+    ]
+
+
 async def _mock_pipeline(payload):
     return {"answer": "mock answer", "sources": [], "follow_up_questions": []}
