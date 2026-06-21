@@ -39,7 +39,7 @@ describe('MessageBubble', () => {
     expect(screen.queryByText('No citations available')).not.toBeInTheDocument();
   });
 
-  it('renders the user bubble right-aligned, using the accent color token', () => {
+  it('renders the user bubble right-aligned with a fixed indigo color', () => {
     const message: ChatMessageOut = {
       id: '3',
       role: 'user',
@@ -53,10 +53,10 @@ describe('MessageBubble', () => {
     const { container } = render(<MessageBubble message={message} />);
 
     expect(container.firstElementChild).toHaveClass('justify-end');
-    expect(screen.getByText('Hi there').className).toContain('bg-[var(--accent-600)]');
+    expect(screen.getByText('Hi there').className).toContain('bg-indigo-600');
   });
 
-  it('renders the assistant bubble left-aligned and neutral (no accent color)', () => {
+  it('renders the assistant bubble left-aligned and neutral', () => {
     const message: ChatMessageOut = {
       id: '4',
       role: 'assistant',
