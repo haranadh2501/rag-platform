@@ -28,6 +28,7 @@ Next.js admin dashboard: login, document upload, document management, user manag
 | 4 | Wire Add by URL to backend API: `src/lib/documentApi.ts` → `ingestDocumentUrlApi({ url, title? })` → `apiRequest<DocumentOut>('POST', '/admin/documents/url', body)`; Bearer token attached automatically by `apiClient`; no direct browser → n8n call; `n8nIngestionApi.ts` no longer imported in `documents/page.tsx` (kept for reference); backend owns JWT validation, tenant isolation, and n8n trigger; response 202 `DocumentOut` fields populate the optimistic row; if backend returns `pending`, local 1500 ms `setTimeout` advances row to `processing` for demo feedback (NOT correlated with actual n8n progress); completed status requires real `GET /admin/documents` data; `GET /admin/documents` polling/list refresh remains pending | ☑ |
 | 4 | URL ingestion error UX polish: `classifyUrlError(err)` in `page.tsx` maps `ApiError.status` to friendly messages (401/403/404/429/5xx) and maps network/CORS `TypeError` to "could not reach service"; all paths include `Technical detail: <message>` in muted sub-text; `urlError` state is now `{ message, detail } \| null`; no optimistic row inserted on failure; button re-enables; `aria-live="assertive"` preserved; `ApiError` imported from `apiClient.ts`; direct n8n browser call not in UI path; backend/CORS availability can block URL ingestion | ☑ |
 | 4 | Wire document pages to real backend (`GET /admin/documents`, file upload, detail, delete) — separate from URL ingest wiring | ☐ |
+| 4 | `GET /admin/documents` list + pagination wiring: `listDocumentsApi({ page, perPage })` in `src/lib/documentApi.ts` → `apiRequest<DocumentList>('GET', '/admin/documents?page=&per_page=')`; Bearer token attached automatically by `apiClient`; `documents/page.tsx` fetches on mount and on `page`/`perPage` change; renders backend `DocumentOut[]` (no mock fallback); loading skeleton + inline error panel with `Technical detail:`; client-side Previous/Next + per-page (10/20/50) controls drive the backend pagination; status filters apply to the currently fetched page; optimistic "Add by URL" rows are dropped once the same `id` appears in a fetched page. File upload, document detail wiring, delete, retry, and 5 s polling remain pending | ☑ |
 | 5 | User management page: `GET /admin/users` + `POST /auth/register` wired; deactivate pending | ☑ |
 | 5 | Chat nav item in Admin sidebar → `/chat/new`; active on `/chat/*`; login redirects `user` role to `/chat/new` | ☑ |
 | 5 | Polish: loading states, error handling, toast notifications | ☐ |
@@ -124,7 +125,7 @@ const statusColors = {
 ## Acceptance Criteria
 - [ ] Login with `admin@example.com` (seed data) works
 - [ ] Upload PDF → status shows `processing` → updates to `completed`
-- [ ] Document list paginated with real data from backend
+- [x] Document list paginated with real data from backend (`GET /admin/documents?page=&per_page=`; client-side Previous/Next + per-page controls)
 - [ ] Delete document removes it from list
 - [ ] Invite user form posts to `POST /admin/users/invite` *(blocked — see Registration Endpoint note below)*
 - [ ] Unauthorized access redirects to login

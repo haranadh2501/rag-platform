@@ -1,63 +1,14 @@
 'use client';
 
 import Link from 'next/link';
-import { useState, Fragment, type FormEvent } from 'react';
-import { ingestDocumentUrlApi } from '../../../lib/documentApi';
+import { useEffect, useState, Fragment, type ChangeEvent, type FormEvent } from 'react';
+import { ingestDocumentUrlApi, listDocumentsApi } from '../../../lib/documentApi';
 import { ApiError } from '../../../lib/apiClient';
 import StatusBadge from '../../../components/admin/StatusBadge';
 import { pipelineStateFromDocument, INGESTION_STAGES } from '@admin-types';
 import type { DocumentOut, PipelineState, IngestionStage, DocumentStatus } from '@admin-types';
 
-// Mock knowledge sources — replaced by GET /admin/documents in Phase 3.
-const MOCK_DOCUMENTS: DocumentOut[] = [
-  {
-    id: 'doc-001',
-    tenant_id: 'tenant-abc',
-    title: 'Onboarding Guide Q1 2026',
-    source_type: 'pdf',
-    source_url: null,
-    status: 'completed',
-    chunk_count: 42,
-    error_message: null,
-    created_at: '2026-05-20T09:15:00Z',
-  },
-  {
-    id: 'doc-002',
-    tenant_id: 'tenant-abc',
-    title: 'Product Roadmap 2026',
-    source_type: 'docx',
-    source_url: null,
-    status: 'processing',
-    chunk_count: 0,
-    error_message: null,
-    created_at: '2026-06-02T08:00:00Z',
-  },
-  {
-    id: 'doc-003',
-    tenant_id: 'tenant-abc',
-    title: 'https://docs.example.com/api-reference',
-    source_type: 'url',
-    source_url: 'https://docs.example.com/api-reference',
-    status: 'failed',
-    chunk_count: 0,
-    error_message: 'HTTP 403 fetching source URL.',
-    failed_stage: 'validated',
-    created_at: '2026-06-01T14:30:00Z',
-  },
-  {
-    id: 'doc-004',
-    tenant_id: 'tenant-abc',
-    title: 'Support FAQ v2',
-    source_type: 'txt',
-    source_url: null,
-    status: 'pending',
-    chunk_count: 0,
-    error_message: null,
-    created_at: '2026-06-02T10:45:00Z',
-  },
-];
-
-// Mock storage quota — replaced by GET /admin/tenants/:id or quota endpoint in Phase 3.
+// Mock storage quota — replaced by GET /admin/tenants/:id or quota endpoint in a future phase.
 const MOCK_QUOTA = { usedMb: 140, totalMb: 500 };
 
 const STAGE_LABELS: Record<IngestionStage, string> = {
@@ -249,6 +200,27 @@ function classifyUrlError(err: unknown): UrlSubmitError {
   };
 }
 
+interface ListFetchError {
+  message: string;
+  detail: string;
+}
+
+function classifyListError(err: unknown): ListFetchError {
+  const technical = `Technical detail: ${err instanceof Error ? err.message : String(err)}`;
+  if (err instanceof ApiError) {
+    if (err.status === 401) return { message: 'Your session expired. Please sign in again.', detail: technical };
+    if (err.status === 403) return { message: 'You do not have permission to view documents.', detail: technical };
+    if (err.status === 404) return { message: 'The documents endpoint is not available yet.', detail: technical };
+    if (err.status === 429) return { message: 'Too many requests. Please try again in a minute.', detail: technical };
+    if (err.status >= 500) return { message: 'The document service is having trouble. Please try again later.', detail: technical };
+    return { message: 'The document service did not respond. Please try again in a moment.', detail: technical };
+  }
+  return {
+    message: 'Could not reach the document service. Check backend availability or CORS.',
+    detail: technical,
+  };
+}
+
 interface UploadSourcePanelProps {
   onAccepted: (doc: DocumentOut) => void;
 }
@@ -427,16 +399,54 @@ function UploadSourcePanel({ onAccepted }: UploadSourcePanelProps) {
   );
 }
 
+const PER_PAGE_OPTIONS = [10, 20, 50];
+
 export default function DocumentsPage() {
   const [activeFilter, setActiveFilter] = useState<FilterOption>('all');
   const [optimisticDocs, setOptimisticDocs] = useState<DocumentOut[]>([]);
+  const [documents, setDocuments] = useState<DocumentOut[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(20);
+  const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<ListFetchError | null>(null);
 
-  const optimisticIds = new Set(optimisticDocs.map((d) => d.id));
-  const allDocs = [...optimisticDocs, ...MOCK_DOCUMENTS];
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setFetchError(null);
+    listDocumentsApi({ page, perPage })
+      .then((result) => {
+        if (cancelled) return;
+        setDocuments(result.documents);
+        setTotal(result.total);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setFetchError(classifyListError(err));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [page, perPage]);
+
+  // Optimistic rows from "Add by URL" disappear once GET /admin/documents
+  // returns the same id as a persisted row, avoiding a duplicate entry.
+  const persistedIds = new Set(documents.map((d) => d.id));
+  const visibleOptimisticDocs = optimisticDocs.filter((d) => !persistedIds.has(d.id));
+  const optimisticIds = new Set(visibleOptimisticDocs.map((d) => d.id));
+  const allDocs = [...visibleOptimisticDocs, ...documents];
   const filteredDocs =
     activeFilter === 'all'
       ? allDocs
       : allDocs.filter((d) => d.status === activeFilter);
+
+  const totalPages = Math.max(1, Math.ceil(total / perPage));
+  const rangeStart = total === 0 ? 0 : (page - 1) * perPage + 1;
+  const rangeEnd = Math.min(page * perPage, total);
 
   function handleAccepted(doc: DocumentOut): void {
     setOptimisticDocs((prev) => [doc, ...prev]);
@@ -445,7 +455,7 @@ export default function DocumentsPage() {
       setActiveFilter('all');
     }
     // If backend returned pending, advance locally to processing after 1500 ms for
-    // demo feedback. Real status requires GET /admin/documents polling (Phase 3).
+    // demo feedback. Real status requires GET /admin/documents polling (a later phase).
     if (doc.status === 'pending') {
       setTimeout(() => {
         setOptimisticDocs((prev) =>
@@ -453,6 +463,19 @@ export default function DocumentsPage() {
         );
       }, 1500);
     }
+  }
+
+  function handlePreviousPage(): void {
+    setPage((p) => Math.max(1, p - 1));
+  }
+
+  function handleNextPage(): void {
+    setPage((p) => p + 1);
+  }
+
+  function handlePerPageChange(e: ChangeEvent<HTMLSelectElement>): void {
+    setPerPage(Number(e.target.value));
+    setPage(1);
   }
 
   return (
@@ -487,6 +510,18 @@ export default function DocumentsPage() {
         ))}
       </div>
 
+      {fetchError && (
+        <div
+          role="alert"
+          aria-live="assertive"
+          className="mb-4 rounded-md border border-red-200 bg-red-50 p-3"
+        >
+          <p className="text-sm font-medium text-red-800">Could not load documents</p>
+          <p className="mt-1 text-xs text-red-700">{fetchError.message}</p>
+          <p className="mt-1 text-xs text-red-400">{fetchError.detail}</p>
+        </div>
+      )}
+
       {/* Document table */}
       <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
         <table className="min-w-full divide-y divide-slate-200">
@@ -505,7 +540,15 @@ export default function DocumentsPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {filteredDocs.length === 0 ? (
+            {loading ? (
+              Array.from({ length: 5 }).map((_, i) => (
+                <tr key={`doc-skeleton-${i}`} className="animate-pulse">
+                  <td colSpan={6} className="px-4 py-3">
+                    <div className="h-4 w-full rounded bg-slate-100" />
+                  </td>
+                </tr>
+              ))
+            ) : filteredDocs.length === 0 ? (
               <tr>
                 <td colSpan={6} className="px-4 py-10 text-center text-sm text-slate-400">
                   No {activeFilter === 'all' ? '' : `${activeFilter} `}documents.
@@ -558,6 +601,50 @@ export default function DocumentsPage() {
             ))}
           </tbody>
         </table>
+      </div>
+
+      {/* Pagination controls */}
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-sm text-slate-600">
+        <p>{total === 0 ? 'No documents' : `${rangeStart}-${rangeEnd} of ${total}`}</p>
+        <div className="flex flex-wrap items-center gap-3">
+          <label htmlFor="documents-per-page" className="text-xs text-slate-500">
+            Rows per page
+          </label>
+          <select
+            id="documents-per-page"
+            value={perPage}
+            onChange={handlePerPageChange}
+            disabled={loading}
+            className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-700 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-60"
+          >
+            {PER_PAGE_OPTIONS.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+          <span aria-live="polite" className="text-xs text-slate-500">
+            Page {page} of {totalPages}
+          </span>
+          <button
+            type="button"
+            onClick={handlePreviousPage}
+            disabled={page <= 1 || loading}
+            aria-label="Previous page"
+            className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Previous
+          </button>
+          <button
+            type="button"
+            onClick={handleNextPage}
+            disabled={page * perPage >= total || loading}
+            aria-label="Next page"
+            className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Next
+          </button>
+        </div>
       </div>
     </main>
   );

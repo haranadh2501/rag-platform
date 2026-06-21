@@ -111,9 +111,10 @@ Poll `GET /admin/documents` every 5 s for rows in `pending` or `processing` stat
 > part of the UI path; backend/CORS availability can block URL ingestion.
 >
 > **Optimistic row does not survive page refresh.** Row never auto-completes; completed status
-> requires real backend data from `GET /admin/documents`. `GET /admin/documents` list API wiring
-> remains pending (Phase 3). `n8nIngestionApi.ts` is kept for reference but is no longer
-> imported by `documents/page.tsx`.
+> requires real backend data from `GET /admin/documents`. `GET /admin/documents` list API wiring is
+> implemented — see "List wiring" note under Document Table below; once the list refetches, an
+> optimistic row with a matching `id` is replaced by the persisted row. `n8nIngestionApi.ts` is
+> kept for reference but is no longer imported by `documents/page.tsx`.
 
 ### Storage Quota Bar
 ```
@@ -130,13 +131,37 @@ Amber at 80 %, red at 95 %. Sourced from tenant metadata.
 | 3 | Quick Start | URL | ● Pending | — | just now | — |
 | 4 | Old Policy | TXT | ✕ Failed | — | 1 day ago | Retry · Delete |
 
+> **List wiring (implemented)**: `documents/page.tsx` calls `listDocumentsApi({ page, perPage })`
+> (`src/lib/documentApi.ts` → `apiRequest<DocumentList>('GET', '/admin/documents?page=&per_page=')`)
+> on mount and whenever `page` or `perPage` changes. Bearer token is attached automatically by
+> `apiClient` — no hardcoded JWT, no direct database access. The table renders backend-returned
+> `DocumentOut[]` instead of mock data; there is no silent fallback to mock data on failure. While
+> a request is in flight, the table body shows 5 pulsing skeleton rows. On failure, a red inline
+> error panel appears above the table with a status-specific friendly message and
+> `Technical detail: <message>` in muted text (401/403/404/429/5xx/network mapped by
+> `classifyListError()`); the table area below keeps whatever was last successfully fetched (empty
+> on a first-load failure).
+
 - Filter bar: all / pending / processing / completed / failed.
-  - **Current mock**: client-side filter over `MOCK_DOCUMENTS`; no network request fired.
-  - **Live stack**: calls `GET /admin/documents?status=<value>` and re-fetches from backend.
-- Pagination: 20 rows/page (`GET /admin/documents?page=&per_page=20`).
+  - **Current state**: client-side filter over the currently fetched page of backend documents; no
+    additional network request fired per filter click. Status filtering is applied to the page
+    already in memory until backend `?status=` filtering is wired in a later phase.
+  - **Future**: calls `GET /admin/documents?status=<value>` and re-fetches from backend.
+- Pagination: client-side controls (Previous / Next / per-page selector) drive the backend's
+  paginated `GET /admin/documents?page=&per_page=` response. Default `page=1`, `perPage=20`;
+  optional per-page selector offers 10/20/50 and resets `page` to 1 on change. Range text shows
+  `"<start>-<end> of <total>"`; page text shows `"Page <page> of <totalPages>"`. Previous is
+  disabled on page 1; Next is disabled once `page * perPage >= total`.
 - "Chunks" column shows `—` while not yet `completed`.
-- Actions column: "Detail" → `/admin/documents/[id]`. "Delete" opens `ConfirmDialog`. "Retry" re-posts the same document to upload endpoint.
-- Empty state: illustration + "Upload your first document" CTA.
+- Actions column: "Detail" → `/admin/documents/[id]` for `completed`/`failed` rows (unchanged).
+  "Delete" and "Retry" remain unwired/pending.
+- Add by URL remains a separate flow from the list fetch: a successful submit still prepends a
+  local optimistic row labelled as a status preview; it is not claimed as persisted until
+  `GET /admin/documents` returns a document with the same `id` (at which point the optimistic
+  copy is dropped in favor of the persisted row).
+- 5 s polling for in-progress rows and auto-refresh remain pending (not implemented in this phase).
+- Empty state: "No documents." row when the fetched page (filtered) has no rows. The richer
+  illustration + "Upload your first document" CTA remains a future enhancement.
 
 ---
 
@@ -350,13 +375,22 @@ All requests send `Authorization: Bearer <token>`. 401 → logout + redirect to 
 > failure; direct n8n browser call is not part of the UI path; backend/CORS availability can
 > block URL ingestion.
 > Row never auto-completes; completed status requires real data from `GET /admin/documents`.
-> `GET /admin/documents` polling/list refresh remains pending (Phase 3). File upload disabled.
+> **`GET /admin/documents` list wiring (implemented)**: `listDocumentsApi({ page, perPage })` in
+> `src/lib/documentApi.ts` calls `apiRequest<DocumentList>('GET', '/admin/documents?page=&per_page=')`.
+> Bearer token attached automatically by `apiClient`. `documents/page.tsx` fetches on mount and on
+> every `page`/`perPage` change; renders backend `DocumentOut[]` (no mock fallback); shows a 5-row
+> pulsing skeleton while loading; shows a red inline error panel with friendly message +
+> `Technical detail:` on failure. Pagination is implemented as client-side controls (Previous/Next,
+> page-of-total display, optional 10/20/50 per-page selector that resets to page 1) driving the
+> backend's paginated response. Status filters apply to the currently fetched page only — backend
+> `?status=` filtering is a future enhancement. 5 s polling/auto-refresh for in-progress rows
+> remains pending. File upload remains disabled. Document detail, delete, and retry remain pending.
 > No automated test runner; verified via typecheck + browser check against live backend.
 > User data is localStorage-sourced only — `GET /auth/me` wiring pending.
 > `AuthGuard` protects `/admin/*` by localStorage token presence (no backend verification per request).
-> Document list, detail, file upload, delete, retry, and all user/tenant/settings pages remain
-> mock/placeholder. `apiClient` is not yet called by document pages. `401 → logout + redirect`
-> in `apiClient.ts` remains a TODO. `GET /auth/me`, role guards, and Tenants 403 remain pending.
+> Document detail, file upload, delete, retry, and all user/tenant/settings pages remain
+> mock/placeholder. `401 → logout + redirect` in `apiClient.ts` remains a TODO. `GET /auth/me`,
+> role guards, and Tenants 403 remain pending.
 > No automated test runner; verified via typecheck + browser check.
 
 ---

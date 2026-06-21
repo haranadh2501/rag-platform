@@ -65,8 +65,8 @@
 > filter auto-switches to All. On failure: "Could not submit URL" panel with error detail in muted
 > sub-text (aria-live="assertive"); button returns to normal. Optimistic row is local/demo-only —
 > never persisted, does not survive page refresh, does NOT confirm successful ingestion. Actual
-> persistence depends on n8n writing to the backend DB. `GET /admin/documents` list API wiring
-> remains pending (Phase 3). File upload disabled. No automated test runner.
+> persistence depends on n8n writing to the backend DB. `GET /admin/documents` list API wiring is
+> implemented — see "Documents Page — List & Pagination" below. File upload disabled. No automated test runner.
 
 **Add by URL — verifiable via `npm run dev` + live backend:**
 - [x] Invalid URL (e.g. `not-a-url`) → "Add source" button disabled; no network request *(verifiable via `npm run dev`)*
@@ -88,7 +88,7 @@
   - 5xx → "The document service is having trouble. Please try again later."
 - [x] Network error / CORS block / "Failed to fetch" → "Could not reach the document service. Check backend availability or CORS." + technical detail *(verifiable via `npm run dev` with backend stopped or CORS misconfigured)*
 - [x] No direct n8n request appears in browser Network tab — `documents/page.tsx` does not import `n8nIngestionApi` *(verifiable by reading source)*
-- [x] Document table does NOT refresh from backend after submit — optimistic row does not survive page refresh; `GET /admin/documents` polling remains pending *(verifiable — expected behaviour)*
+- [x] Document table does NOT automatically refetch immediately after an Add-by-URL submit (no polling trigger yet) — the optimistic row stays until the next `GET /admin/documents` fetch (page change or page reload) returns a persisted row with the same `id`, at which point the optimistic copy is dropped in favor of the real row; the optimistic row itself does not survive a page refresh *(verifiable — expected behaviour)*
 
 **File upload — all criteria blocked (Phase 3):**
 - [ ] Upload a PDF ≤ 25 MB → row appears immediately with `pending` badge (no page refresh)
@@ -96,13 +96,43 @@
 - [ ] Upload a `.exe` or other disallowed type → rejected client-side with error message
 - [ ] XHR progress bar advances during upload; does not jump straight to 100 %
 
+## Documents Page — List & Pagination
+
+> **`GET /admin/documents` list + pagination wired.** `documents/page.tsx` calls
+> `listDocumentsApi({ page, perPage })` (`src/lib/documentApi.ts` →
+> `apiRequest<DocumentList>('GET', '/admin/documents?page=&per_page=')`) on mount and whenever
+> `page` or `perPage` changes. Bearer token is attached automatically by `apiClient` — no
+> hardcoded JWT, no direct database access. The table renders backend-returned `DocumentOut[]`;
+> the mock document array was removed; there is no silent fallback to mock data on failure.
+> Loading: a 5-row pulsing skeleton replaces the table body while the request is in flight.
+> Failure: an inline red panel above the table shows a status-specific friendly message
+> (`classifyListError()`: 401/403/404/429/5xx/network) plus `Technical detail: <message>` in
+> muted text. Pagination is implemented as client-side controls (Previous/Next, "Page X of Y",
+> an optional 10/20/50 per-page `<select>`) driving the backend's paginated response; default
+> `page=1`, `perPage=20`; changing the per-page selector resets `page` to 1 and refetches. Status
+> filters apply to the currently fetched page only — backend `?status=` filtering remains a future
+> enhancement. 5 s polling/auto-refresh for in-progress rows remains pending. File upload remains
+> disabled. Document detail, delete, and retry remain pending. No automated test runner;
+> verification is typecheck + browser check against a live stack.
+
+- [x] Documents page sends `GET /admin/documents?page=1&per_page=20` on initial mount *(requires live backend — verifiable via browser DevTools Network tab)*
+- [x] Request includes `Authorization: Bearer <token>` header; token attached by `apiClient`, no hardcoded value *(verifiable via browser DevTools)*
+- [x] Backend documents render in the table with correct title/type/status/chunks/uploaded values *(requires live backend)*
+- [x] Loading skeleton (5 rows, pulse animation) shown while `GET /admin/documents` is in flight *(verifiable via `npm run dev` with network throttled)*
+- [x] API failure shows inline red "Could not load documents" panel with friendly message + `Technical detail:` in muted text; no silent fallback to mock data *(verifiable via `npm run dev` with backend stopped)*
+- [x] Previous button is disabled on page 1 *(requires live backend)*
+- [x] Next button is disabled once `page * perPage >= total` (last page) *(requires live backend)*
+- [x] Changing the per-page selector resets to page 1 and refetches *(requires live backend)*
+- [x] Status filters apply to the currently fetched page (client-side over the page already in memory) *(requires live backend)*
+
 ## Documents Page — Status & Polling
 
-> **StatusBadge — shared component (UI only)**: `StatusBadge` is now a shared presentation component at
-> `src/components/admin/StatusBadge.tsx`. This was a UI extraction only — no API integration occurred.
-> Both the list page (`documents/page.tsx`) and the detail page (`documents/[id]/page.tsx`) still
-> render hardcoded mock data. Verified via `npm run typecheck` + screenshot; no automated test runner
-> is installed. All criteria below remain unchecked and require Phase 3 live-stack wiring.
+> **StatusBadge — shared component**: `StatusBadge` is a shared presentation component at
+> `src/components/admin/StatusBadge.tsx`, used by both the list page (now wired to
+> `GET /admin/documents` — see "List & Pagination" above) and the detail page
+> (`documents/[id]/page.tsx`, which still renders hardcoded mock data). Verified via
+> `npm run typecheck` + screenshot; no automated test runner is installed. Criteria below require
+> 5 s polling (not yet implemented) and remain unchecked.
 
 - [ ] `pending` → `processing` → `completed` transitions happen without page refresh
 - [ ] `completed` row shows correct chunk count returned by backend (not a hardcoded value)
@@ -123,17 +153,20 @@
 
 ## Documents Page — Table Controls
 
-> **Mock filter (already verifiable)**: client-side filter over mock data — testable via `npm run dev` without a live stack.
-> **API filter (requires live stack)**: re-fetches `GET /admin/documents?status=` on each selection.
-> Update the filter criteria below to remove the mock note once backend wiring is done.
+> **Client-side filter over the fetched page (current state)**: filter buttons apply to the
+> documents already returned by the current `GET /admin/documents` page — no additional network
+> request fires per filter click. See "List & Pagination" above for the fetch/pagination wiring.
+> **API filter (future enhancement)**: re-fetches `GET /admin/documents?status=` on each selection.
+> Update the filter criteria below to remove this note once backend `?status=` filtering is wired.
 >
-> **Actions column — current mock state**: "Detail" link is navigable (routes to the placeholder
-> detail page) but always shows hardcoded mock data regardless of which row was clicked.
+> **Actions column — current state**: "Detail" link is navigable (routes to the placeholder
+> detail page) but the detail page itself always shows hardcoded mock data regardless of which row
+> was clicked — detail wiring is a separate pending phase (see "Document Detail Page" below).
 > "Delete" and "Retry" are not yet implemented; completed/failed rows show only `Detail`, while pending/processing rows show `—`.
 
-- [ ] Filter by `failed` (mock: client-side) → table shows only failed documents; other statuses hidden
-- [ ] Filter by `failed` (live stack) → `GET /admin/documents?status=failed` fires; only failed rows returned from backend
-- [ ] Pagination: navigating to page 2 loads the next 20 rows
+- [x] Filter by `failed` (client-side over fetched page) → table shows only failed documents; other statuses hidden *(requires live backend)*
+- [ ] Filter by `failed` (backend `?status=`) → `GET /admin/documents?status=failed` fires; only failed rows returned from backend *(future enhancement — not yet wired)*
+- [x] Pagination: navigating to page 2 loads the next page of rows from the backend — see "List & Pagination" above *(requires live backend)*
 - [ ] Delete → confirmation dialog appears → confirm → row removed → success toast
 - [ ] Delete → cancel → row remains; no API call fired
 - [ ] Empty state renders when no documents exist
