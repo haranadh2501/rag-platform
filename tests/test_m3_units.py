@@ -26,6 +26,9 @@ from app.services import file_validator, storage  # noqa: E402
 _PDF_BYTES = b"%PDF-1.4 " + b"x" * 100
 _DOCX_BYTES = b"PK\x03\x04" + b"x" * 100
 
+_R2_PUBLIC_URL = "https://pub-test.r2.dev"
+_R2_BUCKET = "test-bucket"
+
 
 # ═══════════════════════════════════════════
 # Storage service — services/storage.py
@@ -135,6 +138,88 @@ def test_validate_disallowed_mime_raises_415():
             declared_mime="text/html",
         )
     assert exc_info.value.status_code == 415
+
+
+# ═══════════════════════════════════════════
+# Storage service — R2 backend
+# ═══════════════════════════════════════════
+
+@pytest.mark.asyncio
+async def test_store_upload_r2_returns_public_url(monkeypatch):
+    from unittest.mock import MagicMock
+    mock_s3 = MagicMock()
+    monkeypatch.setattr(storage, "_r2_client", lambda: mock_s3)
+    monkeypatch.setattr(settings, "STORAGE_BACKEND", "r2")
+    monkeypatch.setattr(settings, "R2_BUCKET_NAME", _R2_BUCKET)
+    monkeypatch.setattr(settings, "R2_PUBLIC_URL", _R2_PUBLIC_URL)
+
+    url = await storage.store_upload("doc.pdf", _PDF_BYTES)
+
+    assert url.startswith(_R2_PUBLIC_URL + "/")
+    assert url.endswith("_doc.pdf")
+
+
+@pytest.mark.asyncio
+async def test_store_upload_r2_calls_put_object_with_correct_args(monkeypatch):
+    from unittest.mock import MagicMock
+    mock_s3 = MagicMock()
+    monkeypatch.setattr(storage, "_r2_client", lambda: mock_s3)
+    monkeypatch.setattr(settings, "STORAGE_BACKEND", "r2")
+    monkeypatch.setattr(settings, "R2_BUCKET_NAME", _R2_BUCKET)
+    monkeypatch.setattr(settings, "R2_PUBLIC_URL", _R2_PUBLIC_URL)
+
+    await storage.store_upload("report.pdf", _PDF_BYTES)
+
+    mock_s3.put_object.assert_called_once()
+    kwargs = mock_s3.put_object.call_args.kwargs
+    assert kwargs["Bucket"] == _R2_BUCKET
+    assert kwargs["Body"] == _PDF_BYTES
+    assert kwargs["Key"].endswith("_report.pdf")
+
+
+@pytest.mark.asyncio
+async def test_delete_upload_r2_calls_delete_object_with_correct_key(monkeypatch):
+    from unittest.mock import MagicMock
+    mock_s3 = MagicMock()
+    monkeypatch.setattr(storage, "_r2_client", lambda: mock_s3)
+    monkeypatch.setattr(settings, "STORAGE_BACKEND", "r2")
+    monkeypatch.setattr(settings, "R2_BUCKET_NAME", _R2_BUCKET)
+    monkeypatch.setattr(settings, "R2_PUBLIC_URL", _R2_PUBLIC_URL)
+
+    await storage.delete_upload(f"{_R2_PUBLIC_URL}/abc123_report.pdf")
+
+    mock_s3.delete_object.assert_called_once()
+    kwargs = mock_s3.delete_object.call_args.kwargs
+    assert kwargs["Bucket"] == _R2_BUCKET
+    assert kwargs["Key"] == "abc123_report.pdf"
+
+
+@pytest.mark.asyncio
+async def test_delete_upload_r2_noop_for_mismatched_url(monkeypatch):
+    from unittest.mock import MagicMock
+    mock_s3 = MagicMock()
+    monkeypatch.setattr(storage, "_r2_client", lambda: mock_s3)
+    monkeypatch.setattr(settings, "STORAGE_BACKEND", "r2")
+    monkeypatch.setattr(settings, "R2_BUCKET_NAME", _R2_BUCKET)
+    monkeypatch.setattr(settings, "R2_PUBLIC_URL", _R2_PUBLIC_URL)
+
+    # URL not from this R2 bucket → silently skipped, no API call
+    await storage.delete_upload("https://different-host.example.com/some-key")
+
+    mock_s3.delete_object.assert_not_called()
+
+
+# ═══════════════════════════════════════════
+# Config — SYNC_DATABASE_URL SSL conversion
+# ═══════════════════════════════════════════
+
+def test_sync_database_url_converts_ssl_param_for_alembic():
+    from app.core.config import Settings
+    s = Settings(DATABASE_URL="postgresql+asyncpg://user:pass@host/db?ssl=require")
+    assert "+psycopg2" in s.SYNC_DATABASE_URL
+    assert "+asyncpg" not in s.SYNC_DATABASE_URL
+    assert "?sslmode=require" in s.SYNC_DATABASE_URL
+    assert "?ssl=require" not in s.SYNC_DATABASE_URL
 
 
 # ═══════════════════════════════════════════
