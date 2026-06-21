@@ -96,6 +96,7 @@ class Settings(BaseSettings):
     MAX_PAGES_PER_DOC: int = 500
     MAX_BYTES_PER_TENANT: int = 1_073_741_824        # 1 GB
     MAX_UPLOADS_PER_HOUR: int = 20
+    DEFAULT_SOURCE_TYPE: str = "url"   # fallback when MIME type is unmapped
     ALLOWED_MIME_TYPES: str = (
         "application/pdf,"
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document,"
