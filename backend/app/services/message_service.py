@@ -14,7 +14,7 @@ from datetime import datetime
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.bots import slack, whatsapp
+from app.bots import slack, teams, whatsapp
 from app.services import pipeline_client
 from app.services.types import MessageContext
 
@@ -99,6 +99,8 @@ async def process_message(ctx: MessageContext, db: AsyncSession) -> dict:
         await slack.post_reply(ctx.slack_channel, ctx.slack_thread_ts, answer, sources)
     elif ctx.source == "whatsapp":
         await whatsapp.post_reply(ctx.whatsapp_from, answer, sources)
+    elif ctx.source == "teams":
+        await teams.post_reply(ctx.teams_service_url, ctx.teams_conversation_id, answer, sources)
 
     await _save_messages(ctx, db, ctx.query, answer, sources)  # Step 8
 
@@ -157,6 +159,38 @@ async def _resolve_identity(ctx: MessageContext, db: AsyncSession) -> None:
         else:
             ctx.user_id = row.user_id
 
+    elif ctx.source == "teams":
+        # Look up tenant via teams_tenant_map (Azure AD tenant id), user via teams_user_id.
+        row = (await db.execute(text("""
+            SELECT m.tenant_id, u.id AS user_id
+            FROM teams_tenant_map m
+            LEFT JOIN users u ON u.tenant_id = m.tenant_id AND u.teams_user_id = :tuid
+            WHERE m.teams_tenant_id = :ttid
+        """), {"ttid": ctx.teams_tenant_id, "tuid": ctx.teams_user_id})).first()
+
+        if row is None:
+            raise IdentityResolutionError(
+                f"Teams tenant {ctx.teams_tenant_id} not in teams_tenant_map"
+            )
+
+        ctx.tenant_id = row.tenant_id
+
+        if row.user_id is None:
+            # Auto-create a "teams" user for this Teams identity in the tenant.
+            safe_id = "".join(c for c in (ctx.teams_user_id or "") if c.isalnum())[:40]
+            ctx.user_id = (await db.execute(text("""
+                INSERT INTO users (tenant_id, email, hashed_password, role, teams_user_id)
+                VALUES (:tid, :email, 'teams-no-login', 'user', :tuid)
+                RETURNING id
+            """), {
+                "tid": ctx.tenant_id,
+                "email": f"teams-{safe_id}@teams.local",
+                "tuid": ctx.teams_user_id,
+            })).scalar_one()
+            await db.commit()
+        else:
+            ctx.user_id = row.user_id
+
 
 async def _find_or_create_conversation(ctx: MessageContext, db: AsyncSession) -> None:
     """Step 3 — one conversation per (user_id, channel); validate web ownership."""
@@ -203,6 +237,8 @@ async def _handle_reset(ctx: MessageContext, db: AsyncSession) -> dict:
         await slack.post_text(ctx.slack_channel, ctx.slack_thread_ts, RESET_CONFIRMATION)
     elif ctx.source == "whatsapp":
         await whatsapp.post_text(ctx.whatsapp_from, RESET_CONFIRMATION)
+    elif ctx.source == "teams":
+        await teams.post_text(ctx.teams_service_url, ctx.teams_conversation_id, RESET_CONFIRMATION)
 
     return {
         "request_id": ctx.request_id,

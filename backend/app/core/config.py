@@ -77,6 +77,15 @@ class Settings(BaseSettings):
     SLACK_BOT_TOKEN: str = ""
     SLACK_SIGNING_SECRET: str = ""
 
+    # ── Microsoft Teams (Bot Framework) ──────────────────────────────
+    # From the Azure Bot registration. APP_PASSWORD is the client secret.
+    # APP_TENANT_ID: set for a single-tenant bot; leave blank for multi-tenant
+    # (uses the botframework.com token endpoint).
+    MICROSOFT_APP_ID: str = ""
+    MICROSOFT_APP_PASSWORD: str = ""
+    MICROSOFT_APP_TENANT_ID: str = ""
+    MAX_TEAMS_UPLOAD_BYTES: int = 10_485_760         # 10 MB — Teams ephemeral upload
+
     # ── Cloudflare R2 (file storage) ─────────────────────────────────
     R2_ACCOUNT_ID: str = "c248caff93b57e6b28730410a4e34ca3"
     R2_ACCESS_KEY_ID: str = ""
