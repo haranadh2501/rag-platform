@@ -9,8 +9,9 @@ interface CitationsPanelProps {
 
 export default function CitationsPanel({ sources }: CitationsPanelProps) {
   const [open, setOpen] = useState(false);
+  const safeSources = sources ?? [];
 
-  if (sources.length === 0) {
+  if (safeSources.length === 0) {
     return <p className="px-1 text-xs text-slate-400">No citations available</p>;
   }
 
@@ -24,7 +25,7 @@ export default function CitationsPanel({ sources }: CitationsPanelProps) {
       >
         <span className="flex items-center gap-1.5">
           <span aria-hidden="true">📄</span>
-          {sources.length} {sources.length === 1 ? 'source' : 'sources'}
+          {safeSources.length} {safeSources.length === 1 ? 'source' : 'sources'}
         </span>
         <svg
           className={`h-3.5 w-3.5 text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`}
@@ -40,7 +41,7 @@ export default function CitationsPanel({ sources }: CitationsPanelProps) {
 
       {open && (
         <div className="flex flex-col gap-2 border-t border-slate-100 bg-slate-50/60 p-2">
-          {sources.map((source, index) => (
+          {safeSources.map((source, index) => (
             <div key={`${source.document_id}-${index}`} className="rounded-md border border-slate-200 bg-white p-3">
               <p className="flex flex-wrap items-baseline gap-1 text-xs font-medium text-slate-700">
                 <span>Source {index + 1}</span>

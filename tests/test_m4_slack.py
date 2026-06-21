@@ -156,7 +156,12 @@ async def slack_user():
     yield {"team_id": team_id, "slack_user_id": slack_uid, "tenant_id": tenant_id, "user_id": user_id}
 
     async with AsyncSessionLocal() as db:
+        # Delete in order: conversations (child) → users (child) → tenant (parent)
+        await db.execute(text("DELETE FROM conversations WHERE user_id = :u"), {"u": user_id})
         await db.execute(text("DELETE FROM slack_workspace_map WHERE team_id = :t"), {"t": team_id})
+        # Drop conversations (cascades to chat_messages) before users: conversations.user_id
+        # has no ON DELETE CASCADE, so deleting users first violates the FK.
+        await db.execute(text("DELETE FROM conversations WHERE tenant_id = :t"), {"t": tenant_id})
         await db.execute(text("DELETE FROM users WHERE tenant_id = :t"), {"t": tenant_id})
         await db.execute(text("DELETE FROM tenants WHERE id = :t"), {"t": tenant_id})
         await db.commit()
@@ -228,6 +233,25 @@ async def test_slack_duplicate_event_id_noop(client, slack_user, monkeypatch):
     async with AsyncSessionLocal() as db:
         await db.execute(text("DELETE FROM processed_requests WHERE request_id = :r"), {"r": event_id})
         await db.commit()
+
+
+async def test_slack_unknown_team_identity_failure_noop(client, slack_user, monkeypatch):
+    """team_id not in slack_workspace_map → IdentityResolutionError, logged, no reply, 200 ack."""
+    posted = []
+    monkeypatch.setattr(slack, "post_reply", lambda *a: posted.append(1) or _noop())
+    monkeypatch.setattr(slack, "post_text", lambda *a: posted.append(1) or _noop())
+    monkeypatch.setattr(pipeline_client, "call_pipeline", _mock_pipeline)
+
+    raw, headers = _signed({
+        "type": "event_callback",
+        "event_id": f"Ev{uuid.uuid4().hex[:8]}",
+        "team_id": f"T{uuid.uuid4().hex[:8]}",  # not registered in slack_workspace_map
+        "event": {"user": slack_user["slack_user_id"], "text": "hello", "channel": "C1", "ts": "1.1"},
+    })
+    r = await client.post("/webhooks/slack/events", content=raw, headers=headers)
+    assert r.status_code == 200
+    assert posted == []  # no reply attempted
+    assert await _count_messages(slack_user["user_id"]) == 0
 
 
 async def _noop():

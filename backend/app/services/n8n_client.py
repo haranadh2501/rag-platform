@@ -39,24 +39,28 @@ MOCK_RETRIEVE_RESPONSE = {
 async def ingest(
     document_id: str,
     tenant_id: str,
-    file_path: str,
+    source_url: str,
     source_type: str,
     title: str,
 ) -> dict:
     """Trigger n8n ingestion workflow."""
     if settings.MOCK_N8N:
-        logger.info(f"[MOCK] Ingestion triggered for {document_id}")
+        logger.info("[MOCK] Ingestion triggered for %s", document_id)
         return {"status": "mock_started"}
 
     payload = {
         "document_id": document_id,
-        "tenant_id": tenant_id,
-        "file_path": file_path,
+        "tenant_id":   tenant_id,
         "source_type": source_type,
-        "title": title,
+        "source_url":  source_url,
+        "title":       title,
     }
+    logger.info("[n8n ingest] → POST %s", settings.N8N_INGEST_WEBHOOK_URL)
+    logger.info("[n8n ingest] → payload: %s", payload)
     async with httpx.AsyncClient(timeout=30.0) as client:
         resp = await client.post(settings.N8N_INGEST_WEBHOOK_URL, json=payload)
+        logger.info("[n8n ingest] ← status: %s", resp.status_code)
+        logger.info("[n8n ingest] ← body: %s", resp.text[:500])
         resp.raise_for_status()
         return resp.json()
 
@@ -80,5 +84,32 @@ async def retrieve(
     }
     async with httpx.AsyncClient(timeout=60.0) as client:
         resp = await client.post(settings.N8N_RETRIEVE_WEBHOOK_URL, json=payload)
+        resp.raise_for_status()
+        return resp.json()
+
+
+async def ingest_ephemeral(
+    content: bytes,
+    conversation_id: str,
+    mime_type: str,
+) -> dict:
+    """Trigger n8n ephemeral ingestion workflow for WhatsApp/chat uploads.
+
+    Files are indexed temporarily (1-hour TTL) and scoped to a conversation_id.
+    """
+    if settings.MOCK_N8N:
+        logger.info(f"[MOCK] Ephemeral ingest for conversation={conversation_id}")
+        return {"status": "mock_indexed"}
+
+    # Send multipart form data with the file
+    files = {"file": ("upload", content, mime_type)}
+    data = {"conversation_id": conversation_id}
+
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        resp = await client.post(
+            settings.N8N_EPHEMERAL_INGEST_WEBHOOK_URL,
+            files=files,
+            data=data
+        )
         resp.raise_for_status()
         return resp.json()

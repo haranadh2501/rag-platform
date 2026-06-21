@@ -4,7 +4,7 @@ interface FollowUpChipsProps {
 }
 
 export default function FollowUpChips({ questions, onSelect }: FollowUpChipsProps) {
-  const visible = questions.slice(0, 3);
+  const visible = (questions ?? []).slice(0, 3);
 
   if (visible.length === 0) {
     return null;

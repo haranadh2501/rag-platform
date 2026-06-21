@@ -15,9 +15,13 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    from pathlib import Path
+    Path(settings.UPLOAD_DIR).mkdir(parents=True, exist_ok=True)
     logger.info("🚀 IISc RAG Platform starting up...")
     logger.info(f"   MOCK_N8N={settings.MOCK_N8N}")
     logger.info(f"   APP_ENV={settings.APP_ENV}")
+    logger.info(f"   STORAGE_BACKEND={settings.STORAGE_BACKEND}")
+    logger.info(f"   UPLOAD_DIR={settings.UPLOAD_DIR}")
     yield
     logger.info("Shutting down...")
 

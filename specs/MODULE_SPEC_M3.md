@@ -23,6 +23,7 @@ File upload endpoint, document management, chat proxy to n8n with MOCK mode.
 - `backend/app/api/admin.py`
 - `backend/app/api/chat.py`
 - `backend/app/services/n8n_client.py`
+- `backend/app/services/storage.py` (local + Cloudflare R2 backends)
 
 ## MOCK_N8N Implementation (Day 2 priority)
 ```python
@@ -51,11 +52,12 @@ async def chat_query(request: ChatQueryRequest, current_user=Depends(get_current
 ## n8n Client Service
 ```python
 # backend/app/services/n8n_client.py
-async def ingest(document_id, tenant_id, file_path, source_type): ...
+async def ingest(document_id, tenant_id, source_url, source_type, title): ...
 async def retrieve(query, tenant_id, conversation_history, max_chunks=5): ...
 ```
 - Uses `httpx.AsyncClient`
 - Reads `N8N_RETRIEVE_WEBHOOK_URL`, `N8N_INGEST_WEBHOOK_URL` from config
+- `source_url` for file uploads = R2 public URL (`https://pub-a9bb7d7b516244eaacc47d9cab962786.r2.dev/<key>`) when `STORAGE_BACKEND=r2`; falls back to `APP_BASE_URL/admin/documents/{id}/download` for local backend. For URL ingestion = the original URL.
 - Raises `HTTPException(502)` if n8n returns non-200
 
 ## Acceptance Criteria
@@ -97,6 +99,22 @@ async def retrieve(query, tenant_id, conversation_history, max_chunks=5): ...
 
 ### Day 6 — Tests
 12. `tests/test_chat.py`: query returns sources, conversation history persisted, tenant isolation (user A cannot read user B's docs).
+
+## Unit Test Coverage
+
+> Full test plan in `specs/PLAN_M3.md §7`. Summary below.
+
+| Test file | Type | Cases | Coverage |
+|---|---|---|---|
+| `tests/test_m3_units.py` | Pure unit (no DB) | 14 | `storage.py`, `file_validator.py`, all M3 schemas |
+| `tests/test_m3_admin.py` | Integration (DB + monkeypatch) | 30 | All document endpoints, tenant endpoints, n8n callback |
+| `tests/test_m3_conversations.py` | Integration (DB + monkeypatch) | 12 | Conversation list, detail, delete |
+
+Key testing decisions:
+- **Pure unit tests** use `pytest tmp_path` for storage; no DB required
+- **Integration tests** follow the same pattern as `tests/test_auth.py` — real Postgres, auto-skip if DB unreachable, self-seeding fixtures with teardown
+- **External services** (`n8n_client`, `storage`) are monkeypatched in integration tests so no network calls or filesystem side-effects
+- `POST /chat/query` is already tested in `tests/test_m4_chat.py` — not duplicated here
 
 ## Learning Resources
 - FastAPI file uploads: https://fastapi.tiangolo.com/tutorial/request-files/

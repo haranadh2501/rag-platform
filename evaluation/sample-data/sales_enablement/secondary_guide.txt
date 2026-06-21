@@ -1,0 +1,10 @@
+Sales Process Guide
+
+Section: Discounts
+Account executives may approve discounts up to 10 percent. Discounts from 11 to 20 percent require sales-director approval; larger discounts require finance approval.
+
+Section: Security questions
+Use the approved security brief for encryption, data residency, and certifications. Unknown security answers must be routed to the security team rather than guessed.
+
+Section: Competitor claims
+Comparisons must use current approved battlecards. Do not claim a competitor lacks a feature without a dated, cited source.

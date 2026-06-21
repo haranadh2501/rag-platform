@@ -1,0 +1,2732 @@
+▗ ▗   ▖ ▖  Claude Code v2.1.162
+           Opus 4.8 · Claude Pro
+  ▘▘ ▝▝    ~/Documents/GitHub/rag-platform
+
+
+ ▎ Opus 4.8 is here! Now defaults to high effort · /effort xhigh for your hardest tasks
+   +1 more · /status
+
+❯ You are pair-programming with me on Module M5 (Ephemeral Ingestion) of an     
+  academic multi-tenant RAG platform.                                           
+                                                                                
+  Hard rules you MUST obey on every reply:                                      
+  1. Treat the uploaded files as the source of truth. If something is unclear,  
+     ask me — do NOT invent file paths, schema columns, env vars, or webhook    
+     shapes.                                                                    
+  2. FastAPI is a thin gateway. ALL ingestion/embedding/LLM logic lives in n8n. 
+     Do not propose moving any of it to FastAPI.                                
+  3. Multi-tenant isolation is a hard gate. Every INSERT/SELECT into            
+     `ephemeral_chunks` MUST include `tenant_id`.                               
+  4. Locked stack — do not substitute: Voyage `voyage-4-large` (1024 dims) for  
+     embeddings, OpenAI `gpt-4o-mini` for vision OCR, pgvector on Neon          
+  Postgres,                                                                     
+     n8n for the workflow.                                                      
+  5. Never echo real secrets. Use placeholders like <VOYAGE_API_KEY>,           
+     <OPENAI_API_KEY>, <PG_PASSWORD>.                                           
+  6. Only files in scope: `n8n-workflows/ingest-ephemeral.json` and             
+  (optionally)                                                                  
+     `docs/n8n-setup.md`. Do not modify any other file.                         
+  7. Output style: when you produce a workflow JSON, give me the FULL file, not 
+     a diff. When you produce a node's Function code, give me the complete      
+     JavaScript for that one node.                                              
+  8. Follow spec-driven development: spec → plan → tests → implementation →     
+     verification. Stop and wait for my approval between phases.                
+                                                                                
+  If I ever ask you to skip a phase, push back once and explain why.            
+
+⏺ Understood. Before we start, let me confirm I've internalized the working
+  agreement and ground myself in the actual files rather than assumptions.
+
+  Let me locate my spec and the relevant in-scope files.
+
+  Read 2 files, listed 1 directory (ctrl+o to expand)
+
+⏺ I've read my module spec and the existing ingest-ephemeral.json skeleton. Let
+  me also ground myself in the actual ephemeral_chunks schema before I assert
+  any columns — the skeleton references columns I should verify, not trust.
+
+  Searched for 1 pattern, read 1 file (ctrl+o to expand)
+
+⏺ I'm grounded now. Here's what the source files actually say, and the conflicts
+  I need you to resolve before I can write the Phase 1 spec.
+
+  What's true in the repo
+
+  ephemeral_chunks schema (database/init.sql:73) — the real columns I must
+  insert into:
+
+  ┌─────────────────┬──────────────────┬──────────────────────────┐
+  │     column      │       type       │          notes           │
+  ├─────────────────┼──────────────────┼──────────────────────────┤
+  │ id              │ UUID             │ auto                     │
+  ├─────────────────┼──────────────────┼──────────────────────────┤
+  │ tenant_id       │ UUID NOT NULL    │ isolation gate (rule 3)  │
+  ├─────────────────┼──────────────────┼──────────────────────────┤
+  │ conversation_id │ UUID NOT NULL    │ chat scope               │
+  ├─────────────────┼──────────────────┼──────────────────────────┤
+  │ content         │ TEXT NOT NULL    │                          │
+  ├─────────────────┼──────────────────┼──────────────────────────┤
+  │ embedding       │ vector(1024)     │ Voyage voyage-4-large ✓  │
+  ├─────────────────┼──────────────────┼──────────────────────────┤
+  │ chunk_index     │ INTEGER NOT NULL │                          │
+  ├─────────────────┼──────────────────┼──────────────────────────┤
+  │ source_name     │ VARCHAR(500)     │ original filename        │
+  ├─────────────────┼──────────────────┼──────────────────────────┤
+  │ metadata        │ JSONB            │ → good home for used_ocr │
+  ├─────────────────┼──────────────────┼──────────────────────────┤
+  │ expires_at      │ TIMESTAMPTZ      │ default NOW() + 1 hour   │
+  ├─────────────────┼──────────────────┼──────────────────────────┤
+  │ created_at      │ TIMESTAMPTZ      │ auto                     │
+  └─────────────────┴──────────────────┴──────────────────────────┘
+
+  Note: there is no document_id, page_number, or token_count column here (those
+  exist on document_chunks, not ephemeral). Purge is
+  cleanup_expired_ephemeral_chunks() (init.sql:93), run by a cron outside our
+  scope.
+
+  Existing ingest-ephemeral.json is a 5-node skeleton: Webhook → Extract+Chunk
+  (stub) → Voyage embed → Store (stub) → respondToWebhook. It responds
+  synchronously and has no callback to FastAPI.
+
+  Conflicts I won't resolve by guessing (rule 1)
+
+  1. Sync response vs. async callback? The skeleton ends in respondToWebhook
+  (synchronous). But the M5 spec defines an async callback contract POST 
+  /webhooks/n8n/ingestion-status. These are different architectures. For
+  ephemeral chat/WhatsApp uploads, which one is real — respond inline, or fire
+  the callback (or both)?
+  2. What does the upstream caller actually POST to /ingest-ephemeral? I need
+  the exact webhook payload M4/M12 sends. I'd expect at least conversation_id,
+  tenant_id, source_name, and either the file bytes or a file_path/URL +
+  source_type. The skeleton assumes pre-chunked chunks[] and a ttl_seconds
+  field, which contradicts the "Extract + Chunk happens in n8n" design. Can you
+  point me to the producer, or tell me the payload shape?
+  3. Does ephemeral need the gpt-4o-mini vision OCR fallback for scanned/image
+  PDFs, or is OCR only for the forever ingestion-pipeline.json? (Rule 4 locks
+  the model; I just need to know if it's in M5-ephemeral's scope.)
+
+  Once you answer these three, I'll write the Phase 1 spec for
+  ingest-ephemeral.json and stop for your approval before any planning or JSON.
+  I won't start coding until we clear the spec phase.
+
+✻ Cogitated for 1m 15s
+
+❯ PHASE 1 — SPEC EXTRACTION.                                                    
+                                                                                
+  Read these files I've attached:                                               
+  - CLAUDE.md                                                                   
+  - ARCHITECTURE.md (esp. §2 "Two Upload Paths" and §6 "Webhook Contracts")     
+  - specs/MODULE_SPEC_M5.md                                                     
+  - database/init.sql  (look for `ephemeral_chunks` and                         
+    `cleanup_expired_ephemeral_chunks()`)                                       
+  - n8n-workflows/ingest-ephemeral.json (current skeleton)                      
+  - backend/app/core/config.py  (env var names)                                 
+  - backend/app/services/n8n_client.py  (caller signature)                      
+                                                                                
+  Produce a single Markdown document titled                                     
+  "M5 Ephemeral Ingestion — Locked Spec" containing:                            
+                                                                                
+  A. Inbound contract — exact JSON shape FastAPI sends to                       
+     POST /webhook/ingest-ephemeral, with field types and which are required.   
+  B. Outbound contract — exact JSON shape my workflow returns synchronously     
+     (success + failure).                                                       
+  C. DB write contract — every column of `ephemeral_chunks` I must populate,    
+     with types and how to compute each value.                                  
+  D. Constraints — file size cap, allowed source types, TTL default + max,      
+     tenant isolation rule, secret-handling rule.                               
+  E. Non-goals — what this workflow does NOT do (callbacks to FastAPI?          
+     document_chunks? quota? auth?).                                            
+  F. Open questions — anything ambiguous in the spec. List each as              
+     "QUESTION N: ... (I will ASSUME X unless told otherwise)".                 
+                                                                                
+  Do NOT design nodes yet. Do NOT write code yet. Just produce the spec.        
+
+  Searched for 1 pattern, read 3 files (ctrl+o to expand)
+
+⏺ I've now read all seven files. The decisive find: ARCHITECTURE.md §6 defines 
+  the ephemeral inbound contract, and it differs from the forever-ingest
+  contract (no source_type, no callback_token, no title). Also confirmed:
+  n8n_client.py implements ingest() and retrieve() only — there is no ephemeral 
+  caller function yet, so the code can't override the §6 contract; §6 is the
+  source of truth.
+
+  Here is the Phase 1 deliverable. I'm outputting it inline (writing a new .md
+  would breach the file-scope rule; tell me if you want it persisted to
+  docs/n8n-setup.md).
+
+  ---
+  M5 Ephemeral Ingestion — Locked Spec
+
+  Workflow file: n8n-workflows/ingest-ephemeral.json · Webhook path:
+  /webhook/ingest-ephemeral (per N8N_EPHEMERAL_INGEST_WEBHOOK_URL,
+  config.py:43).
+
+  A. Inbound contract — FastAPI → POST /webhook/ingest-ephemeral
+
+  Source of truth: ARCHITECTURE.md §6.
+
+  ┌─────────────────┬──────────┬──────────┬─────────────────────────────────┐
+  │      Field      │   Type   │ Required │              Notes              │
+  ├─────────────────┼──────────┼──────────┼─────────────────────────────────┤
+  │ conversation_id │ string   │ yes      │ chat scope; written to every    │
+  │                 │ (UUID)   │          │ row                             │
+  ├─────────────────┼──────────┼──────────┼─────────────────────────────────┤
+  │ tenant_id       │ string   │ yes      │ isolation gate (rule 3)         │
+  │                 │ (UUID)   │          │                                 │
+  ├─────────────────┼──────────┼──────────┼─────────────────────────────────┤
+  │                 │          │          │ server path, e.g.               │
+  │ file_path       │ string   │ yes      │ /tmp/whatsapp-xxx.pdf; file     │
+  │                 │          │          │ already saved by FastAPI        │
+  ├─────────────────┼──────────┼──────────┼─────────────────────────────────┤
+  │ source_name     │ string   │ yes      │ original filename, e.g.         │
+  │                 │ (≤500)   │          │ user-upload.pdf                 │
+  ├─────────────────┼──────────┼──────────┼─────────────────────────────────┤
+  │ ttl_seconds     │ integer  │ no       │ default 3600 (see §D)           │
+  └─────────────────┴──────────┴──────────┴─────────────────────────────────┘
+
+  Not present in this contract (unlike /webhook/ingest): document_id,
+  source_type, title, callback_token. → see QUESTION 1 (source_type) and
+  QUESTION 4 (auth).
+
+  B. Outbound contract — synchronous response (respondToWebhook)
+
+  Not defined in any source file → proposed shape, flagged in QUESTION 2.
+
+  Success (HTTP 200):
+  {
+    "status": "completed",
+    "conversation_id": "uuid",
+    "chunk_count": 12,
+    "used_ocr": false,
+    "expires_at": "2026-06-18T15:04:05Z"
+  }
+
+  Failure (HTTP 200 with error body, or 4xx/5xx — see QUESTION 2):
+  {
+    "status": "failed",
+    "conversation_id": "uuid",
+    "chunk_count": 0,
+    "error_message": "Unsupported file type: .xlsx"
+  }
+
+  Note: this path does not call /webhooks/n8n/ingestion-status — that callback
+  is keyed on document_id, which ephemeral has none (§E, QUESTION 3).
+
+  C. DB write contract — ephemeral_chunks (init.sql:73)
+
+  One row per chunk. Columns I populate:
+
+  ┌─────────────────┬───────────────┬───────────┬───────────────────────────┐
+  │     Column      │     Type      │ Populate? │      How to compute       │
+  ├─────────────────┼───────────────┼───────────┼───────────────────────────┤
+  │ id              │ UUID          │ no        │ DB default                │
+  │                 │               │           │ gen_random_uuid()         │
+  ├─────────────────┼───────────────┼───────────┼───────────────────────────┤
+  │ tenant_id       │ UUID NOT NULL │ yes       │ from payload — every      │
+  │                 │               │           │ INSERT (rule 3)           │
+  ├─────────────────┼───────────────┼───────────┼───────────────────────────┤
+  │ conversation_id │ UUID NOT NULL │ yes       │ from payload              │
+  ├─────────────────┼───────────────┼───────────┼───────────────────────────┤
+  │ content         │ TEXT NOT NULL │ yes       │ chunk text from chunker   │
+  ├─────────────────┼───────────────┼───────────┼───────────────────────────┤
+  │ embedding       │ vector(1024)  │ yes       │ Voyage voyage-4-large     │
+  │                 │               │           │ output, cast ::vector     │
+  ├─────────────────┼───────────────┼───────────┼───────────────────────────┤
+  │ chunk_index     │ INT NOT NULL  │ yes       │ 0-based index from        │
+  │                 │               │           │ chunker                   │
+  ├─────────────────┼───────────────┼───────────┼───────────────────────────┤
+  │ source_name     │ VARCHAR(500)  │ yes       │ from payload              │
+  ├─────────────────┼───────────────┼───────────┼───────────────────────────┤
+  │                 │               │           │ { "used_ocr": <bool>,     │
+  │ metadata        │ JSONB         │ optional  │ "page_number": <int|null> │
+  │                 │               │           │  }; default {}            │
+  ├─────────────────┼───────────────┼───────────┼───────────────────────────┤
+  │                 │ TIMESTAMPTZ   │           │ NOW() + (ttl_seconds) *   │
+  │ expires_at      │ NOT NULL      │ yes       │ INTERVAL '1 second'       │
+  │                 │               │           │ (default 3600)            │
+  ├─────────────────┼───────────────┼───────────┼───────────────────────────┤
+  │ created_at      │ TIMESTAMPTZ   │ no        │ DB default NOW()          │
+  └─────────────────┴───────────────┴───────────┴───────────────────────────┘
+
+  D. Constraints
+
+  - File size cap: 10 MB (MAX_WHATSAPP_UPLOAD_BYTES = 10_485_760, config.py:78).
+  FastAPI validates pre-call; n8n re-checks defensively (QUESTION 5).
+  - Allowed source types: the subset of ALLOWED_MIME_TYPES (config.py:82)
+  reachable on the chat path — PDF, DOCX, TXT, PNG, JPEG. No URL source
+  (ephemeral payload carries file_path only, not a URL). PNG/JPEG require OCR to
+  yield text (QUESTION 6).
+  - TTL: default 3600s; clamp to [60, 3600] (QUESTION 7).
+  - Tenant isolation: tenant_id non-negotiable on every INSERT; no
+  cross-conversation reads. Embeddings stay scoped to conversation_id.
+  - Secrets: Voyage / OpenAI keys live only in n8n credentials (VoyageAuth,
+  OpenAIAuth header-auth creds). Never inlined in node JSON, never logged, never
+  in the response body. Placeholders only in docs.
+
+  E. Non-goals — this workflow does NOT
+
+  - Call POST /webhooks/n8n/ingestion-status (that contract is
+  document_id-keyed; ephemeral is synchronous-response only).
+  - Write to document_chunks or any persistent table.
+  - Enforce or update tenant quota (ARCHITECTURE.md §2: ephemeral "Counts toward
+  quota: No").
+  - Authenticate the caller / validate JWT or Twilio signature (done upstream in
+  FastAPI before the webhook fires — but see QUESTION 4).
+  - Purge expired rows (that's the hourly cleanup_expired_ephemeral_chunks()
+  cron, init.sql:93 — out of scope).
+  - Persist a documents row or any document-registry record.
+
+  F. Open questions
+
+  - QUESTION 1 — source_type derivation. The inbound contract has no
+  source_type. I will ASSUME the workflow infers type from the
+  file_path/source_name extension (.pdf/.docx/.txt/.png/.jpg/.jpeg) unless told
+  otherwise.
+  - QUESTION 2 — response shape & error HTTP code. No outbound shape is defined
+  in any file. I will ASSUME the shape in §B, always returned as HTTP 200
+  (status field signals success/failure) so Twilio/M4 can parse uniformly,
+  unless you want non-2xx on failure.
+  - QUESTION 3 — no FastAPI callback. I will ASSUME ephemeral never calls
+  /webhooks/n8n/ingestion-status and reports purely via the synchronous
+  response.
+  - QUESTION 4 — webhook auth. The §6 ephemeral payload carries no
+  callback_token/secret, unlike /webhook/ingest. I will ASSUME the webhook is
+  unauthenticated and trusts the upstream FastAPI gateway (network-internal)
+  unless you want a shared-secret header added.
+  - QUESTION 5 — size re-check in n8n. I will ASSUME n8n re-validates ≤10 MB
+  defensively and returns status:"failed" if exceeded, rather than trusting
+  FastAPI alone.
+  - QUESTION 6 — OCR scope for images/scanned PDFs. ARCHITECTURE.md §4 says
+  ephemeral is "same as ingestion," and PNG/JPEG are allowed types that yield no
+  text without OCR. I will ASSUME OCR via OpenAI gpt-4o-mini vision (rule 4) is
+  in scope for images and text-less PDF pages, with metadata.used_ocr = true.
+  - QUESTION 7 — TTL bounds. Default 3600 is clear; max is unspecified. I will 
+  ASSUME clamp to [60, 3600] (the platform is described everywhere as "1-hour
+  TTL"), rejecting nothing — just clamping — unless you want a different
+  ceiling.
+
+  ---
+  Phase 1 is complete. I'll stop here and wait for your approval / answers to 
+  the QUESTIONs before moving to Phase 2 (node design / plan). I won't design
+  nodes or write JSON yet.
+
+✻ Cogitated for 5m 25s
+
+※ recap: Building M5 ephemeral ingestion workflow for the RAG platform, following spec-driven phases. Phase 1 spec is done and shared. Next: you answer the 7 open questions (source_type, response shape, OCR scope, TTL bounds, auth) so I can start Phase 2 node design. (disable recaps in /config)
+
+❯ Produce a numbered list of test cases I will run against the deployed         
+  workflow with `curl`. For each case give:                                     
+  - Name                                                                        
+  - curl command (use placeholders for tenant_id/conversation_id/file_path)     
+  - Expected HTTP status                                                        
+  - Expected JSON response body shape                                           
+  - Expected SQL row(s) in `ephemeral_chunks` (or zero rows for failure cases)  
+                                                                                
+  Cover at minimum:                                                             
+  1. Happy path — 2-page text PDF.                                              
+  2. Happy path — scanned PDF (forces OCR branch, expect                        
+     metadata.used_ocr=true).                                                   
+  3. File > 10 MB → 422.                                                        
+  4. Missing `tenant_id` → 422.                                                 
+  5. Non-existent file_path → 5xx with `{status:"failed", error:...}`.          
+  6. TTL respected — expires_at = now + ttl_seconds (±5s).                      
+  7. Tenant isolation — two different tenant_ids land in distinct rows;         
+     neither row leaks into the other tenant's SELECT.                          
+  8. Cleanup — after manually setting expires_at to past + running              
+     `SELECT cleanup_expired_ephemeral_chunks()`, rows are gone.                
+                                                                                
+  Do NOT write the workflow JSON yet.                                           
+
+⏺ Before the list — two notes, then the cases.
+
+  Ordering: we haven't done Phase 2 (node design / plan) yet; you've moved spec
+  → tests. That's a fine order (acceptance tests from the spec don't need the
+  internal node plan), so I won't block — just flagging once per rule 8 that the
+  node plan is still owed before implementation.
+
+  Your expected statuses resolve two open questions and override my §B 
+  assumption: I had assumed failures return HTTP 200 with a status field. Cases
+  3–5 show you want real HTTP failure codes — 422 for validation, 5xx for 
+  runtime — and the failure key is error (my spec said error_message). I've
+  aligned the cases below to what you wrote. This means the workflow needs an
+  explicit validation node that can emit 422 (n8n's webhook does not validate
+  the body on its own). I'll fold that into the Phase 2 plan.
+
+  Reusable setup (placeholders):
+  N8N_BASE="https://<your-n8n-host>"
+  URL="$N8N_BASE/webhook/ingest-ephemeral"
+  TENANT_A="<tenant_id_A>"
+  TENANT_B="<tenant_id_B>"
+  CONV="<conversation_id>"
+  # psql against Neon:
+  PSQL="psql '<DATABASE_URL>' -t -A"
+
+  ---
+  M5 Ephemeral Ingestion — Acceptance Test Cases (curl)
+
+  1. Happy path — 2-page text PDF
+
+  curl -sS -w "\n%{http_code}\n" -X POST "$URL" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "conversation_id": "'"$CONV"'",
+      "tenant_id": "'"$TENANT_A"'",
+      "file_path": "<file_path:/tmp/two-page-text.pdf>",
+      "source_name": "two-page-text.pdf",
+      "ttl_seconds": 3600
+    }'
+  - HTTP: 200
+  - Body shape:
+  { "status": "completed", "conversation_id": "<uuid>", "chunk_count": <int ≥
+  1>, "used_ocr": false, "expires_at": "<ISO8601>" }
+  - SQL: chunk_count rows for (tenant_id=A, conversation_id=CONV); each row has
+  non-null embedding, vector_dims(embedding)=1024, chunk_index contiguous
+  0..N-1, metadata->>'used_ocr' = 'false', source_name='two-page-text.pdf'.
+  SELECT count(*), min(chunk_index), max(chunk_index),
+  bool_and(vector_dims(embedding)=1024)
+  FROM ephemeral_chunks WHERE tenant_id='<A>' AND conversation_id='<CONV>';
+
+  2. Happy path — scanned PDF (OCR branch)
+
+  curl -sS -w "\n%{http_code}\n" -X POST "$URL" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "conversation_id": "'"$CONV"'",
+      "tenant_id": "'"$TENANT_A"'",
+      "file_path": "<file_path:/tmp/scanned.pdf>",
+      "source_name": "scanned.pdf"
+    }'
+  - HTTP: 200
+  - Body shape: { "status": "completed", "conversation_id": "<uuid>", 
+  "chunk_count": <int ≥ 1>, "used_ocr": true, "expires_at": "<ISO8601>" }
+  - SQL: ≥1 row; every row metadata->>'used_ocr' = 'true'; content non-empty
+  (OCR text present).
+  SELECT bool_and(metadata->>'used_ocr'='true'), bool_and(length(content)>0)
+  FROM ephemeral_chunks WHERE tenant_id='<A>' AND conversation_id='<CONV>';
+
+  3. File > 10 MB → 422
+
+  curl -sS -w "\n%{http_code}\n" -X POST "$URL" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "conversation_id": "'"$CONV"'",
+      "tenant_id": "'"$TENANT_A"'",
+      "file_path": "<file_path:/tmp/big-12mb.pdf>",
+      "source_name": "big-12mb.pdf"
+    }'
+  - HTTP: 422
+  - Body shape: { "status": "failed", "error": "<size-related message, e.g. 
+  'File exceeds 10 MB limit'>" }
+  - SQL: 0 rows inserted for this conversation_id.
+  SELECT count(*) FROM ephemeral_chunks WHERE conversation_id='<CONV>';  -- 
+  expect 0
+
+  4. Missing tenant_id → 422
+
+  curl -sS -w "\n%{http_code}\n" -X POST "$URL" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "conversation_id": "'"$CONV"'",
+      "file_path": "<file_path:/tmp/two-page-text.pdf>",
+      "source_name": "two-page-text.pdf"
+    }'
+  - HTTP: 422
+  - Body shape: { "status": "failed", "error": "<'tenant_id is required'>" }
+  - SQL: 0 rows (validation must fail-closed before any INSERT — tenant
+  isolation gate, rule 3).
+  SELECT count(*) FROM ephemeral_chunks WHERE conversation_id='<CONV>';  -- 
+  expect 0
+
+  5. Non-existent file_path → 5xx
+
+  curl -sS -w "\n%{http_code}\n" -X POST "$URL" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "conversation_id": "'"$CONV"'",
+      "tenant_id": "'"$TENANT_A"'",
+      "file_path": "<file_path:/tmp/does-not-exist.pdf>",
+      "source_name": "does-not-exist.pdf"
+    }'
+  - HTTP: 5xx (e.g. 500)
+  - Body shape: { "status": "failed", "error": "<'file not found' / read error>"
+  }
+  - SQL: 0 rows.
+  SELECT count(*) FROM ephemeral_chunks WHERE conversation_id='<CONV>';  -- 
+  expect 0
+
+  6. TTL respected — expires_at ≈ now + ttl_seconds (±5s)
+
+  curl -sS -w "\n%{http_code}\n" -X POST "$URL" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "conversation_id": "'"$CONV"'",
+      "tenant_id": "'"$TENANT_A"'",
+      "file_path": "<file_path:/tmp/two-page-text.pdf>",
+      "source_name": "two-page-text.pdf",
+      "ttl_seconds": 600
+    }'
+  - HTTP: 200; body as case 1, with expires_at ≈ now + 600s.
+  - SQL: for all rows, expires_at - created_at within 600s ± 5s.
+  SELECT bool_and(abs(extract(epoch FROM (expires_at - created_at)) - 600) <= 5)
+  FROM ephemeral_chunks WHERE tenant_id='<A>' AND conversation_id='<CONV>';  -- 
+  expect t
+
+  7. Tenant isolation — distinct rows, no cross-tenant leak
+
+  # Tenant A
+  curl -sS -X POST "$URL" -H "Content-Type: application/json" \
+    -d '{"conversation_id":"<CONV_A>","tenant_id":"'"$TENANT_A"'","file_path":"<
+  file_path:/tmp/two-page-text.pdf>","source_name":"a.pdf"}'
+  # Tenant B (different tenant + conversation, same file content)
+  curl -sS -X POST "$URL" -H "Content-Type: application/json" \
+    -d '{"conversation_id":"<CONV_B>","tenant_id":"'"$TENANT_B"'","file_path":"<
+  file_path:/tmp/two-page-text.pdf>","source_name":"b.pdf"}'
+  - HTTP: 200 for both.
+  - Body shape: each { "status":"completed", "conversation_id":"<its own>", ... 
+  }.
+  - SQL: A's rows carry tenant_id=A only; B's carry tenant_id=B only; neither
+  appears in the other's tenant-scoped SELECT.
+  -- A's scoped read returns only A's rows, zero of B's:
+  SELECT count(*) FILTER (WHERE tenant_id='<B>') AS leaked_into_A
+  FROM ephemeral_chunks WHERE tenant_id='<A>';        -- expect 0
+  SELECT count(DISTINCT tenant_id) FROM ephemeral_chunks
+  WHERE conversation_id IN ('<CONV_A>','<CONV_B>');   -- expect 2, never merged
+
+  8. Cleanup — expired rows purged by cleanup_expired_ephemeral_chunks()
+
+  # (no curl — DB-only test, run after case 1 has inserted rows)
+  psql '<DATABASE_URL>' <<'SQL'
+  -- Force the rows expired
+  UPDATE ephemeral_chunks SET expires_at = NOW() - INTERVAL '1 minute'
+  WHERE conversation_id = '<CONV>';
+  -- Run the purge (returns count deleted)
+  SELECT cleanup_expired_ephemeral_chunks();          -- expect ≥ chunk_count
+  -- Confirm gone
+  SELECT count(*) FROM ephemeral_chunks WHERE conversation_id = '<CONV>';  --
+  expect 0
+  SQL
+  - Expected: cleanup_expired_ephemeral_chunks() returns the number of deleted
+  rows (≥ the chunk_count from case 1); follow-up count(*) is 0. Non-expired
+  rows from other conversations remain untouched.
+
+  ---
+  One residual flag for your sign-off: cases 1, 2, 6 assume a per-row created_at
+  baseline for the TTL check, which the schema provides (init.sql:83). Tell me
+  whether 422-on-missing-field and 422-on-oversize are the final contract — if
+  so I'll lock QUESTION 2/5 to "non-2xx on failure, body key error" in the spec.
+  Still holding at the tests phase; no workflow JSON until you approve.
+
+✻ Cooked for 1m 8s
+
+❯ PHASE 4a — IMPLEMENT THE "Validate" Function node.                            
+                                                                                
+  Per the Phase 2 design, write the complete JavaScript body for the            
+  `Validate` Function node. Requirements:                                       
+                                                                                
+  - Read `conversation_id`, `tenant_id`, `file_path`, `source_name`,            
+    `ttl_seconds` from $json (handle both $json and $json.body shapes — n8n     
+    varies).                                                                    
+  - Reject (throw new Error) on:                                                
+     * missing required field                                                   
+     * file_path not under /tmp or /uploads (path-traversal guard)              
+     * file > 10 MB (use fs.statSync)                                           
+     * ttl_seconds < 60 or > 86400                                              
+  - On success, return a single item:                                           
+     { conversation_id, tenant_id, file_path, source_name,                      
+       ttl_seconds: <number, default 3600> }                                    
+                                                                                
+  Output ONLY the JS code block, no explanation. I will paste it directly       
+  into the node.                                                                
+
+⏺ // n8n Function node: "Validate"
+  // Fail-closed gateway for ephemeral ingestion. Runs before any 
+  extract/embed/INSERT.
+  const fs = require('fs');
+  const path = require('path');
+
+  // n8n varies: payload may be at $json or $json.body
+  const src = ($json && $json.body) ? $json.body : $json;
+
+  const conversation_id = src.conversation_id;
+  const tenant_id       = src.tenant_id;
+  const file_path       = src.file_path;
+  const source_name     = src.source_name;
+  const rawTtl          = src.ttl_seconds;
+
+  // 1. Required fields (tenant_id is the isolation gate — never proceed without
+  it)
+  const required = { conversation_id, tenant_id, file_path, source_name };
+  for (const [key, val] of Object.entries(required)) {
+    if (val === undefined || val === null || (typeof val === 'string' &&
+  val.trim() === '')) {
+      throw new Error(`Missing required field: ${key}`);
+    }
+  }
+
+  // 2. Path-traversal guard — resolved path must live under /tmp or /uploads
+  const resolved = path.resolve(String(file_path));
+  const allowedRoots = ['/tmp/', '/uploads/'];
+  const underAllowedRoot = allowedRoots.some(root => resolved.startsWith(root));
+  if (!underAllowedRoot) {
+    throw new Error(`file_path outside allowed roots (/tmp, /uploads): 
+  ${resolved}`);
+  }
+
+  // 3. Size cap — 10 MB (MAX_WHATSAPP_UPLOAD_BYTES). statSync also surfaces 
+  missing files.
+  const MAX_BYTES = 10 * 1024 * 1024; // 10485760
+  let stat;
+  try {
+    stat = fs.statSync(resolved);
+  } catch (e) {
+    throw new Error(`Cannot stat file_path: ${resolved} (${e.message})`);
+  }
+  if (!stat.isFile()) {
+    throw new Error(`file_path is not a regular file: ${resolved}`);
+  }
+  if (stat.size > MAX_BYTES) {
+    throw new Error(`File exceeds 10 MB limit: ${stat.size} bytes`);
+  }
+
+  // 4. TTL bounds — default 3600; if provided must be an integer in [60, 86400]
+  let ttl_seconds = 3600;
+  if (rawTtl !== undefined && rawTtl !== null && rawTtl !== '') {
+    const n = Number(rawTtl);
+    if (!Number.isFinite(n) || !Number.isInteger(n)) {
+      throw new Error(`ttl_seconds must be an integer: ${rawTtl}`);
+    }
+    if (n < 60 || n > 86400) {
+      throw new Error(`ttl_seconds out of range [60, 86400]: ${n}`);
+    }
+    ttl_seconds = n;
+  }
+
+  return [{
+    json: {
+      conversation_id: String(conversation_id),
+      tenant_id: String(tenant_id),
+      file_path: resolved,
+      source_name: String(source_name),
+      ttl_seconds,
+    },
+  }];
+
+✻ Cooked for 23s
+
+❯ PHASE 5 — FULL WORKFLOW JSON.                                                 
+                                                                                
+  Assemble the complete `n8n-workflows/ingest-ephemeral.json`, using:           
+  - the node graph from Phase 2                                                 
+  - the node code from each Phase 4 step                                        
+  - the existing skeleton in ingest-ephemeral.json as the structural baseline   
+    (preserve `name`, `tags`, `active:false`, `settings.executionOrder:"v1"`)   
+                                                                                
+  Rules:                                                                        
+  - Output ONE complete JSON document, ready to paste into n8n's                
+    "Import from clipboard".                                                    
+  - Use credential REFERENCES only (e.g. `"credentials": {"httpHeaderAuth":     
+    {"id": "REPLACE_ME", "name": "VoyageAuth"}}`). Never inline secrets.        
+  - Keep node `id`s stable where possible (re-use `wh-ephemeral`,               
+    `extract-chunk`, etc., from the skeleton when meaning matches).             
+  - After the JSON, list every credential I need to create in n8n and the       
+    exact env var that feeds it.                                                
+  - After that, list the file path I should save it to:                         
+    `n8n-workflows/ingest-ephemeral.json`.                                      
+
+⏺ Pushing back once here, as rule 8 requires — then I'll do whatever you decide.
+
+  The problem: this Phase 5 asks me to assemble from "the Phase 2 node graph"
+  and "the node code from each Phase 4 step," but in this conversation those
+  artifacts don't exist yet. Here's the actual inventory of what we've locked:
+
+  ┌───────┬─────────────────────────────────────┬───────────────────────────┐
+  │ Phase │              Artifact               │          Status           │
+  ├───────┼─────────────────────────────────────┼───────────────────────────┤
+  │       │                                     │ ✅ done (7 open           │
+  │ 1     │ Locked spec (contracts A–F)         │ questions, mostly         │
+  │       │                                     │ resolved by your test     │
+  │       │                                     │ statuses)                 │
+  ├───────┼─────────────────────────────────────┼───────────────────────────┤
+  │       │                                     │ ❌ never produced — I     │
+  │ 2     │ Node graph / design                 │ flagged it as "still      │
+  │       │                                     │ owed" twice               │
+  ├───────┼─────────────────────────────────────┼───────────────────────────┤
+  │ 3     │ Acceptance test cases               │ ✅ done                   │
+  ├───────┼─────────────────────────────────────┼───────────────────────────┤
+  │ 4a    │ Validate Function node JS           │ ✅ done                   │
+  ├───────┼─────────────────────────────────────┼───────────────────────────┤
+  │       │ Extract+OCR, Chunk, Voyage-embed    │                           │
+  │ 4b…   │ config, Store/INSERT Postgres node, │ ❌ never produced         │
+  │       │  error branch, Respond shaping      │                           │
+  └───────┴─────────────────────────────────────┴───────────────────────────┘
+
+  If I assemble the full JSON right now, I'd have to invent the pieces we never
+  designed or wrote:
+
+  - the source_type switch + extension inference (QUESTION 1)
+  - the Extract + OCR node — the gpt-4o-mini vision branch, used_ocr flagging
+  (QUESTION 6)
+  - the Chunk code (512/50)
+  - the exact Voyage embed request→row zipping
+  - the Store node — Postgres INSERT INTO ephemeral_chunks(...) with the
+  tenant_id gate and expires_at = NOW() + ttl * INTERVAL '1 second'
+  - the error branch → {status:"failed", error} with 422 vs 5xx routing (which
+  the Validate throws feed into)
+  - the Respond success body from §B
+
+  That's the bulk of the workflow, and inventing it silently would violate rule
+  1 (no invented schema/shapes) and the spec-driven gate in rule 8.
+
+  Two clean ways forward — your call:
+
+  1. Do it properly: I produce the Phase 2 node graph for your approval, then
+  the Phase 4b–4x node code, then assemble Phase 5 from approved pieces.
+  (Recommended — it's how the rest of M5 was built.)
+  2. Proceed now with explicit assumptions: I assemble the full JSON in one
+  shot, but every node we never designed gets built from my best reading of the
+  spec and each assumption flagged inline in a list after the JSON. Faster, but
+  you're reviewing invented internals rather than approved ones.
+
+  Which do you want? If you say "proceed," I'll take option 2 and mark every
+  assumption — I won't pretend the missing phases happened.
+
+✻ Churned for 26s
+
+※ recap: We're building M5's ephemeral ingestion n8n workflow, spec-driven. I'm blocked at Phase 5 (full JSON) because Phase 2 design and Phase 4b+ node code were never produced. Next: you decide whether I build those properly first or assemble now with flagged assumptions. (disable recaps in /config)
+
+❯ Option 1. Run Phase 2 now. Use the locked spec from Phase 1, the test         
+  plan from Phase 3, and the Validate node from Phase 4a as fixed               
+  constraints. Wait for my approval before Phase 4b.                            
+
+⏺ Phase 2 — ingest-ephemeral.json Node Design
+
+  Designed to satisfy the Phase 1 locked spec, pass all 8 Phase 3 tests, and
+  consume the Phase 4a Validate node unchanged. Design only — no JSON, no node
+  code beyond Validate.
+
+  1. Locked design decisions (with rationale)
+
+  #: D1
+  Decision: Single synchronous Respond to Webhook per run; responseMode: 
+    responseNode on the Webhook (matches skeleton).
+  Why: §B / QUESTION 3 — no FastAPI callback.
+  ────────────────────────────────────────
+  #: D2
+  Decision: All error branches converge on one Classify Error → one Respond 
+    Error.
+  Why: Centralizes the 422-vs-5xx decision; keeps exactly one Respond node
+    reachable per run.
+  ────────────────────────────────────────
+  #: D3
+  Decision: Status code is computed, not hard-coded. Classify Error maps
+    error→{statusCode, error}.
+  Why: Resolves the Phase 4a ↔ test-case-5 conflict (see §4).
+  ────────────────────────────────────────
+  #: D4
+  Decision: Embed in ONE Voyage call per document (input = array of chunk
+  texts),
+     then explode to N row-items.
+  Why: Fewer API calls; alignment is index-based. Matches the skeleton's
+    chunks.map(c=>c.content) shape. Risk noted in §6.
+  ────────────────────────────────────────
+  #: D5
+  Decision: Type inferred from extension in a Detect Type node that throws on
+    unsupported.
+  Why: QUESTION 1; unsupported → 422 via D2/D3.
+  ────────────────────────────────────────
+  #: D6
+  Decision: OCR is conditional: images always OCR; PDFs OCR only when text
+    extraction is empty (scanned). metadata.used_ocr set accordingly.
+  Why: QUESTION 6; lets case 1 (text PDF) report used_ocr:false and case 2
+    (scanned) report true.
+
+  2. Node inventory
+
+  id: wh-ephemeral
+  name: Webhook /ingest-ephemeral
+  type: webhook
+  responsibility: receive POST, responseNode mode
+  onError: —
+  ────────────────────────────────────────
+  id: validate
+  name: Validate
+  type: function
+  responsibility: Phase 4a (fixed) — required fields, path guard, ≤10 MB, ttl
+    bounds
+  onError: → error output
+  ────────────────────────────────────────
+  id: detect-type
+  name: Detect Type
+  type: function
+  responsibility: infer source_type from ext; throw "Unsupported file type"
+    otherwise
+  onError: → error output
+  ────────────────────────────────────────
+  id: route-type
+  name: Route by Type
+  type: switch
+  responsibility: 4 outputs: pdf / docx / txt / image
+  onError: —
+  ────────────────────────────────────────
+  id: extract-pdf
+  name: Extract PDF
+  type: function
+  responsibility: pdf-parse → text + page_count, used_ocr:false
+  onError: → error output
+  ────────────────────────────────────────
+  id: pdf-has-text
+  name: PDF has text?
+  type: if
+  responsibility: text length > threshold?
+  onError: —
+  ────────────────────────────────────────
+  id: ocr-pdf
+  name: OCR PDF (vision)
+  type: httpRequest
+  responsibility: gpt-4o-mini vision per page → text, used_ocr:true
+  onError: → error output
+  ────────────────────────────────────────
+  id: extract-docx
+  name: Extract DOCX
+  type: function
+  responsibility: docx → text, used_ocr:false
+  onError: → error output
+  ────────────────────────────────────────
+  id: read-txt
+  name: Read TXT
+  type: function
+  responsibility: read file → text, used_ocr:false
+  onError: → error output
+  ────────────────────────────────────────
+  id: ocr-image
+  name: OCR Image (vision)
+  type: httpRequest
+  responsibility: gpt-4o-mini vision → text, used_ocr:true
+  onError: → error output
+  ────────────────────────────────────────
+  id: normalize
+  name: Normalize Text
+  type: function
+  responsibility: merge branches → {text, used_ocr, page_count, +passthrough}
+  onError: —
+  ────────────────────────────────────────
+  id: chunk
+  name: Chunk
+  type: function
+  responsibility: 512-tok / 50-overlap →
+    {chunks:[{content,chunk_index,page_number}], ...passthrough}
+  onError: → error output
+  ────────────────────────────────────────
+  id: embed
+  name: Voyage embed
+  type: httpRequest
+  responsibility: one call, voyage-4-large, input_type:document, cred VoyageAuth
+  onError: → error output
+  ────────────────────────────────────────
+  id: zip
+  name: Zip Rows
+  type: function
+  responsibility: align embeddings[i]→chunks[i]; explode to N row items carrying
+
+    tenant_id, conversation_id, source_name, metadata.used_ocr, ttl_seconds
+  onError: → error output
+  ────────────────────────────────────────
+  id: store
+  name: Store ephemeral
+  type: postgres
+  responsibility: per-item INSERT INTO ephemeral_chunks(...), expires_at = NOW()
+   
+    + ttl*INTERVAL '1 second', embedding::vector, cred ragPostgres;  RETURNING 
+    expires_at
+  onError: → error output
+  ────────────────────────────────────────
+  id: aggregate
+  name: Aggregate Result
+  type: function/aggregate
+  responsibility: collapse N items → {chunk_count, expires_at, used_ocr, 
+    conversation_id}
+  onError: —
+  ────────────────────────────────────────
+  id: build-success
+  name: Build Success
+  type: function
+  responsibility: §B body {status:"completed", conversation_id, chunk_count, 
+    used_ocr, expires_at}
+  onError: —
+  ────────────────────────────────────────
+  id: respond
+  name: Respond Success
+  type: respondToWebhook
+  responsibility: code 200, body from build-success
+  onError: —
+  ────────────────────────────────────────
+  id: classify-error
+  name: Classify Error
+  type: function
+  responsibility: map error→{statusCode:422|500, error}
+  onError: —
+  ────────────────────────────────────────
+  id: respond-error
+  name: Respond Error
+  type: respondToWebhook
+  responsibility: responseCode = statusCode, body {status:"failed", error}
+  onError: —
+
+  Reused skeleton ids: wh-ephemeral, embed, store, respond. The skeleton's
+  combined extract-chunk stub is split into the extract/chunk nodes above.
+
+  3. Connection graph
+
+  [wh-ephemeral]
+       │
+       ▼
+  [validate] ──err──┐
+       │            │
+       ▼            │
+  [detect-type]─err─┤
+       │            │
+       ▼            │
+  [route-type]      │
+    ├─pdf→ [extract-pdf]─err─┤
+    │         │              │
+    │         ▼              │
+    │     [pdf-has-text]     │
+    │       ├─yes→──────────────┐
+    │       └─no → [ocr-pdf]─err─┤  │
+    │                  │         │  │
+    ├─docx→[extract-docx]─err────┤  │
+    ├─txt →[read-txt]────err─────┤  │
+    └─img →[ocr-image]───err─────┤  │
+                                 │  │
+          all extract outputs ───┼──┴──▶ [normalize]
+                                 │            │
+                                 │            ▼
+                                 │        [chunk]─err─┐
+                                 │            │       │
+                                 │            ▼       │
+                                 │        [embed]─err─┤
+                                 │            │       │
+                                 │            ▼       │
+                                 │        [zip]──err──┤
+                                 │            │       │
+                                 │            ▼       │
+                                 │        [store]─err─┤
+                                 │            │       │
+                                 │            ▼       │
+                                 │        [aggregate] │
+                                 │            │       │
+                                 │            ▼       │
+                                 │      [build-success]
+                                 │            │       │
+                                 │            ▼       │
+                                 │        [respond] (200)
+                                 │                    │
+     all ──err── outputs ────────┴───────▶ [classify-error]
+                                                │
+                                                ▼
+                                         [respond-error] (422 | 5xx)
+
+  4. Status-code contract (the Phase 4a ↔ test-5 reconciliation)
+
+  Classify Error reads the incoming error message and decides:
+
+  ┌───────────────────────────────────────────┬──────────────────────┬──────┐
+  │                  Trigger                  │     Source node      │ Code │
+  ├───────────────────────────────────────────┼──────────────────────┼──────┤
+  │ missing required field, path-traversal,   │ validate             │ 422  │
+  │ oversize, ttl out of range                │                      │      │
+  ├───────────────────────────────────────────┼──────────────────────┼──────┤
+  │ unsupported file type                     │ detect-type          │ 422  │
+  ├───────────────────────────────────────────┼──────────────────────┼──────┤
+  │ file not found / stat failure             │ validate             │ 500  │
+  │                                           │ (fs.statSync throw)  │      │
+  ├───────────────────────────────────────────┼──────────────────────┼──────┤
+  │ extract / OCR / embed / DB failure        │ runtime nodes        │ 500  │
+  └───────────────────────────────────────────┴──────────────────────┴──────┘
+
+  This is how case 4 (missing tenant_id) → 422 and case 5 (non-existent
+  file_path) → 5xx both hold, even though both originate as throws inside the
+  same fixed Validate node — the classifier distinguishes by message. This is 
+  the one place the design leans on error-message matching; I'll make the
+  Validate messages stable strings in Phase 4b so the classifier is
+  deterministic (the Phase 4a code already uses distinct prefixes: Missing 
+  required field, file_path outside allowed roots, File exceeds 10 MB,
+  ttl_seconds … vs Cannot stat file_path / is not a regular file).
+
+  5. Test-coverage map
+
+  ┌────────────────┬────────────────────────────────────────────────────────┐
+  │      Test      │                      Satisfied by                      │
+  ├────────────────┼────────────────────────────────────────────────────────┤
+  │ 1 text PDF     │ route→extract-pdf→has-text:yes→…→store; used_ocr:false │
+  ├────────────────┼────────────────────────────────────────────────────────┤
+  │ 2 scanned PDF  │ route→extract-pdf→has-text:no→ocr-pdf; used_ocr:true   │
+  ├────────────────┼────────────────────────────────────────────────────────┤
+  │ 3 >10 MB       │ validate throw → classify 422                          │
+  ├────────────────┼────────────────────────────────────────────────────────┤
+  │ 4 missing      │ validate throw → classify 422                          │
+  │ tenant_id      │                                                        │
+  ├────────────────┼────────────────────────────────────────────────────────┤
+  │ 5 missing file │ validate statSync throw → classify 500                 │
+  ├────────────────┼────────────────────────────────────────────────────────┤
+  │ 6 TTL          │ store expires_at = NOW()+ttl*INTERVAL '1 second'       │
+  ├────────────────┼────────────────────────────────────────────────────────┤
+  │ 7 isolation    │ zip writes tenant_id on every row; store INSERT        │
+  │                │ includes it (rule 3)                                   │
+  ├────────────────┼────────────────────────────────────────────────────────┤
+  │ 8 cleanup      │ external cron — design only ensures correct            │
+  │                │ expires_at; no node needed                             │
+  └────────────────┴────────────────────────────────────────────────────────┘
+
+  6. Open design risks — need your ruling before Phase 4b
+
+  - R1 — PDF→image for OCR. ocr-pdf needs page images to send to gpt-4o-mini
+  vision. n8n has no built-in PDF rasterizer. Options: (a) require a
+  pdftoppm/ImageMagick binary in the n8n image (infra dependency on M7), (b)
+  send the raw PDF bytes and rely on the model, (c) scope ephemeral OCR to 
+  images only and treat scanned PDFs as "no text → failed". I lean (c) for the 
+  academic build (simplest, no infra change) — but it weakens test case 2. Your
+  call.
+  - R2 — single Voyage batch (D4). One call sends all chunk texts. A 10 MB doc
+  can exceed Voyage's per-request token/array cap. Assume single batch for now;
+  add batching only if a test doc trips the limit. OK?
+  - R3 — unsupported type = 422. Confirm detect-type throwing for non-allowed
+  extensions should surface as 422 (client error), not 5xx.
+  - R4 — Postgres node mode. Per-item parameterized INSERT (N executions) vs one
+  Code-built multi-row INSERT. I lean per-item (simpler, safe ::vector
+  binding). OK?
+
+  ---
+  Phase 2 design is on the table. Holding for your approval — and specifically
+  your ruling on R1–R4 — before I write any Phase 4b node code.
+
+✻ Sautéed for 5m 54s
+
+❯ Confirmed. Lock the failure contract in the Phase 1 spec:                     
+                                                                                
+  - Validation failures (missing field, bad type, oversize, path                
+    outside allowed roots, ttl out of range) → HTTP 422.                        
+  - Runtime failures (file read error, OCR failure, Voyage API error,           
+    Postgres error) → HTTP 5xx.                                                 
+  - Failure response body shape (both cases):                                   
+      { "status": "failed", "error": "<human-readable message>" }               
+  - Success response body shape:                                                
+      {                                                                         
+        "status": "completed",                                                  
+        "conversation_id": "<uuid>",                                            
+        "chunk_count": <int>,                                                   
+        "used_ocr": <bool>,                                                     
+        "expires_at": "<ISO8601>"                                               
+      }                                                                         
+                                                                                
+  Update the locked spec: remove the §B assumption that failures return         
+  HTTP 200, and close QUESTION 2 and QUESTION 5. Reply with just the            
+  updated §B and the closed-questions list — do not regenerate the              
+  whole spec.                                                                   
+⏺ §B. Outbound contract — synchronous response (updated)
+
+  ▎ Revised: failures now return real HTTP error codes; the prior assumption 
+  ▎ that all responses are HTTP 200 is removed.
+
+  The workflow returns exactly one synchronous response via Respond to Webhook.
+  It never calls /webhooks/n8n/ingestion-status.
+
+  Success — HTTP 200:
+  {
+    "status": "completed",
+    "conversation_id": "<uuid>",
+    "chunk_count": <int>,
+    "used_ocr": <bool>,
+    "expires_at": "<ISO8601>"
+  }
+
+  Failure — HTTP 422 (validation) or 5xx (runtime):
+  {
+    "status": "failed",
+    "error": "<human-readable message>"
+  }
+
+  Status-code routing (decided by the Classify Error node):
+
+  ┌────────────┬──────────────────────────────────────────────────────┬──────┐
+  │   Class    │                       Triggers                       │ HTTP │
+  ├────────────┼──────────────────────────────────────────────────────┼──────┤
+  │            │ missing required field · unsupported source type ·   │      │
+  │ Validation │ file > 10 MB · file_path outside /tmp,/uploads ·     │ 422  │
+  │            │ ttl_seconds out of [60, 86400]                       │      │
+  ├────────────┼──────────────────────────────────────────────────────┼──────┤
+  │ Runtime    │ file read/stat error · OCR failure · Voyage API      │ 5xx  │
+  │            │ error · Postgres error                               │      │
+  └────────────┴──────────────────────────────────────────────────────┴──────┘
+
+  Closed questions
+
+  - QUESTION 2 — response shape & error HTTP code → CLOSED. Resolved per above:
+  success = HTTP 200 with the completed body; failures = HTTP 422 (validation)
+  or 5xx (runtime), body { "status": "failed", "error": "<message>" } (key is
+  error, not error_message). The earlier "always HTTP 200" assumption is
+  withdrawn.
+  - QUESTION 5 — size re-check in n8n → CLOSED. The Validate node re-verifies
+  file size ≤ 10 MB defensively (via fs.statSync) rather than trusting the
+  FastAPI pre-check. An oversize file is a validation failure → HTTP 422 (Phase
+  3 case 3).
+
+  Q1, Q3, Q4, Q6, Q7 remain as previously recorded. §B and the QUESTION 2/5
+  entries are now locked; the rest of the spec is unchanged.
+
+✻ Worked for 19s
+
+❯ PHASE 2 — DESIGN.                                                             
+                                                                                
+  Using the Phase 1 locked spec (with the failure contract just locked in),     
+  the Phase 3 acceptance tests, and the Phase 4a Validate node already          
+  written, design the complete n8n node graph for                               
+  `n8n-workflows/ingest-ephemeral.json`.                                        
+                                                                                
+  Output ONLY:                                                                  
+                                                                                
+  1. A Mermaid `flowchart TB` diagram of nodes + connections (including         
+     the error branch back to a RespondToWebhook).                              
+                                                                                
+  2. A table with columns:                                                      
+     Node name | n8n node type | Purpose | Inputs from | Outputs to |           
+     Error behaviour (throw vs. branch).                                        
+                                                                                
+  3. The list of n8n credentials needed. For each:                              
+     - credential name (used inside the JSON, e.g. "VoyageAuth")                
+     - credential type (e.g. "httpHeaderAuth", "postgres", "openAi")            
+     - which env var feeds it (use placeholder values like                      
+       <VOYAGE_API_KEY>, <OPENAI_API_KEY>, <NEON_DATABASE_URL>)                 
+                                                                                
+  4. The exact webhook path, HTTP method, and "Response Mode" setting.          
+                                                                                
+  5. The exact Postgres parameterised INSERT statement for                      
+     `ephemeral_chunks`, with $1..$N placeholders matching the column           
+     order from database/init.sql. Include the                                  
+     `expires_at = NOW() + ($N || ' seconds')::interval` expression.            
+                                                                                
+  6. HTTP status routing: state which node's errors map to 422 and which        
+     map to 5xx, and how the error branch carries that distinction to the       
+     Respond node.                                                              
+                                                                                
+  Constraints:                                                                  
+  - Start from the existing 5-node skeleton in ingest-ephemeral.json.           
+    Add only nodes strictly required (Validate already exists per 4a;           
+    add Zip; add IF/branch for OCR; add error-path Respond).                    
+  - Do NOT write any Function code or full JSON yet.                            
+  - Required node sequence (happy path):                                        
+      Webhook → Validate → Extract+OCR → Chunk → Voyage embed →                 
+      Zip → Postgres INSERT → Respond (success).                                
+    Plus an error branch from any throw → Format error → Respond (failure).     
+                                                                                
+  Wait for my approval before Phase 4b.                                         
+
+⏺ Phase 2 — ingest-ephemeral.json Node Graph
+
+  1. Mermaid flowchart
+
+  flowchart TB
+      WH[Webhook /ingest-ephemeral] --> VAL[Validate]
+      VAL -->|main| EXT[Extract Text]
+      EXT -->|main| IFOCR{Needs OCR?}
+      IFOCR -->|true| OCR[OCR gpt-4o-mini vision]
+      IFOCR -->|false| CHK[Chunk]
+      OCR --> CHK
+      CHK --> EMB[Voyage embed]
+      EMB --> ZIP[Zip Rows]
+      ZIP --> PG[Store ephemeral - Postgres INSERT]
+      PG --> ROK[Respond success 200]
+
+      %% error branch — every throwing node's error output converges here
+      VAL -.err.-> FERR[Format Error]
+      EXT -.err.-> FERR
+      OCR -.err.-> FERR
+      CHK -.err.-> FERR
+      EMB -.err.-> FERR
+      ZIP -.err.-> FERR
+      PG  -.err.-> FERR
+      FERR --> RERR[Respond failure 422 or 5xx]
+
+  2. Node table
+
+  Node name: Webhook /ingest-ephemeral
+  n8n node type: n8n-nodes-base.webhook
+  Purpose: Receive POST, hold connection for response node
+  Inputs from: (trigger)
+  Outputs to: Validate
+  Error behaviour: n/a
+  ────────────────────────────────────────
+  Node name: Validate
+  n8n node type: n8n-nodes-base.function
+  Purpose: Phase 4a checks (fields, path guard, ≤10 MB, ttl)
+  Inputs from: Webhook
+  Outputs to: main→Extract Text; error→Format Error
+  Error behaviour: throw → error output
+  ────────────────────────────────────────
+  Node name: Extract Text
+  n8n node type: n8n-nodes-base.function
+  Purpose: Infer type by extension, read /tmp//uploads file, extract
+  pdf/docx/txt
+    text; set needs_ocr (image, or empty-text PDF); throw on unsupported type
+  Inputs from: Validate
+  Outputs to: main→Needs OCR?; error→Format Error
+  Error behaviour: throw → error output
+  ────────────────────────────────────────
+  Node name: Needs OCR?
+  n8n node type: n8n-nodes-base.if
+  Purpose: Branch on needs_ocr === true
+  Inputs from: Extract Text
+  Outputs to: true→OCR; false→Chunk
+  Error behaviour: no throw (pure branch)
+  ────────────────────────────────────────
+  Node name: OCR (gpt-4o-mini vision)
+  n8n node type: n8n-nodes-base.httpRequest
+  Purpose: OCR image / scanned pages → text, set used_ocr=true; cred OpenAIAuth
+  Inputs from: Needs OCR? (true)
+  Outputs to: main→Chunk; error→Format Error
+  Error behaviour: branch (error output)
+  ────────────────────────────────────────
+  Node name: Chunk
+  n8n node type: n8n-nodes-base.function
+  Purpose: 512-tok / 50-overlap → single item
+    {chunks:[{content,chunk_index,page_number}], …passthrough}
+  Inputs from: Needs OCR? (false) and OCR
+  Outputs to: main→Voyage embed; error→Format Error
+  Error behaviour: branch (error output)
+  ────────────────────────────────────────
+  Node name: Voyage embed
+  n8n node type: n8n-nodes-base.httpRequest
+  Purpose: One call, voyage-4-large, input_type:document,
+    input=chunks.map(content); cred VoyageAuth
+  Inputs from: Chunk
+  Outputs to: main→Zip Rows; error→Format Error
+  Error behaviour: branch (error output)
+  ────────────────────────────────────────
+  Node name: Zip Rows
+  n8n node type: n8n-nodes-base.function
+  Purpose: Align embeddings[i]↔chunks[i], build pgvector literal [..], explode 
+  to
+     N row items carrying tenant_id, conversation_id, content, embedding, 
+    chunk_index, source_name, metadata{used_ocr,page_number}, ttl_seconds
+  Inputs from: Voyage embed
+  Outputs to: main→Store ephemeral; error→Format Error
+  Error behaviour: branch (error output)
+  ────────────────────────────────────────
+  Node name: Store ephemeral
+  n8n node type: n8n-nodes-base.postgres
+  Purpose: Per-item parameterised INSERT (see §5), RETURNING expires_at
+  Inputs from: Zip Rows
+  Outputs to: main→Respond success; error→Format Error
+  Error behaviour: branch (error output)
+  ────────────────────────────────────────
+  Node name: Respond (success)
+  n8n node type: n8n-nodes-base.respondToWebhook
+  Purpose: Code 200; aggregate via $items(): chunk_count={{ $items().length }},
+    expires_at/used_ocr/conversation_id from first item
+  Inputs from: Store ephemeral
+  Outputs to: (HTTP response)
+  Error behaviour: n/a
+  ────────────────────────────────────────
+  Node name: Format Error
+  n8n node type: n8n-nodes-base.function
+  Purpose: Classify error→{status:"failed", error, statusCode} (422 vs 5xx)
+  Inputs from: error outputs of Validate, Extract, OCR, Chunk, Voyage embed,
+  Zip,
+    Store
+  Outputs to: main→Respond failure
+  Error behaviour: n/a
+  ────────────────────────────────────────
+  Node name: Respond (failure)
+  n8n node type: n8n-nodes-base.respondToWebhook
+  Purpose: responseCode = {{ $json.statusCode }}; body {status,error}
+  Inputs from: Format Error
+  Outputs to: (HTTP response)
+  Error behaviour: n/a
+
+  Skeleton ids reused: wh-ephemeral, embed, store, respond. The skeleton's
+  combined extract-chunk stub is split into Extract Text + Chunk; new ids added:
+  validate, ocr-needed, ocr, zip, format-error, respond-error.
+
+  3. n8n credentials
+
+  ┌─────────────────┬────────────────┬──────────────────────────────────────┐
+  │ Credential name │  Credential    │            Fed by env var            │
+  │    (in JSON)    │      type      │                                      │
+  ├─────────────────┼────────────────┼──────────────────────────────────────┤
+  │ VoyageAuth      │ httpHeaderAuth │ Authorization: Bearer                │
+  │                 │                │ <VOYAGE_API_KEY>                     │
+  ├─────────────────┼────────────────┼──────────────────────────────────────┤
+  │                 │                │ Authorization: Bearer                │
+  │ OpenAIAuth      │ httpHeaderAuth │ <OPENAI_API_KEY> (OCR via            │
+  │                 │                │ /v1/chat/completions)                │
+  ├─────────────────┼────────────────┼──────────────────────────────────────┤
+  │ ragPostgres     │ postgres       │ host/db/user/password parsed from    │
+  │                 │                │ <NEON_DATABASE_URL>                  │
+  └─────────────────┴────────────────┴──────────────────────────────────────┘
+
+  All referenced by {id, name} only — no secrets inlined.
+
+  4. Webhook settings
+
+  - Path: ingest-ephemeral (full URL …/webhook/ingest-ephemeral)
+  - HTTP method: POST
+  - Response Mode: Using 'Respond to Webhook' node (responseMode: 
+  "responseNode", typeVersion 1.1 — preserved from skeleton)
+
+  5. Postgres parameterised INSERT
+
+  Column order per database/init.sql:73 (omitting id, created_at → DB defaults):
+
+  INSERT INTO ephemeral_chunks
+      (tenant_id, conversation_id, content, embedding, chunk_index, source_name,
+  metadata, expires_at)
+  VALUES
+      ($1, $2, $3::vector, $4, $5, $6, $7::jsonb, NOW() + ($8 || ' 
+  seconds')::interval)
+  RETURNING expires_at;
+
+  ┌─────┬─────────────────┬──────────────────────────────────────────────────┐
+  │  $  │     Column      │                      Source                      │
+  ├─────┼─────────────────┼──────────────────────────────────────────────────┤
+  │ $1  │ tenant_id       │ payload (isolation gate, rule 3)                 │
+  ├─────┼─────────────────┼──────────────────────────────────────────────────┤
+  │ $2  │ conversation_id │ payload                                          │
+  ├─────┼─────────────────┼──────────────────────────────────────────────────┤
+  │ $3  │ content         │ chunk text                                       │
+  ├─────┼─────────────────┼──────────────────────────────────────────────────┤
+  │ $4  │ embedding       │ Voyage 1024-dim vector as [..] literal, cast     │
+  │     │                 │ ::vector                                         │
+  ├─────┼─────────────────┼──────────────────────────────────────────────────┤
+  │ $5  │ chunk_index     │ chunker (0-based)                                │
+  ├─────┼─────────────────┼──────────────────────────────────────────────────┤
+  │ $6  │ source_name     │ payload                                          │
+  ├─────┼─────────────────┼──────────────────────────────────────────────────┤
+  │ $7  │ metadata        │ {"used_ocr":<bool>,"page_number":<int|null>},    │
+  │     │                 │ cast ::jsonb                                     │
+  ├─────┼─────────────────┼──────────────────────────────────────────────────┤
+  │ $8  │ ttl_seconds     │ validated payload (default 3600) → expires_at =  │
+  │     │                 │ NOW() + ($8 || ' seconds')::interval             │
+  └─────┴─────────────────┴──────────────────────────────────────────────────┘
+
+  RETURNING expires_at feeds the success response body.
+
+  6. HTTP status routing
+
+  Maps to 422 (validation):
+  - Validate throws — Missing required field…, file_path outside allowed roots…,
+  File exceeds 10 MB limit…, ttl_seconds out of range…
+  - Extract Text throw — Unsupported file type…
+
+  Maps to 5xx (runtime):
+  - Validate throws — Cannot stat file_path…, …is not a regular file… (file
+  missing/unreadable → Phase 3 case 5)
+  - Extract Text runtime read/parse failure
+  - OCR (OpenAI), Voyage embed, Store ephemeral (Postgres) errors
+
+  How the distinction is carried: every throwing node uses On Error = "Continue 
+  (using error output)", so its error output emits an item containing the thrown
+  error message. All such error outputs fan into the single Format Error node,
+  which:
+  1. message-matches the known validation prefixes above → sets statusCode = 
+  422; otherwise → statusCode = 500;
+  2. emits { "status": "failed", "error": "<message>", "statusCode": <code> }.
+
+  Respond (failure) sets its Response Code field to the expression {{ 
+  $json.statusCode }} and returns body { "status": "failed", "error": 
+  "<message>" }. This is the single place the 422/5xx decision is made, and it
+  relies on the stable error-string prefixes already produced by the Phase 4a
+  Validate code (I'll keep those strings stable in Phase 4b).
+
+  ---
+  Phase 2 graph is on the table. Holding for your approval before Phase 4b (the
+  Extract+OCR, Chunk, Zip, and Format Error node code).
+
+✻ Churned for 1m 42s
+
+❯ approved                                                                      
+
+⏺ Phase 2 is locked. Before I write Phase 4b code, two things genuinely block me
+  — I flagged R1 in the design and you approved the graph, but the
+  implementation of the Extract+OCR path can't be written faithfully without
+  your ruling (rule 1: I won't invent the rasterization mechanism). And I want
+  to match your preferred granularity.
+
+⏺ User answered Claude's questions:
+  ⎿  · How should the OCR path handle scanned (text-less) PDFs? gpt-4o-mini 
+     vision accepts images, not PDF bytes — so a scanned PDF must first be 
+     rasterized to page images. This decision changes the Extract Text + OCR 
+     node code and affects whether Phase 3 test case 2 can pass. → Rasterize PDF
+     pages (M7 infra dep)
+     · How do you want Phase 4b delivered? It covers four Function nodes: 
+     Extract Text, Chunk, Zip Rows, Format Error (OCR + Voyage embed are 
+     HTTP-node configs handled in Phase 5). → All four at once
+
+⏺ Approved decisions locked: R1 = rasterize scanned-PDF pages via pdftoppm 
+  (poppler-utils in the n8n container — M7 infra dependency), deliver all four
+  nodes together. Here is Phase 4b.
+
+  A few cross-node contracts these rely on (must hold in the Phase 5 JSON / n8n
+  env — calling them out rather than hiding them):
+  - n8n env: NODE_FUNCTION_ALLOW_BUILTIN=fs,path,os,child_process and
+  NODE_FUNCTION_ALLOW_EXTERNAL=pdf-parse,mammoth.
+  - Container has poppler-utils (pdftoppm) — M7 must add this to n8n image.
+  - OCR and Voyage embed HTTP nodes must be configured with "Include Input 
+  Fields = true" so chunks[] + passthrough survive the HTTP call (Chunk and Zip
+  read them back).
+
+  ---
+  Node 1 — Extract Text (Function)
+
+  // n8n Function node: "Extract Text"
+  // env: NODE_FUNCTION_ALLOW_BUILTIN=fs,path,os,child_process
+  //      NODE_FUNCTION_ALLOW_EXTERNAL=pdf-parse,mammoth
+  // container: poppler-utils (pdftoppm) required for scanned-PDF OCR (R1)
+  const fs = require('fs');
+  const path = require('path');
+  const os = require('os');
+  const { execFileSync } = require('child_process');
+  const pdfParse = require('pdf-parse');
+  const mammoth = require('mammoth');
+
+  const input = items[0].json;
+  const { conversation_id, tenant_id, source_name, ttl_seconds } = input;
+  const filePath = input.file_path;
+
+  // Infer type from extension (Validate already guaranteed existence + path 
+  safety)
+  const ext = path.extname(source_name || filePath).toLowerCase().replace(/^\./,
+  '');
+  const SUPPORTED = ['pdf', 'docx', 'txt', 'png', 'jpg', 'jpeg'];
+  if (!SUPPORTED.includes(ext)) {
+    throw new Error(`Unsupported file type: .${ext}`);   // -> 422 (validation)
+  }
+
+  const TEXT_THRESHOLD = 20;   // chars; a PDF below this is treated as scanned
+  const passthrough = { conversation_id, tenant_id, source_name, ttl_seconds };
+  const dataUrl = (buf, mime) =>
+  `data:${mime};base64,${buf.toString('base64')}`;
+  const pageNum = f => parseInt((f.match(/(\d+)\.png$/) || [])[1] || '0', 10);
+
+  let out;
+  try {
+    if (ext === 'txt') {
+      out = { ...passthrough, source_type: 'txt', text:
+  fs.readFileSync(filePath, 'utf8'),
+              needs_ocr: false, page_count: 1, images: [] };
+
+    } else if (ext === 'docx') {
+      const { value } = await mammoth.extractRawText({ path: filePath });
+      out = { ...passthrough, source_type: 'docx', text: value || '',
+              needs_ocr: false, page_count: 1, images: [] };
+
+    } else if (ext === 'pdf') {
+      const parsed = await pdfParse(fs.readFileSync(filePath));
+      const text = (parsed.text || '').trim();
+      if (text.length >= TEXT_THRESHOLD) {
+        out = { ...passthrough, source_type: 'pdf', text, needs_ocr: false,
+                page_count: parsed.numpages || 1, images: [] };
+      } else {
+        // Scanned PDF -> rasterize each page to PNG, hand images to OCR node 
+  (R1)
+        const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ocr-'));
+        execFileSync('pdftoppm', ['-png', '-r', '150', filePath,
+  path.join(workDir, 'page')]);
+        const files = fs.readdirSync(workDir).filter(f => f.endsWith('.png'))
+                        .sort((a, b) => pageNum(a) - pageNum(b));
+        const images = files.map(f => ({
+          page_number: pageNum(f),
+          data_url: dataUrl(fs.readFileSync(path.join(workDir, f)),
+  'image/png'),
+        }));
+        out = { ...passthrough, source_type: 'pdf', text: '', needs_ocr: true,
+                page_count: images.length, images };
+      }
+
+    } else {
+      // png / jpg / jpeg -> single-image OCR
+      const mime = ext === 'png' ? 'image/png' : 'image/jpeg';
+      out = { ...passthrough, source_type: ext, text: '', needs_ocr: true,
+  page_count: 1,
+              images: [{ page_number: 1, data_url:
+  dataUrl(fs.readFileSync(filePath), mime) }] };
+    }
+  } catch (e) {
+    // read / parse / rasterize failures are runtime -> 5xx
+    throw new Error(`Extraction failed for ${source_name}: ${e.message}`);
+  }
+
+  return [{ json: out }];
+
+  ---
+  Node 2 — Chunk (Function)
+
+  // n8n Function node: "Chunk"
+  // One input item. Text is either input.text (non-OCR branch) or the OCR HTTP
+  // response (OCR node configured with "Include Input Fields"). 512-word 
+  windows,
+  // 50-word overlap (MODULE_SPEC_M5).
+  const input = items[0].json;
+  const used_ocr = input.needs_ocr === true;
+
+  let text = (typeof input.text === 'string' && input.text.trim().length)
+    ? input.text
+    : (input.choices && input.choices[0] && input.choices[0].message
+        ? (input.choices[0].message.content || '')
+        : '');
+  text = String(text).trim();
+
+  if (!text.length) {
+    throw new Error(`No extractable text for ${input.source_name}`);   // -> 5xx
+  (runtime)
+  }
+
+  const CHUNK_SIZE = 512;   // words
+  const OVERLAP = 50;
+  const words = text.split(/\s+/).filter(Boolean);
+  const chunks = [];
+  let i = 0;
+  while (i < words.length) {
+    chunks.push({
+      content: words.slice(i, i + CHUNK_SIZE).join(' '),
+      chunk_index: chunks.length,
+      page_number: null,     // page boundaries are lost after concat; 
+  metadata.page_number optional
+    });
+    i += (CHUNK_SIZE - OVERLAP);
+  }
+
+  return [{
+    json: {
+      chunks,
+      conversation_id: input.conversation_id,
+      tenant_id: input.tenant_id,
+      source_name: input.source_name,
+      ttl_seconds: input.ttl_seconds,
+      used_ocr,
+    },
+  }];
+
+  ---
+  Node 3 — Zip Rows (Function)
+
+  // n8n Function node: "Zip Rows"
+  // Input: one item with chunks[] + passthrough (from Chunk) AND Voyage's 
+  data[]
+  // (Voyage HTTP node configured with "Include Input Fields"). Explodes to N 
+  row
+  // items whose field order matches the $1..$8 INSERT contract.
+  const input = items[0].json;
+  const chunks = input.chunks || [];
+  const data = (input.data || []).slice();   // Voyage: [{embedding, index}, 
+  ...]
+
+  if (!chunks.length) {
+    throw new Error('Zip Rows: no chunks to store');   // -> 5xx
+  }
+  if (data.length !== chunks.length) {
+    throw new Error(`Embedding count mismatch: ${data.length} for
+  ${chunks.length} chunks`); // -> 5xx
+  }
+
+  data.sort((a, b) => (a.index ?? 0) - (b.index ?? 0));   // defensive: align by
+  Voyage index
+
+  const { tenant_id, conversation_id, source_name, ttl_seconds, used_ocr } =
+  input;
+
+  return chunks.map((c, i) => {
+    const vec = data[i].embedding;
+    if (!Array.isArray(vec) || vec.length !== 1024) {
+      throw new Error(`Bad embedding for chunk ${i}: expected 1024 dims`);   // 
+  -> 5xx
+    }
+    return {
+      json: {
+        tenant_id,                                 // $1  isolation gate (rule 
+  3)
+        conversation_id,                           // $2
+        content: c.content,                        // $3
+        embedding: `[${vec.join(',')}]`,           // $4  ::vector literal
+        chunk_index: c.chunk_index,                // $5
+        source_name,                               // $6
+        metadata: JSON.stringify({                 // $7  ::jsonb
+          used_ocr: used_ocr === true,
+          page_number: c.page_number ?? null,
+        }),
+        ttl_seconds,                               // $8
+      },
+    };
+  });
+
+  ---
+  Node 4 — Format Error (Function)
+
+  // n8n Function node: "Format Error"
+  // All error outputs converge here. Classify 422 (validation) vs 5xx (runtime)
+  // and emit the locked failure body. Respond (failure) reads statusCode.
+  const j = items[0].json || {};
+
+  // n8n error-output shape varies — dig the thrown message out of the likely 
+  spots
+  const msg =
+    (j.error && (j.error.message || j.error.description)) ||
+    (typeof j.error === 'string' ? j.error : null) ||
+    j.message ||
+    'Unexpected error during ephemeral ingestion';
+
+  // Validation messages from Validate + Extract Text -> 422; everything else ->
+  5xx.
+  // .includes (not .startsWith) so an n8n-prepended node label doesn't break 
+  matching.
+  const VALIDATION_MARKERS = [
+    'Missing required field',
+    'file_path outside allowed roots',
+    'File exceeds 10 MB limit',
+    'ttl_seconds',                  // "out of range" / "must be an integer"
+    'Unsupported file type',
+  ];
+  const isValidation = VALIDATION_MARKERS.some(m => String(msg).includes(m));
+
+  return [{
+    json: {
+      status: 'failed',
+      error: String(msg),
+      statusCode: isValidation ? 422 : 500,
+    },
+  }];
+
+  ---
+  Two notes worth your eyes before Phase 5:
+  1. page_number is null for all chunks — text from all pages is concatenated
+  before chunking, so per-chunk page attribution is lost. The schema column is
+  optional, but if you want real page numbers we'd chunk per-page instead
+  (changes the Chunk node). Flag if you want that.
+  2. Format Error message-matching is the one fragile seam (depends on the raw
+  thrown string reaching it). I used .includes for resilience; the Validate
+  strings are stable per Phase 4a.
+
+  Phase 4b complete (4 nodes). Holding for approval before Phase 5 (full JSON
+  assembly).
+
+✻ Cooked for 3m 8s
+
+❯ approved                                                                      
+
+⏺ Approved. Assembling Phase 5.
+
+  One correction I have to make from Phase 2 §5: the ::vector cast was on the
+  wrong placeholder (it sat on $3/content instead of $4/embedding). The correct
+  VALUES clause is ($1, $2, $3, $4::vector, $5, $6, $7::jsonb, …). I'm applying
+  that fix here and flagging it.
+
+  To avoid hand-escaping four large JS bodies into JSON (error-prone), I'll
+  generate the file programmatically so escaping is guaranteed correct, then
+  validate it parses.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Generated and JSON-validated (12 nodes, 10 connection groups). Let me also
+  confirm the embedded JS bodies are syntactically valid (they run inside n8n,
+  but a syntax check catches escaping mistakes now).
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Both checks pass: valid JSON, all five Function bodies are syntactically valid
+  JS. The file is written to n8n-workflows/ingest-ephemeral.json (I own this
+  file as M5). Here is the complete document.
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ The complete document is above (and saved to
+  n8n-workflows/ingest-ephemeral.json). Skeleton invariants preserved: name,
+  tags, active:false, settings.executionOrder:"v1", and reused ids wh-ephemeral
+  / embed / store / respond.
+
+  Credentials to create in n8n
+
+  ┌──────────────┬────────────────┬────────────┬───────────────────────────┐
+  │ Credential   │                │ Where it's │                           │
+  │  name (in    │      Type      │    used    │      Fed by env var       │
+  │    JSON)     │                │            │                           │
+  ├──────────────┼────────────────┼────────────┼───────────────────────────┤
+  │ VoyageAuth   │ httpHeaderAuth │ Voyage     │ header Authorization:     │
+  │              │                │ embed node │ Bearer <VOYAGE_API_KEY>   │
+  ├──────────────┼────────────────┼────────────┼───────────────────────────┤
+  │ OpenAIAuth   │ httpHeaderAuth │ OCR node   │ header Authorization:     │
+  │              │                │            │ Bearer <OPENAI_API_KEY>   │
+  ├──────────────┼────────────────┼────────────┼───────────────────────────┤
+  │              │                │ Store      │ host/db/user/password     │
+  │ ragPostgres  │ postgres       │ ephemeral  │ parsed from               │
+  │              │                │ node       │ <NEON_DATABASE_URL>       │
+  └──────────────┴────────────────┴────────────┴───────────────────────────┘
+
+  After creating each, replace the placeholder ids (REPLACE_ME_VOYAGE,
+  REPLACE_ME_OPENAI, REPLACE_ME_PG) — n8n usually re-binds these automatically
+  when you pick the credential from the dropdown on each node post-import.
+
+  Save path
+
+  n8n-workflows/ingest-ephemeral.json
+  (Already written there. Not committed — that's yours per the git rules.)
+
+  Mandatory post-import checks (version-sensitive — verify in the UI, don't 
+  assume)
+
+  These are the spots where the exact serialized key varies across n8n versions,
+  so I left them to be confirmed visually rather than guess a wrong key:
+
+  1. OCR and Voyage embed HTTP nodes → enable "Include Input Fields" (Options).
+  This is the single point of failure for passthrough: Chunk reads
+  chunks/conversation_id/etc. and Zip Rows reads chunks + Voyage's data[] from
+  the same item. If this toggle is off, those fields vanish after the HTTP call
+  and the run breaks. (The success Respond is already hardened against this — it
+  pulls conversation_id/used_ocr via $('Chunk').first() and expires_at from the
+  Store RETURNING.)
+  2. Store ephemeral query parameters — confirm the $1..$8 array binds
+  correctly. I used options.queryReplacement with an array expression (not a
+  comma string) deliberately: the $4 embedding literal [0.1,0.2,…] contains
+  commas, which a comma-separated replacement string would split. Needs Postgres
+  node ≥ v2.5.
+  3. Respond (failure) status code — options.responseCode is set to ={{ 
+  $json.statusCode }} (422 or 500 from Format Error). Confirm the node renders a
+  dynamic Response Code field.
+  4. n8n env must allow the modules the Function nodes require:
+  NODE_FUNCTION_ALLOW_BUILTIN=fs,path,os,child_process,
+  NODE_FUNCTION_ALLOW_EXTERNAL=pdf-parse,mammoth, and the container needs
+  poppler-utils (pdftoppm) — these are M7 infra changes.
+
+  One correction logged
+
+  The ::vector cast was on the wrong placeholder in Phase 2 §5 ($3 instead of
+  $4). The shipped query is correct: ($1, $2, $3, $4::vector, $5, $6, $7::jsonb,
+  NOW() + ($8 || ' seconds')::interval), with queryReplacement ordered
+  [tenant_id, conversation_id, content, embedding, chunk_index, source_name, 
+  metadata, ttl_seconds].
+
+  ---
+  Phase 5 complete and validated (JSON parses; all Function bodies pass node 
+  --check). Next would be Phase 6 — verification: run the Phase 3 curl suite
+  against a deployed import. Want me to draft the docs/n8n-setup.md
+  setup/verification steps (the only other in-scope file), or hold here?
+
+✻ Cogitated for 5m 30s
+
+❯ PHASE 5 — FULL WORKFLOW JSON.                                                 
+                                                                                
+  Now assemble the complete `n8n-workflows/ingest-ephemeral.json`               
+  using:                                                                        
+    - Phase 2 node graph (approved)                                             
+    - Phase 4a Validate JS                                                      
+    - Phase 4b Extract + OCR JS                                                 
+    - Phase 4c Chunk JS                                                         
+    - Phase 4d Voyage embed node JSON                                           
+    - Phase 4e Zip JS                                                           
+    - Phase 4f Postgres node JSON                                               
+    - Phase 4g Format success JS, Respond success JSON,                         
+                Format error JS, Respond failure JSON                           
+                                                                                
+  Structural rules (preserve from existing skeleton):                           
+    name: "Ephemeral Ingestion (1-hour TTL)"                                    
+    active: false                                                               
+    settings: { "executionOrder": "v1" }                                        
+    tags: ["rag-platform", "ephemeral"]                                         
+                                                                                
+  Layout rules:                                                                 
+    Webhook (240,300) → Validate (440,300) → Extract+OCR (640,300)              
+      → Chunk (840,300) → Voyage embed (1040,300) → Zip (1240,300)              
+      → Postgres (1440,300) → Format success (1640,300)                         
+      → Respond success (1840,300)                                              
+    Error path off every Function-throwing node and Postgres node:              
+      → Format error (1240,500) → Respond failure (1640,500)                    
+                                                                                
+  Wiring rules:                                                                 
+    - Webhook -> Validate (main[0])                                             
+    - Validate -> Extract+OCR (main[0])  +  Validate.error -> Format error      
+    - Extract+OCR -> Chunk (main[0])     +  .error -> Format error              
+    - Chunk -> Voyage embed (main[0])    +  .error -> Format error              
+    - Voyage embed -> Zip (main[0])      +  .error -> Format error              
+    - Zip -> Postgres (main[0])          +  .error -> Format error              
+    - Postgres -> Format success         +  .error -> Format error              
+    - Format success -> Respond success                                         
+    - Format error -> Respond failure                                           
+    Set "onError": "continueErrorOutput" on every Function and the              
+    Postgres node so n8n exposes the second (error) output.                     
+                                                                                
+  Credential references (no inline secrets — placeholders only):                
+    - Voyage embed: { "httpHeaderAuth": { "id":"REPLACE_ME",                    
+                                          "name":"VoyageAuth" } }               
+    - Postgres:     { "postgres":       { "id":"REPLACE_ME",                    
+                                          "name":"EphemeralDB" } }              
+    - OpenAI vision is called inline from Extract+OCR using                     
+      process.env.OPENAI_API_KEY — no n8n credential needed for that            
+      node, but n8n's environment MUST expose OPENAI_API_KEY.                   
+                                                                                
+  Output rules:                                                                 
+    1) Output ONE complete JSON document, valid (no trailing commas),           
+       ready to paste into n8n's "Import from clipboard".                       
+    2) After the JSON, output a "Credentials to create in n8n" section          
+       listing each credential, its type, and which env var feeds it.           
+    3) After that, output a single line:                                        
+         "Save to: n8n-workflows/ingest-ephemeral.json"                         
+                                                                                
+  Do NOT include any other commentary.                                          
+
+⏺ I have to push back once here (rule 8) — this Phase 5 request lists inputs
+  that either differ from what we approved or were never produced, and I won't
+  fabricate them as if they were.
+
+  Deltas from the approved work:
+
+  1. Topology changed from the approved Phase 2 graph. Approved Phase 2 was: … 
+  Extract Text → Needs OCR? (IF) → OCR (HTTP node) → Chunk …, and the success
+  response was aggregated inside Respond (success). This request is linear with 
+  OCR inlined (no Needs OCR? IF, no separate OCR HTTP node) plus a new Format 
+  success node. That's a legitimate redesign — but it's a redesign, not an
+  assembly of approved pieces.
+  2. Two pieces of code don't exist yet (we never ran Phase 4c–4g as separate
+  steps; Phase 4b delivered Extract Text, Chunk, Zip, Format Error — that's it):
+    - Extract + OCR with an inline OpenAI call. The Phase 4b Extract Text I
+  wrote and you approved only rasterizes and emits images[] for a downstream OCR
+  node — it never calls OpenAI. Inlining the vision call is new, unwritten,
+  unapproved code.
+    - Format success JS. Never written (I aggregated in the Respond node).
+  3. process.env.OPENAI_API_KEY inside a Function node is a real landmine. n8n
+  blocks env access in code nodes by default
+  (N8N_BLOCK_ENV_ACCESS_IN_NODE=true), so process.env.OPENAI_API_KEY will be
+  undefined unless M7 flips that flag. Function nodes also have no global fetch
+  in the bundled Node — the inline call must use
+  this.helpers.httpRequest/require('https'). I don't want to invent this
+  silently.
+
+  (The credential rename ragPostgres → EphemeralDB and the new coordinates are
+  fine — cosmetic.)
+
+  Two ways forward — your call:
+
+  - Option A (proper): I write the two missing nodes as quick approval steps —
+  Extract + OCR (inline vision via this.helpers.httpRequest, with the
+  N8N_BLOCK_ENV_ACCESS_IN_NODE note) and Format success — you approve, then I
+  assemble the full JSON exactly to this topology.
+  - Option B (proceed now): I assemble the full JSON immediately to your
+  specified topology, writing those two nodes fresh and flagging them inline as
+  newly-authored (not previously approved), including the env-access caveat.
+
+  Which do you want? I won't emit the JSON until you pick, so I don't pass off
+  invented code as approved.
+
+✻ Brewed for 55s
+
+❯ what do you suggest                                                           
+
+⏺ My suggestion: Option A — but drop the inline-OCR/process.env idea and keep 
+  the separate OCR HTTP node with the OpenAIAuth credential that you already 
+  approved in Phase 2.
+
+  Reasoning:
+
+  - The inline-OCR change is a regression, not a simplification. It trades a
+  clean, working pattern (n8n credential vault → OpenAIAuth header) for one that
+  fights the platform: env access is blocked in code nodes by default, Function
+  nodes have no fetch, and putting an API key path through process.env in code
+  is exactly the kind of secret-handling we've been avoiding (rule 5). It would
+  take more new, fragile code to do something worse.
+  - The separate OCR node + Needs OCR? IF already exists, is JSON-valid, and 
+  passed node --check — it's in the file now. Keeping it costs nothing.
+  - The one genuinely good idea in your new spec is the explicit Format success 
+  node. Splitting the success-body assembly out of the Respond node is cleaner
+  than my $items() aggregation and easier to test in isolation. That's worth
+  adopting.
+
+  So the actual delta from the validated workflow already on disk is small:
+  1. Add a Format success Function node between Store ephemeral and Respond 
+  (success) (one new, small, approvable node).
+  2. Rename the Postgres credential ragPostgres → EphemeralDB, ids to REPLACE_ME
+  (cosmetic).
+  3. Keep everything else — separate OCR node, IF branch, error routing — as
+  approved.
+
+  That gets you the structural improvement you want without the process.env
+  landmine or any invented inline-OCR code.
+
+  If you specifically want the linear, no-IF graph for diagram simplicity, I can
+  do that too — but the right way is to keep OCR as its own credentialed node
+  and just route Extract → OCR → Chunk unconditionally with the IF removed (OCR
+  no-ops when there are no images), not to inline the API call.
+
+  Want me to write just the Format success node (Phase 4g) for approval, then
+  re-assemble? That's one small node away from done.
+
+✻ Cooked for 31s
+
+❯ proceed with option A                                                         
+
+⏺ Per my recommendation, the only genuinely new node for Option A is Format 
+  success (the rest stays as the approved, validated design with OCR as its own
+  credentialed node). Here it is for approval.
+
+  Phase 4g — Format success (Function node)
+
+  // n8n Function node: "Format success"
+  // Sits between Store ephemeral and Respond (success). Builds the locked §B
+  // success body. Postgres RETURNING gives expires_at (+ one item per inserted
+  // row); conversation_id / used_ocr are pulled from the Chunk node (Postgres
+  // output doesn't carry them).
+  const rows = items;                          // one item per inserted 
+  ephemeral_chunks row
+  const chunk_count = rows.length;
+
+  if (!chunk_count) {
+    throw new Error('Format success: no rows were inserted');   // -> 5xx via 
+  Format Error
+  }
+
+  const rawExpires = rows[0].json.expires_at;
+  const expires_at = (rawExpires instanceof Date) ? rawExpires.toISOString() :
+  rawExpires;
+
+  const chunkMeta = $('Chunk').first().json;
+
+  return [{
+    json: {
+      status: 'completed',
+      conversation_id: chunkMeta.conversation_id,
+      chunk_count,
+      used_ocr: chunkMeta.used_ocr === true,
+      expires_at,
+    },
+  }];
+
+  Companion change this implies for assembly: Respond (success) simplifies to
+  responseBody: "={{ $json }}" (it just echoes this node's output) with
+  options.responseCode: 200. Format success also gets onError: 
+  "continueErrorOutput" → Format Error, so a zero-row anomaly still returns a
+  clean 5xx.
+
+  Net delta from the workflow already on disk: +1 node (Format success),
+  Respond-success body simplified, Postgres credential renamed ragPostgres → 
+  EphemeralDB. OCR node, Needs OCR? IF, and all error routing stay as approved.
+
+  Approve this node and I'll re-assemble the full ingest-ephemeral.json (Phase
+  5) with it wired in.
+
+✻ Baked for 28s
+
+❯ approved                                                                      
+⏺ Approved. Re-assembling the full workflow with Format success wired in
+  (Postgres cred → EphemeralDB, all credential ids → REPLACE_ME, OCR kept as its
+  own OpenAIAuth node per Option A).
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+⏺ Validated: 13 nodes, JSON parses, all Function bodies pass node --check,
+  wiring confirmed (Store → Format success → Respond success; every throwing
+  node → Format Error; Needs OCR? true→OCR / false→Chunk). Saved to disk.
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ The complete document is above (saved to disk, JSON-valid, all Function bodies
+  pass node --check).
+
+  Credentials to create in n8n
+
+  ┌──────────────┬────────────────┬───────────────┬─────────────────────────┐
+  │ Credential   │                │               │                         │
+  │  name (in    │      Type      │    Used by    │     Fed by env var      │
+  │    JSON)     │                │               │                         │
+  ├──────────────┼────────────────┼───────────────┼─────────────────────────┤
+  │ VoyageAuth   │ httpHeaderAuth │ Voyage embed  │ header Authorization:   │
+  │              │                │               │ Bearer <VOYAGE_API_KEY> │
+  ├──────────────┼────────────────┼───────────────┼─────────────────────────┤
+  │              │                │ OCR           │ header Authorization:   │
+  │ OpenAIAuth   │ httpHeaderAuth │ (gpt-4o-mini  │ Bearer <OPENAI_API_KEY> │
+  │              │                │ vision)       │                         │
+  ├──────────────┼────────────────┼───────────────┼─────────────────────────┤
+  │              │                │ Store         │ host/db/user/password   │
+  │ EphemeralDB  │ postgres       │ ephemeral     │ from                    │
+  │              │                │               │ <NEON_DATABASE_URL>     │
+  └──────────────┴────────────────┴───────────────┴─────────────────────────┘
+
+  After creating each, pick it from the dropdown on its node so n8n rebinds the
+  REPLACE_ME ids.
+
+  Save to: n8n-workflows/ingest-ephemeral.json
+
+✻ Cooked for 1m 47s
+
+❯ Now, do you see any un implemented nodes yet? if not we will go for           
+  verification                                                                  
+
+⏺ No — every node is fully implemented. Nothing is left as a stub. Quick audit
+  of all 13 against the skeleton (which had 5 stub nodes returning fake data):
+
+  ┌─────┬───────────────────────────┬────────────────────────────────────────┐
+  │  #  │           Node            │                 State                  │
+  ├─────┼───────────────────────────┼────────────────────────────────────────┤
+  │ 1   │ Webhook /ingest-ephemeral │ ✅ POST, path, responseNode            │
+  ├─────┼───────────────────────────┼────────────────────────────────────────┤
+  │ 2   │ Validate                  │ ✅ full JS (4a)                        │
+  ├─────┼───────────────────────────┼────────────────────────────────────────┤
+  │ 3   │ Extract Text              │ ✅ full JS (extract + rasterize)       │
+  ├─────┼───────────────────────────┼────────────────────────────────────────┤
+  │ 4   │ Needs OCR?                │ ✅ IF condition configured             │
+  ├─────┼───────────────────────────┼────────────────────────────────────────┤
+  │ 5   │ OCR (gpt-4o-mini vision)  │ ✅ HTTP body + OpenAIAuth              │
+  ├─────┼───────────────────────────┼────────────────────────────────────────┤
+  │ 6   │ Chunk                     │ ✅ full JS                             │
+  ├─────┼───────────────────────────┼────────────────────────────────────────┤
+  │ 7   │ Voyage embed              │ ✅ HTTP body + VoyageAuth              │
+  ├─────┼───────────────────────────┼────────────────────────────────────────┤
+  │ 8   │ Zip Rows                  │ ✅ full JS                             │
+  ├─────┼───────────────────────────┼────────────────────────────────────────┤
+  │ 9   │ Store ephemeral           │ ✅ executeQuery + $1..$8 + EphemeralDB │
+  ├─────┼───────────────────────────┼────────────────────────────────────────┤
+  │ 10  │ Format success            │ ✅ full JS                             │
+  ├─────┼───────────────────────────┼────────────────────────────────────────┤
+  │ 11  │ Respond (success)         │ ✅ ={{ $json }}, 200                   │
+  ├─────┼───────────────────────────┼────────────────────────────────────────┤
+  │ 12  │ Format Error              │ ✅ full JS, 422/5xx classify           │
+  ├─────┼───────────────────────────┼────────────────────────────────────────┤
+  │ 13  │ Respond (failure)         │ ✅ dynamic responseCode                │
+  └─────┴───────────────────────────┴────────────────────────────────────────┘
+
+  No stub functionCode, no placeholder logic, no dangling connections — the
+  graph is complete and JSON/JS both validate.
+
+  But before you run verification, four non-node prerequisites must be true in 
+  the n8n environment, or tests will fail for environmental reasons rather than 
+  logic:
+
+  1. 🔴 Critical — enable "Include Input Fields" on the OCR and Voyage embed 
+  HTTP nodes. This is the single most likely verification failure: Chunk reads
+  the OCR result + passthrough, and Zip Rows reads chunks[] + Voyage's data[]
+  from the same item. Without this toggle, those fields vanish after each HTTP
+  call. (I couldn't encode it reliably in JSON — version-sensitive key — so it's
+  a manual UI step.)
+  2. Credentials created and rebound (VoyageAuth, OpenAIAuth, EphemeralDB — the
+  REPLACE_ME ids).
+  3. n8n env flags + libs: NODE_FUNCTION_ALLOW_BUILTIN=fs,path,os,child_process,
+  NODE_FUNCTION_ALLOW_EXTERNAL=pdf-parse,mammoth, and those two npm modules
+  installed.
+  4. poppler-utils (pdftoppm) in the n8n container — M7 infra; needed only for
+  scanned-PDF OCR (test case 2).
+
+  If those are in place, we're ready for Phase 6 — verification against the
+  Phase 3 curl suite. Want me to write docs/n8n-setup.md (the in-scope companion
+  doc) capturing this checklist + the curl tests, so the verification run is
+  reproducible?
+
+✻ Cooked for 29s
+
+❯ handle the critical need above                                                
+
+⏺ Good call — I'll eliminate the toggle dependency entirely rather than leave it
+  as a manual step. Instead of relying on "Include Input Fields" (a
+  version-sensitive toggle that may not even exist on every n8n build), I'll
+  have Chunk and Zip Rows read their passthrough/chunks[] directly from the 
+  upstream Function nodes by reference ($('Extract Text').first() /
+  $('Chunk').first()), and pull only the HTTP-specific payload (choices / data)
+  from the current item. That makes passthrough survive both HTTP calls with
+  zero manual configuration.
+
+  This edits two already-approved nodes — you authorized it ("handle it") — so
+  here's exactly what changes, then I regenerate.
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+⏺ Handled. The "Include Input Fields" dependency is gone — passthrough no longer
+  depends on any HTTP-node toggle.
+
+  What changed (saved to n8n-workflows/ingest-ephemeral.json, JSON-valid, all JS
+  passes node --check):
+
+  - Chunk now reads passthrough from $('Extract Text').first().json and only the
+  OCR text (choices) from the current item. Works identically on both the OCR
+  and non-OCR branches.
+  - Zip Rows now reads chunks[] + passthrough from $('Chunk').first().json and
+  only the embeddings (data[]) from the current item (Voyage response).
+  - Format success already used the same $('Chunk').first() pattern — now
+  consistent across all three.
+
+  These $('Node').first() references resolve reliably in a Function node (each
+  upstream node emits exactly one item before Zip Rows explodes), so the OCR and
+  Voyage HTTP nodes can replace the item freely without losing context.
+
+  Updated pre-verification checklist — the 🔴 critical item is resolved; three
+  environmental prerequisites remain (all M7/n8n-admin setup, not workflow
+  logic):
+
+  1. ✅ ~~Include Input Fields toggle~~ — no longer needed.
+  2. Create + rebind credentials VoyageAuth, OpenAIAuth, EphemeralDB.
+  3. n8n env: NODE_FUNCTION_ALLOW_BUILTIN=fs,path,os,child_process,
+  NODE_FUNCTION_ALLOW_EXTERNAL=pdf-parse,mammoth, modules installed.
+  4. poppler-utils (pdftoppm) in the n8n container — only for scanned-PDF OCR
+  (test 2).
+
+  We're ready for Phase 6 — verification. Want me to write docs/n8n-setup.md
+  with this checklist + the runnable Phase 3 curl suite so the run is
+  reproducible?
+
+✻ Worked for 2m 14s
+
+❯ PHASE 6 — VERIFICATION.                                                       
+                                                                                
+  Walk me through running the Phase 3 acceptance tests end-to-end               
+  against my LOCAL n8n + Neon Postgres. Output a numbered runbook:              
+                                                                                
+  1. docker compose command to start only the services this workflow            
+     needs (postgres + n8n). Reference docker-compose.yml in the repo.          
+                                                                                
+  2. Steps in the n8n UI to:                                                    
+     - import n8n-workflows/ingest-ephemeral.json                               
+     - create the VoyageAuth credential (header auth — placeholder              
+       <VOYAGE_API_KEY>)                                                        
+     - create the EphemeralDB credential (postgres — parse fields from          
+       placeholder <NEON_DATABASE_URL>; ssl required)                           
+     - expose OPENAI_API_KEY to the n8n container as an env var                 
+       (point at docker-compose.yml's `environment:` block)                     
+     - activate the workflow and copy the production webhook URL                
+                                                                                
+  3. psql command to seed one tenant row and two conversation rows              
+     (one per tenant for tenant-isolation test). Use gen_random_uuid().         
+     Print the UUIDs to stdout so the user can paste them into curl.            
+                                                                                
+  4. Shell commands to prepare the 4 test fixture files in /tmp:                
+       /tmp/two-page-text.pdf   (any small native-text PDF)                     
+       /tmp/scanned.pdf         (image-only PDF — give one-line                 
+                                 imagemagick command to fabricate)              
+       /tmp/big-12mb.pdf        (use `dd` to create 12 MB junk file             
+                                 renamed .pdf)                                  
+       /tmp/does-not-exist.pdf  (just do not create it)                         
+                                                                                
+  5. The 8 curl commands from Phase 3, in order, using $URL, $TENANT_A,         
+     $TENANT_B, $CONV_A, $CONV_B variables. After each curl, give the           
+     exact psql verification query and the expected scalar result.              
+                                                                                
+  6. The cleanup command:  python -m scripts.cleanup_ephemeral                  
+     (note: run from backend/ with DATABASE_URL exported).                      
+                                                                                
+  If any step depends on something M2/M7 hasn't shipped (e.g. the               
+  tenants table not yet migrated), flag it and give a manual SQL                
+  fallback.                                                                     
+                                                                                
+  Output the runbook as Markdown. No commentary outside it.                     
+
+  Searched for 1 pattern, listed 1 directory (ctrl+o to expand)
+
+⏺ M5 Ephemeral Ingestion — Phase 6 Verification Runbook
+
+  ▎ Targets local n8n (Docker) + Neon Postgres (cloud). n8n uses the local 
+  ▎ postgres service for its own state; all app data (tenants, ephemeral_chunks,
+  ▎ …) lives on Neon and is reached via the EphemeralDB credential and psql 
+  ▎ "<NEON_DATABASE_URL>".
+
+  ▎ 🚩 PREREQ FLAGS — confirm before running (M7/M2 not yet shipped in repo):
+  ▎ - n8n image lacks the Function-node deps. docker-compose.yml's n8n service 
+  ▎ has no NODE_FUNCTION_ALLOW_EXTERNAL, and n8nio/n8n:latest ships without 
+  ▎ pdf-parse, mammoth, or poppler-utils. Extraction (tests 1, 2) will fail 
+  ▎ until M7 adds them. Temporary fallback after step 1:
+  ▎ docker exec -u root rag-n8n sh -c "apk add --no-cache poppler-utils && cd 
+  ▎ /usr/local/lib/node_modules/n8n && npm i pdf-parse mammoth"
+  ▎ # then add to the n8n service environment: and restart:
+  ▎ #   NODE_FUNCTION_ALLOW_BUILTIN: "fs,path,os,child_process"
+  ▎ #   NODE_FUNCTION_ALLOW_EXTERNAL: "pdf-parse,mammoth"
+  ▎ docker compose up -d n8n
+  ▎ - Neon schema must be migrated (tenants, conversations, ephemeral_chunks, 
+  ▎ cleanup_expired_ephemeral_chunks()). If M2's Alembic hasn't run against 
+  ▎ Neon, apply the SQL fallback once:
+  ▎ psql "<NEON_DATABASE_URL>" -f database/init.sql
+
+  ---
+  1. Start only postgres + n8n
+
+  # from repo root; OPENAI_API_KEY/POSTGRES_PASSWORD come from .env
+  docker compose up -d postgres n8n
+  docker compose ps          # both healthy/running
+
+  2. n8n UI setup
+
+  Open http://localhost:5678 → log in admin / n8nadmin (compose
+  N8N_BASIC_AUTH_*).
+
+  1. Import workflow: Workflows → ⋮ → Import from File → select
+  n8n-workflows/ingest-ephemeral.json.
+  2. VoyageAuth credential: Credentials → New → Header Auth. Name VoyageAuth;
+  Name = Authorization, Value = Bearer <VOYAGE_API_KEY>. Open the Voyage embed
+  node → select this credential (replaces REPLACE_ME).
+  3. OpenAIAuth credential: Credentials → New → Header Auth. Name OpenAIAuth;
+  Name = Authorization, Value = Bearer <OPENAI_API_KEY>. Open the OCR 
+  (gpt-4o-mini vision) node → select it.
+  4. EphemeralDB credential: Credentials → New → Postgres. Parse from
+  <NEON_DATABASE_URL> (postgres://USER:PASS@HOST/DB?sslmode=require): Host =
+  HOST, Port = 5432, Database = DB, User = USER, Password = PASS, SSL = require.
+  Open Store ephemeral → select it.
+  5. OPENAI_API_KEY env var: already wired in docker-compose.yml →
+  n8n.environment.OPENAI_API_KEY: ${OPENAI_API_KEY}; just set OPENAI_API_KEY in
+  .env before step 1. 🚩 Note: this M5 workflow calls OpenAI via the OpenAIAuth 
+  credential (step 3), so this env var is not consumed by our workflow — it's 
+  only here because your step asked. The credential is what matters.
+  6. Activate the workflow (top-right Active toggle). Open the Webhook 
+  /ingest-ephemeral node → copy the Production URL →
+  http://localhost:5678/webhook/ingest-ephemeral.
+
+  export URL="http://localhost:5678/webhook/ingest-ephemeral"
+
+  3. Seed tenants + conversations on Neon (prints export lines)
+
+  ▎ Seeds two tenants + one conversation each — the isolation test (5.7) 
+  ▎ requires two distinct tenants. conversation_id has no FK, so the 
+  ▎ conversation rows are for realism only; tenant_id is an FK and must exist.
+
+  psql "<NEON_DATABASE_URL>" -At <<'SQL'
+  WITH ta AS (INSERT INTO tenants(name,slug) VALUES('Verify 
+  A','verify-a-'||substr(md5(random()::text),1,8)) RETURNING id),
+       tb AS (INSERT INTO tenants(name,slug) VALUES('Verify 
+  B','verify-b-'||substr(md5(random()::text),1,8)) RETURNING id),
+       ca AS (INSERT INTO conversations(tenant_id,title,channel) SELECT
+  id,'verify-conv-a','whatsapp' FROM ta RETURNING id,tenant_id),
+       cb AS (INSERT INTO conversations(tenant_id,title,channel) SELECT
+  id,'verify-conv-b','whatsapp' FROM tb RETURNING id,tenant_id)
+  SELECT 'export TENANT_A='||(SELECT tenant_id FROM ca)||'
+  export CONV_A='  ||(SELECT id        FROM ca)||'
+  export TENANT_B='||(SELECT tenant_id FROM cb)||'
+  export CONV_B='  ||(SELECT id        FROM cb);
+  SQL
+  # copy the 4 printed lines into your shell:
+  # export TENANT_A=... ; export CONV_A=... ; export TENANT_B=... ; export 
+  CONV_B=...
+
+  4. Prepare fixture files in /tmp (macOS)
+
+  # native-text, 2 pages (\f = page break); cupsfilter ships with macOS
+  printf 'Reset procedure: hold power 10s.\fPage two: contact support for 
+  RMA.\n' > /tmp/t.txt
+  cupsfilter /tmp/t.txt > /tmp/two-page-text.pdf 2>/dev/null
+
+  # image-only (no text layer) -> forces OCR branch  (newer ImageMagick: use 
+  `magick`)
+  convert -size 1000x1400 xc:white -gravity center -pointsize 48 -annotate 0
+  'SCANNED PAGE 1' /tmp/scanned.pdf
+
+  # 12 MB junk renamed .pdf (rejected on size before parsing)
+  dd if=/dev/zero of=/tmp/big-12mb.pdf bs=1m count=12
+
+  # leave this one ABSENT
+  rm -f /tmp/does-not-exist.pdf
+
+  5. Run the 8 acceptance tests
+
+  ▎ Reset helper (clean per-conversation state):
+  ▎ reset_conv () { psql "<NEON_DATABASE_URL>" -c "DELETE FROM ephemeral_chunks 
+  ▎ WHERE conversation_id='$1';"; }
+
+  5.1 Happy path — 2-page text PDF  🚩 needs pdf-parse
+
+  reset_conv "$CONV_A"
+  curl -sS -w "\n%{http_code}\n" -X POST "$URL" -H "Content-Type: 
+  application/json" -d '{
+    "conversation_id":"'"$CONV_A"'","tenant_id":"'"$TENANT_A"'",
+    "file_path":"/tmp/two-page-text.pdf","source_name":"two-page-text.pdf","ttl_
+  seconds":3600 }'
+  Expect HTTP 200, body {"status":"completed","used_ocr":false,...}.
+  psql "<NEON_DATABASE_URL>" -At -c "SELECT count(*)>=1 AND 
+  bool_and(vector_dims(embedding)=1024) FROM ephemeral_chunks WHERE 
+  tenant_id='$TENANT_A' AND conversation_id='$CONV_A';"
+  Expected: t
+
+  5.2 Happy path — scanned PDF (OCR)  🚩 needs pdftoppm + OpenAIAuth
+
+  reset_conv "$CONV_A"
+  curl -sS -w "\n%{http_code}\n" -X POST "$URL" -H "Content-Type: 
+  application/json" -d '{
+    "conversation_id":"'"$CONV_A"'","tenant_id":"'"$TENANT_A"'",
+    "file_path":"/tmp/scanned.pdf","source_name":"scanned.pdf" }'
+  Expect HTTP 200, body {"status":"completed","used_ocr":true,...}.
+  psql "<NEON_DATABASE_URL>" -At -c "SELECT count(*)>=1 AND 
+  bool_and(metadata->>'used_ocr'='true') FROM ephemeral_chunks WHERE 
+  tenant_id='$TENANT_A' AND conversation_id='$CONV_A';"
+  Expected: t
+
+  5.3 File > 10 MB → 422
+
+  reset_conv "$CONV_A"
+  curl -sS -w "\n%{http_code}\n" -X POST "$URL" -H "Content-Type: 
+  application/json" -d '{
+    "conversation_id":"'"$CONV_A"'","tenant_id":"'"$TENANT_A"'",
+    "file_path":"/tmp/big-12mb.pdf","source_name":"big-12mb.pdf" }'
+  Expect HTTP 422, body {"status":"failed","error":"File exceeds 10 MB limit: 
+  ..."}.
+  psql "<NEON_DATABASE_URL>" -At -c "SELECT count(*) FROM ephemeral_chunks WHERE
+  conversation_id='$CONV_A';"
+  Expected: 0
+
+  5.4 Missing tenant_id → 422
+
+  reset_conv "$CONV_A"
+  curl -sS -w "\n%{http_code}\n" -X POST "$URL" -H "Content-Type: 
+  application/json" -d '{
+    "conversation_id":"'"$CONV_A"'","file_path":"/tmp/two-page-text.pdf","source
+  _name":"two-page-text.pdf" }'
+  Expect HTTP 422, body {"status":"failed","error":"Missing required field: 
+  tenant_id"}.
+  psql "<NEON_DATABASE_URL>" -At -c "SELECT count(*) FROM ephemeral_chunks WHERE
+  conversation_id='$CONV_A';"
+  Expected: 0
+
+  5.5 Non-existent file_path → 5xx
+
+  reset_conv "$CONV_A"
+  curl -sS -w "\n%{http_code}\n" -X POST "$URL" -H "Content-Type: 
+  application/json" -d '{
+    "conversation_id":"'"$CONV_A"'","tenant_id":"'"$TENANT_A"'",
+    "file_path":"/tmp/does-not-exist.pdf","source_name":"does-not-exist.pdf" }'
+  Expect HTTP 500, body {"status":"failed","error":"Cannot stat file_path: 
+  ..."}.
+  psql "<NEON_DATABASE_URL>" -At -c "SELECT count(*) FROM ephemeral_chunks WHERE
+  conversation_id='$CONV_A';"
+  Expected: 0
+
+  5.6 TTL respected — expires_at ≈ now + 600s
+
+  reset_conv "$CONV_A"
+  curl -sS -w "\n%{http_code}\n" -X POST "$URL" -H "Content-Type: 
+  application/json" -d '{
+    "conversation_id":"'"$CONV_A"'","tenant_id":"'"$TENANT_A"'",
+    "file_path":"/tmp/two-page-text.pdf","source_name":"two-page-text.pdf","ttl_
+  seconds":600 }'
+  Expect HTTP 200.
+  psql "<NEON_DATABASE_URL>" -At -c "SELECT bool_and(abs(extract(epoch FROM 
+  (expires_at-created_at))-600)<=5) FROM ephemeral_chunks WHERE 
+  tenant_id='$TENANT_A' AND conversation_id='$CONV_A';"
+  Expected: t
+
+  5.7 Tenant isolation — no cross-tenant leak
+
+  reset_conv "$CONV_A"; reset_conv "$CONV_B"
+  curl -sS -X POST "$URL" -H "Content-Type: application/json" -d
+  '{"conversation_id":"'"$CONV_A"'","tenant_id":"'"$TENANT_A"'","file_path":"/tm
+  p/two-page-text.pdf","source_name":"a.pdf"}' >/dev/null
+  curl -sS -X POST "$URL" -H "Content-Type: application/json" -d
+  '{"conversation_id":"'"$CONV_B"'","tenant_id":"'"$TENANT_B"'","file_path":"/tm
+  p/two-page-text.pdf","source_name":"b.pdf"}' >/dev/null
+  Both HTTP 200.
+  psql "<NEON_DATABASE_URL>" -At -c "SELECT count(*) FILTER (WHERE 
+  tenant_id='$TENANT_B') FROM ephemeral_chunks WHERE tenant_id='$TENANT_A';"
+  psql "<NEON_DATABASE_URL>" -At -c "SELECT count(DISTINCT tenant_id) FROM 
+  ephemeral_chunks WHERE conversation_id IN ('$CONV_A','$CONV_B');"
+  Expected: 0  (no leak), then 2  (never merged)
+
+  5.8 Cleanup — expired rows purged
+
+  psql "<NEON_DATABASE_URL>" <<SQL
+  UPDATE ephemeral_chunks SET expires_at = NOW() - INTERVAL '1 minute'
+    WHERE conversation_id IN ('$CONV_A','$CONV_B');
+  SELECT cleanup_expired_ephemeral_chunks();
+  SELECT count(*) FROM ephemeral_chunks WHERE conversation_id IN 
+  ('$CONV_A','$CONV_B');
+  SQL
+  Expected: function returns the number of deleted rows (≥1); final count = 0.
+
+  6. Cleanup script (real cron path)
+
+  cd backend
+  export DATABASE_URL="<NEON_DATABASE_URL>"
+  python -m scripts.cleanup_ephemeral
+  🚩 If the module path differs (M2 owns backend/scripts/) or the script isn't
+  runnable, fallback to the function directly:
+  psql "<NEON_DATABASE_URL>" -c "SELECT cleanup_expired_ephemeral_chunks();"
+
+✻ Cogitated for 2m 55s
+
+❯ PHASE 7 — SELF-REVIEW.                                                        
+                                                                                
+  Re-read:                                                                      
+  - specs/MODULE_SPEC_M5.md "Acceptance Criteria"                               
+  - CLAUDE.md "Hard Rules"                                                      
+  - ARCHITECTURE.md §6 "Webhook Contracts" and §7 "Security"                    
+                                                                                
+  Audit the final Phase 5 workflow JSON line by line and produce                
+  this checklist. Mark each [x] or [ ]. For every [ ], propose the              
+  smallest possible patch (a diff snippet for the JSON).                        
+                                                                                
+  - [ ] Webhook path equals "ingest-ephemeral" (matches                         
+        N8N_EPHEMERAL_INGEST_WEBHOOK_URL in backend/app/core/config.py)         
+  - [ ] Every Postgres INSERT row carries a non-null tenant_id                  
+  - [ ] No secret literal anywhere in the JSON (grep for "Bearer ",             
+        "sk-", "pa-", "npg_", "@neon.tech")                                     
+  - [ ] OCR branch sets metadata.used_ocr = true                                
+  - [ ] Voyage call uses model "voyage-4-large" and                             
+        input_type "document"                                                   
+  - [ ] expires_at uses NOW() + ttl_seconds (Postgres-side, not                 
+        JS-side) so timezone is server-authoritative                            
+  - [ ] embedding column written as pgvector literal "[v1,v2,...]"              
+        and cast ::vector                                                       
+  - [ ] Error branch returns JSON with key "error", not                         
+        "error_message", not "message"                                          
+  - [ ] Failure status codes: 422 for validation errors,                        
+        5xx for runtime errors                                                  
+  - [ ] No call to OpenAI for generation (vision OCR only)                      
+  - [ ] No callback to /webhooks/n8n/ingestion-status (ephemeral                
+        is synchronous)                                                         
+  - [ ] File size hard cap = 10 MB (10 * 1024 * 1024)                           
+  - [ ] file_path restricted to /tmp or /uploads (path-traversal guard)         
+  - [ ] ttl_seconds bounded [60, 86400]                                         
+  - [ ] All Function nodes set "onError":"continueErrorOutput"                  
+  - [ ] Workflow.active = false in the committed JSON                           
+                                                                                
+  Output only the checklist with patches.                                       
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+⏺ All items verified against the JSON. Only one box fails.
+
+  - [x] Webhook path = "ingest-ephemeral" — "path": "ingest-ephemeral" matches
+  config.py:43 N8N_EPHEMERAL_INGEST_WEBHOOK_URL.
+  - [x] Every INSERT row carries non-null tenant_id — $1 = $json.tenant_id;
+  Validate rejects missing tenant_id, Zip Rows carries it onto every row.
+  - [x] No secret literal in JSON — grep for Bearer , sk-, pa-, npg_, @neon.tech
+  → CLEAN (keys live in n8n credential vault).
+  - [x] OCR branch sets metadata.used_ocr = true — needs_ocr → Chunk.used_ocr →
+  Zip writes metadata.used_ocr.
+  - [x] Voyage uses "voyage-4-large" + input_type "document" — confirmed in
+  embed body.
+  - [x] expires_at server-authoritative — NOW() + ($8 || ' seconds')::interval
+  (Postgres-side, not JS).
+  - [x] embedding pgvector literal + ::vector — Zip emits `[${vec.join(',')}]`;
+  SQL $4::vector.
+  - [x] Error branch key "error" — Format Error and Respond (failure) use
+  "error" (not error_message/message).
+  - [x] 422 validation / 5xx runtime — statusCode: isValidation ? 422 : 500.
+  - [x] No OpenAI generation — only api.openai.com/v1/chat/completions with
+  gpt-4o-mini for vision OCR; no generation call.
+  - [x] No callback to /webhooks/n8n/ingestion-status — grep → NONE (synchronous
+  respond only).
+  - [x] Size cap = 10 MB — 10 * 1024 * 1024.
+  - [x] file_path restricted to /tmp or /uploads — allowedRoots = ['/tmp/', 
+  '/uploads/'].
+  - [x] ttl_seconds bounded [60, 86400] — n < 60 || n > 86400.
+  - [ ] All Function nodes set "onError":"continueErrorOutput" — Validate,
+  Extract Text, Chunk, Zip Rows, Format success ✓; Format Error is MISSING it.
+  It's the terminal error formatter, so this is intentional today — but to meet
+  the criterion literally and ensure a throw inside Format Error still yields a
+  response, add it and wire its error output to Respond (failure).
+
+  # node "Format Error":
+       "type": "n8n-nodes-base.function",
+       "typeVersion": 1,
+  -    "position": [1040, 600]
+  +    "position": [1040, 600],
+  +    "onError": "continueErrorOutput"
+     },
+  # connections "Format Error":
+       "Format Error": {
+         "main": [
+  -        [ { "node": "Respond (failure)", "type": "main", "index": 0 } ]
+  +        [ { "node": "Respond (failure)", "type": "main", "index": 0 } ],
+  +        [ { "node": "Respond (failure)", "type": "main", "index": 0 } ]
+         ]
+       }
+  - [x] Workflow.active = false — "active": false.
+
+✻ Worked for 1m 14s
+
+❯ handle the uncheked parts of the verification                                 
+
+⏺ Applying the patch to the unchecked item (#15) directly to the file, then
+  re-validating.
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Update(n8n-workflows/ingest-ephemeral.json)  ⎿  Added 2 lines, removed 1 line
+      225        "position": [
+      226          1040,
+      227          600
+      228 -      ]                                                       
+      228 +      ],                                                      
+      229 +      "onError": "continueErrorOutput"                        
+      230      },
+      231      {
+      232        "parameters": {
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Update(n8n-workflows/ingest-ephemeral.json)
+  ⎿  Added 7 lines
+      428              "type": "main",
+      429              "index": 0
+      430            }
+      431 +        ],                                                    
+      432 +        [                                                     
+      433 +          {                                                   
+      434 +            "node": "Respond (failure)",                      
+      435 +            "type": "main",                                   
+      436 +            "index": 0                                        
+      437 +          }                                                   
+      438          ]
+      439        ]
+      440      }
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Done. The one unchecked item is now closed.
+
+  Patch applied to n8n-workflows/ingest-ephemeral.json (JSON re-validated):
+  - Format Error node → added "onError": "continueErrorOutput".
+  - Format Error connections → added the error output (main[1]) routed to
+  Respond (failure).
+
+  Re-audit:
+  - ✅ Function nodes missing onError: NONE (all 6 now set continueErrorOutput).
+  - ✅ Format Error outputs: main[0] → Respond (failure), main[1] → Respond 
+  (failure).
+  - ✅ active: false preserved; JSON still parses (13 nodes).
+
+  Full Phase 7 checklist is now 16/16 [x].
+
+  One honest caveat on this hardening: main[1] carries a raw error item (no
+  statusCode/error fields), so if Format Error itself ever threw, Respond 
+  (failure) would emit an empty responseCode. In practice Format Error has no
+  throw paths, so this branch is purely defensive belt-and-suspenders to satisfy
+  the "all Function nodes" rule — it will effectively never fire. If you'd
+  rather not have that degenerate path at all, the alternative is to leave
+  Format Error without onError and treat the checklist item as "intentionally
+  exempt (terminal handler)." Say the word and I'll revert to that stance
+  instead.
+
+✻ Churned for 48s
+
+❯ PHASE 8 — GIT ARTEFACTS.                                                      
+                                                                                
+  Generate two outputs.                                                         
+                                                                                
+  (1) Conventional Commit message (single line):                                
+        feat(m5): ephemeral ingestion workflow — validate, extract,             
+        chunk, embed, store                                                     
+                                                                                
+  (2) Pull Request body in Markdown with these sections:                        
+                                                                                
+  ## Summary                                                                    
+  One paragraph: what the PR delivers, scoped to M5 ephemeral                   
+  ingestion only.                                                               
+                                                                                
+  ## Files changed                                                              
+  - n8n-workflows/ingest-ephemeral.json                                         
+                                                                                
+  ## Spec sections implemented                                                  
+  Bullet list referencing specs/MODULE_SPEC_M5.md sections and                  
+  ARCHITECTURE.md §2 / §6 contracts that this PR satisfies.                     
+                                                                                
+  ## Contracts honoured                                                         
+  - Inbound webhook shape (§B of locked spec)                                   
+  - Outbound response shape — success and failure                               
+  - DB row shape for ephemeral_chunks (database/init.sql)                       
+  - HTTP failure codes 422 vs 5xx with body key `error`                         
+  - Tenant isolation: every INSERT carries tenant_id                            
+                                                                                
+  ## Test evidence                                                              
+  Paste the 8 curl commands from Phase 3 with the actual expected               
+  JSON bodies and HTTP status. Mark each "✅ verified locally" /                
+  "⚠️ pending fixture".                                                         
+                                                                                
+  ## Reviewer checklist                                                         
+  Copy the Phase 7 checklist as a fresh empty checklist for the                 
+  reviewer to tick.                                                             
+                                                                                
+  ## Out of scope                                                               
+  - Persistent ingestion (ingestion-pipeline.json — separate PR)                
+  - Retrieval workflow (M6)                                                     
+  - FastAPI changes (none — workflow is wholly inside n8n)                      
+  - /webhooks/n8n/ingestion-status callback (not used for                       
+    ephemeral path)                                                             
+                                                                                
+  ## How to test                                                                
+  Link to the Phase 6 runbook (paste inline if no doc file).                    
+                                                                                
+  Target branch: dev. Reviewer: M1.                                             
+                                                                                
+  Output both deliverables. No additional commentary.                           
+
+⏺ (1) Commit message
+
+  feat(m5): ephemeral ingestion workflow — validate, extract, chunk, embed,
+  store
+
+  (2) Pull Request body
+
+  ## Summary
+  This PR delivers the M5 **ephemeral ingestion** n8n workflow
+  (`ingest-ephemeral.json`): a synchronous webhook pipeline that accepts a
+  chat/WhatsApp-uploaded file, validates it, extracts text (with gpt-4o-mini
+  vision OCR for scanned PDFs and images), chunks it (512-word windows / 50
+  overlap), embeds with Voyage `voyage-4-large` (1024-dim), and stores the rows
+  in `ephemeral_chunks` with a server-side `expires_at` TTL. All logic lives
+  entirely inside n8n; no FastAPI changes. Scope is strictly the ephemeral path
+  — persistent ingestion and retrieval are untouched.
+
+  ## Files changed
+  - `n8n-workflows/ingest-ephemeral.json`
+
+  ## Spec sections implemented
+  - `specs/MODULE_SPEC_M5.md` → **[LOCKED] Locked Scope Update**: second
+  workflow writing to `ephemeral_chunks` (1-hour TTL, conversation-scoped);
+  Voyage `voyage-4-large` (1024 dims); OCR via OpenAI vision with
+  `metadata.used_ocr`.
+  - `specs/MODULE_SPEC_M5.md` → **Workflow Architecture / Chunking Code Node**:
+  webhook → extract → chunk → embed → store flow; 512/50 chunking.
+  - `ARCHITECTURE.md §2 "Two Upload Paths"`: WhatsApp ephemeral path (≤10 MB,
+  `/tmp`, conversation-scoped, no quota).
+  - `ARCHITECTURE.md §6 "Webhook Contracts"`: `POST /webhook/ingest-ephemeral`
+  inbound shape `{conversation_id, tenant_id, file_path, source_name,
+  ttl_seconds}`.
+  - `ARCHITECTURE.md §7 "Security"`: 10 MB cap, path restriction, per-tenant
+  isolation on every row.
+
+  ## Contracts honoured
+  - **Inbound webhook shape** (§B locked spec): `{conversation_id, tenant_id,
+  file_path, source_name, ttl_seconds?}`; required fields enforced fail-closed
+  in `Validate`.
+  - **Outbound response shape** — success `{status:"completed", conversation_id,
+  chunk_count, used_ocr, expires_at}`; failure `{status:"failed", error}`.
+  - **DB row shape for `ephemeral_chunks`** (`database/init.sql`): `tenant_id, 
+  conversation_id, content, embedding::vector(1024), chunk_index, source_name, 
+  metadata::jsonb, expires_at`; `id`/`created_at` defaulted.
+  - **HTTP failure codes** — `422` for validation errors, `5xx` for runtime 
+  errors, body key `error`.
+  - **Tenant isolation** — every INSERT carries `tenant_id` (`$1`), sourced from
+  the validated payload; no cross-conversation reads.
+
+  ## Test evidence
+  > Status: ⚠️ none executed against a live n8n+Neon yet — this PR was 
+  statically validated (JSON parses, all Function bodies pass `node --check`). 
+  The 8 cases below are the agreed acceptance suite; run via the Phase 6 runbook
+  before merge.
+
+  1. **Text PDF** — `200` · `{"status":"completed","used_ocr":false,...}` — ⚠️ 
+  pending fixture
+     ```bash
+     curl -sS -X POST "$URL" -H "Content-Type: application/json" -d 
+  '{"conversation_id":"'"$CONV_A"'","tenant_id":"'"$TENANT_A"'","file_path":"/tm
+  p/two-page-text.pdf","source_name":"two-page-text.pdf","ttl_seconds":3600}'
+  2. Scanned PDF (OCR) — 200 · {"status":"completed","used_ocr":true,...} — ⚠️
+  pending fixture
+  curl -sS -X POST "$URL" -H "Content-Type: application/json" -d
+  '{"conversation_id":"'"$CONV_A"'","tenant_id":"'"$TENANT_A"'","file_path":"/tm
+  p/scanned.pdf","source_name":"scanned.pdf"}'
+  3. >10 MB — 422 · {"status":"failed","error":"File exceeds 10 MB limit: ..."}
+  — ⚠️ pending fixture
+  curl -sS -X POST "$URL" -H "Content-Type: application/json" -d
+  '{"conversation_id":"'"$CONV_A"'","tenant_id":"'"$TENANT_A"'","file_path":"/tm
+  p/big-12mb.pdf","source_name":"big-12mb.pdf"}'
+  4. Missing tenant_id — 422 · {"status":"failed","error":"Missing required 
+  field: tenant_id"} — ⚠️ pending fixture
+  curl -sS -X POST "$URL" -H "Content-Type: application/json" -d
+  '{"conversation_id":"'"$CONV_A"'","file_path":"/tmp/two-page-text.pdf","source
+  _name":"two-page-text.pdf"}'
+  5. Non-existent file_path — 500 · {"status":"failed","error":"Cannot stat 
+  file_path: ..."} — ⚠️ pending fixture
+  curl -sS -X POST "$URL" -H "Content-Type: application/json" -d
+  '{"conversation_id":"'"$CONV_A"'","tenant_id":"'"$TENANT_A"'","file_path":"/tm
+  p/does-not-exist.pdf","source_name":"does-not-exist.pdf"}'
+  6. TTL respected — 200 · expires_at − created_at ≈ 600s (±5) — ⚠️ pending
+  fixture
+  curl -sS -X POST "$URL" -H "Content-Type: application/json" -d
+  '{"conversation_id":"'"$CONV_A"'","tenant_id":"'"$TENANT_A"'","file_path":"/tm
+  p/two-page-text.pdf","source_name":"two-page-text.pdf","ttl_seconds":600}'
+  7. Tenant isolation — both 200; A's tenant-scoped SELECT contains 0 of B's
+  rows; 2 distinct tenants — ⚠️ pending fixture
+  curl -sS -X POST "$URL" -H "Content-Type: application/json" -d
+  '{"conversation_id":"'"$CONV_A"'","tenant_id":"'"$TENANT_A"'","file_path":"/tm
+  p/two-page-text.pdf","source_name":"a.pdf"}'
+  curl -sS -X POST "$URL" -H "Content-Type: application/json" -d
+  '{"conversation_id":"'"$CONV_B"'","tenant_id":"'"$TENANT_B"'","file_path":"/tm
+  p/two-page-text.pdf","source_name":"b.pdf"}'
+  8. Cleanup — cleanup_expired_ephemeral_chunks() returns ≥1; rows then 0 — ⚠️
+  pending fixture
+  psql "<NEON_DATABASE_URL>" -c "UPDATE ephemeral_chunks SET 
+  expires_at=NOW()-INTERVAL '1 minute' WHERE conversation_id IN 
+  ('$CONV_A','$CONV_B'); SELECT cleanup_expired_ephemeral_chunks();"
+
+  Reviewer checklist
+
+  - [ ] Webhook path equals ingest-ephemeral (matches
+  N8N_EPHEMERAL_INGEST_WEBHOOK_URL in backend/app/core/config.py)
+  - [ ] Every Postgres INSERT row carries a non-null tenant_id
+  - [ ] No secret literal anywhere in the JSON (Bearer , sk-, pa-, npg_,
+  @neon.tech)
+  - [ ] OCR branch sets metadata.used_ocr = true
+  - [ ] Voyage call uses model voyage-4-large and input_type "document"
+  - [ ] expires_at uses NOW() + ttl_seconds (Postgres-side,
+  server-authoritative)
+  - [ ] embedding written as pgvector literal [v1,v2,...] and cast ::vector
+  - [ ] Error branch returns JSON with key error (not error_message/message)
+  - [ ] Failure status codes: 422 for validation, 5xx for runtime
+  - [ ] No call to OpenAI for generation (vision OCR only)
+  - [ ] No callback to /webhooks/n8n/ingestion-status (ephemeral is synchronous)
+  - [ ] File size hard cap = 10 MB (10 * 1024 * 1024)
+  - [ ] file_path restricted to /tmp or /uploads (path-traversal guard)
+  - [ ] ttl_seconds bounded [60, 86400]
+  - [ ] All Function nodes set "onError":"continueErrorOutput"
+  - [ ] workflow.active = false in the committed JSON
+
+  Out of scope
+
+  - Persistent ingestion (ingestion-pipeline.json) — separate PR
+  - Retrieval workflow (M6)
+  - FastAPI changes — none; the workflow is wholly inside n8n
+  - /webhooks/n8n/ingestion-status callback — not used for the ephemeral path
+
+  How to test
+
+  Follow the Phase 6 verification runbook: docker compose up -d postgres n8n →
+  import the workflow → create credentials VoyageAuth / OpenAIAuth / EphemeralDB
+  → seed two tenants + conversations on Neon (prints export lines for
+  TENANT_A/CONV_A/TENANT_B/CONV_B) → create /tmp fixtures → run the 8 curls
+  above with the paired psql assertions → purge with python -m 
+  scripts.cleanup_ephemeral (from backend/, DATABASE_URL exported).
+
+  ▎ ⚠️ Environment prerequisites (M7): the n8n image must provide pdf-parse, 
+  ▎ mammoth, poppler-utils, and 
+  ▎ NODE_FUNCTION_ALLOW_EXTERNAL/NODE_FUNCTION_ALLOW_BUILTIN; the Neon DB must 
+  ▎ have the schema from database/init.sql migrated.
+
+  ---Target branch: dev · Reviewer: M1
+  ```
+
+✻ Worked for 46s
+
+※ recap: Building the M5 ephemeral ingestion n8n workflow; it's fully implemented, validated, self-reviewed, and Phase 8 produced the commit message and PR body. Next action is committing the workflow to a branch off dev and opening the PR to M1. (disable recaps in /config)
+
+❯ I need to save all the conversation and my token usage, help                  
+
+⏺ Those two needs map directly to the repo's AI Usage Policy in CLAUDE.md
+  ("Export Claude Code session with /export… Track token usage with /cost").
+  Both are Claude Code built-in commands that you type at the prompt — I can't
+  run them for you:
+
+  1. Save the whole conversation → type:
+  /export
+  1. This writes the full session transcript to a file. You can pass a filename,
+  e.g. /export m5-ephemeral-ingestion.md. (Default lands in the current
+  directory / your configured export path.)
+  2. Token usage + cost → type:
+  /cost
+  2. Shows tokens and estimated cost for this session. Copy the figure into
+  wherever you track it.
+
+  If /export isn't available in your build, the fallback is /resume → select
+  this session, or copy the terminal scrollback.
+
+  Optional — the policy also asks for an agent_usage/ entry ("what you prompted,
+  what it generated, what you corrected"). That folder is outside my declared
+  M5 scope (rule 6: only ingest-ephemeral.json and docs/n8n-setup.md), so I
+  won't write it unprompted. If you want, I can draft
+  agent_usage/m5-ephemeral-ingestion.md summarizing this session — the
+  spec→tests→design→implementation→verification phases, the key corrections
+  (e.g. the ::vector cast fix, dropping the process.env/inline-OCR idea, the
+  Include Input Fields → $('node').first() change), and the open M7 infra
+  prerequisites. Want me to create it? Just confirm and I'll treat it as an
+  approved scope exception.
+
+  Note: I can't see your token totals — /cost is the only place that number
+  lives.
+
+✻ Churned for 22s
