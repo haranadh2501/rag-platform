@@ -33,7 +33,7 @@ from app.core.database import AsyncSessionLocal, get_db
 from app.core.dependencies import require_role
 from app.models.models import Document, User
 from app.schemas.webhook import SlackOnboardRequest, SlackOnboardResponse
-from app.services import file_validator, message_service, n8n_client, pipeline_client
+from app.services import ephemeral_service, file_validator, message_service, n8n_client, pipeline_client
 from app.services.types import MessageContext
 
 logger = logging.getLogger(__name__)
@@ -96,35 +96,68 @@ async def _process_whatsapp_message(
     media_url: str | None = None,
     media_type: str | None = None,
 ) -> None:
-    """Background task — runs Steps 2-8 with its own DB session."""
+    """Background task — runs with its own DB session.
+
+    Branches on ephemeral session state before falling through to the
+    existing normal pipeline. The normal pipeline path is unchanged.
+    """
     async with AsyncSessionLocal() as db:
         ctx = MessageContext(
             request_id=message_sid,
             source="whatsapp",
-            query=query or ".",  # Placeholder if only media
+            query=query or ".",
             whatsapp_from=from_number,
         )
         try:
-            # Resolve identity and find/create conversation first
             await message_service._resolve_identity(ctx, db)
-            await message_service._find_or_create_conversation(ctx, db)
 
-            # Handle media upload if present
+            session = await ephemeral_service.get_active_session(ctx.user_id, db)
+            query_lower = (query or "").strip().lower()
+
+            # ── Ephemeral commands ────────────────────────────────────────────
+            if query_lower == "/ephemeral_ingest":
+                if session:
+                    await whatsapp.post_text(from_number,
+                        "⚠️ Already in ephemeral mode. /end_session to exit first.")
+                else:
+                    await ephemeral_service.start_session(ctx, db)
+                return
+
+            if query_lower == "/end_session":
+                if session:
+                    await ephemeral_service.end_session(ctx, db, session)
+                else:
+                    await whatsapp.post_text(from_number, "No active ephemeral session.")
+                return
+
+            if query_lower in message_service.RESET_COMMANDS:
+                if session:
+                    # Purge ephemeral session silently, then confirm reset
+                    await ephemeral_service.end_session(ctx, db, session, silent=True)
+                    await whatsapp.post_text(from_number, message_service.RESET_CONFIRMATION)
+                    return
+                # No active session — normal reset flow
+                await message_service._find_or_create_conversation(ctx, db)
+                await message_service._handle_reset(ctx, db)
+                return
+
+            # ── Ephemeral mode active ─────────────────────────────────────────
+            if session:
+                if media_url and media_type:
+                    await ephemeral_service.handle_upload(ctx, db, session, media_url, media_type)
+                else:
+                    await ephemeral_service.handle_query(ctx, db, session)
+                return
+
+            # ── Normal mode (unchanged) ───────────────────────────────────────
             if media_url and media_type:
-                await _handle_whatsapp_media(
-                    media_url,
-                    media_type,
-                    from_number,
-                    ctx.conversation_id
-                )
-                # If there's also a text query, process it
-                if query:
-                    await whatsapp.post_text(from_number, "🤔 Thinking...")
-                    await message_service.process_message(ctx, db)
-            elif query:
-                # Text-only message
-                await whatsapp.post_text(from_number, "🤔 Thinking...")
-                await message_service.process_message(ctx, db)
+                await whatsapp.post_text(from_number,
+                    "📎 File uploads require ephemeral mode. Send /ephemeral_ingest first.")
+                return
+
+            await whatsapp.post_text(from_number, "🤔 Thinking...")
+            await message_service._find_or_create_conversation(ctx, db)
+            await message_service.process_message(ctx, db)
 
         except message_service.IdentityResolutionError:
             await whatsapp.post_text(from_number,
