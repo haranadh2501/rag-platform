@@ -8,17 +8,17 @@ Next.js ChatGPT-style interface for querying the knowledge base with grounded an
 ## Day-by-Day Deliverables
 | Day | Deliverable | Done? |
 |---|---|---|
-| 1 | Wireframe chat layout. Study M3's mock response shape. | ☐ |
-| 2 | Chat layout: sidebar (conversation list) + main chat area | ☐ |
-| 2 | Message input component: textarea, send button, keyboard shortcuts | ☐ |
-| 2 | Message display: user/assistant bubbles + Markdown rendering | ☐ |
-| 3 | Source citations: collapsible panel with chunk text + page numbers + scores | ☐ |
-| 3 | Follow-up question chips (clickable → auto-fills input) | ☐ |
-| 3 | Conversation management: new chat, auto-title, load history | ☐ |
-| 4 | Wire to real `POST /chat/query` endpoint | ☐ |
-| 5 | Typing indicator (skeleton while waiting for n8n) | ☐ |
-| 5 | Dark mode + mobile responsive | ☐ |
-| 6 | Polish, search across conversations | ☐ |
+| 1 | Wireframe chat layout. Study M3's mock response shape. | ☑ |
+| 2 | Chat layout: sidebar (conversation list) + main chat area | ☑ |
+| 2 | Message input component: textarea, send button, keyboard shortcuts | ☑ |
+| 2 | Message display: user/assistant bubbles + Markdown rendering | ☑ |
+| 3 | Source citations: collapsible panel with chunk text + page numbers + scores | ☑ |
+| 3 | Follow-up question chips (clickable → auto-fills input) | ☑ |
+| 3 | Conversation management: new chat (frontend-only draft row, no `POST /chat/conversations`), load history. Auto-title is backend-owned — frontend only displays whatever `title` comes back | ☑ |
+| 4 | Wire to real `POST /chat/query` endpoint | ☑ |
+| 5 | Typing indicator (skeleton while waiting for n8n) | ☑ |
+| 5 | Dark mode (chat-scoped, see Acceptance Criteria) + mobile responsive | ☑ |
+| 6 | Polish, search across conversations | ☐ — search not implemented |
 
 ## Files Owned
 - `frontend/src/app/chat/`
@@ -85,7 +85,11 @@ interface ChatQueryResponse {
 - [x] Conversation history loads on sidebar
 - [x] Typing indicator shown while waiting for response
 - [x] Works on mobile (responsive at 375px width)
-- [ ] Dark mode toggle working — **shared-shell gap, not fully M9-owned**: `tailwind.config.ts` declares `darkMode: 'class'` but no `ThemeProvider`/toggle exists anywhere in the app (Admin UI included); requires app-shell-level work outside `frontend/src/app/chat/` and `frontend/src/components/chat/`.
+- [x] Dark mode toggle working for the Chat UI — `ChatThemeProvider` + `ChatThemeToggle` (`frontend/src/components/chat/`) apply a `dark` class to a wrapper `div` (not `<html>`), persisted in `localStorage`. Scoped to chat only — Admin UI still has no theme toggle, but that's not an M9 gap.
+- [x] `/chat/new` shows a temporary, non-persisted "New conversation / Draft" sidebar row before the first message is sent; no backend call happens until then.
+- [x] `useSearchParams()` usage in `/chat/new` and `/chat/[conversationId]` is wrapped in `<Suspense fallback={null}>` per Next.js's production-build requirement.
+
+> Note: items above are confirmed by code review and `tsc --noEmit`. `next build`/`dev`/`lint` could not be run in the environment this was last verified in (Node 18.16 vs. Next 14.2's required ≥18.17) — no live browser check has been performed.
 
 
 ---
