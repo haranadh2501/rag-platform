@@ -102,6 +102,13 @@ class Settings(BaseSettings):
     STORAGE_BACKEND: str = "local"     # "local" | "gcs" | "s3" — see PLAN_M3 §6
     MAX_UPLOAD_BYTES: int = 26_214_400               # 25 MB
     MAX_WHATSAPP_UPLOAD_BYTES: int = 10_485_760      # 10 MB
+    MAX_WHATSAPP_EPHEMERAL_UPLOAD_BYTES: int = 9_437_184   # 9 MB — ephemeral session cap
+
+    # ── n8n Ephemeral (WhatsApp ephemeral sessions) ──────────────────
+    N8N_EPHEMERAL_INGEST_WF_URL: str = "https://n8n-production-c637.up.railway.app/webhook/ingest-ephemeral-wf"
+    N8N_EPHEMERAL_RETRIEVE_URL: str = "https://n8n-production-c637.up.railway.app/webhook/retrieve-ephemeral"
+    N8N_EPHEMERAL_PURGE_URL: str = "https://n8n-production-c637.up.railway.app/webhook/purge-ephemeral"
+
     MAX_PAGES_PER_DOC: int = 500
     MAX_BYTES_PER_TENANT: int = 1_073_741_824        # 1 GB
     MAX_UPLOADS_PER_HOUR: int = 20

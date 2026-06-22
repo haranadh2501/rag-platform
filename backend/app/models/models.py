@@ -1,6 +1,6 @@
 """SQLAlchemy ORM models — all tables defined here."""
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from sqlalchemy import (
     Column, String, Boolean, DateTime, Integer, Numeric, Text, ForeignKey, JSON, BigInteger,
 )
@@ -128,3 +128,24 @@ class TeamsTenantMap(Base):
     teams_tenant_id = Column(String(64), primary_key=True)
     tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class EphemeralSession(Base):
+    """Tracks active WhatsApp ephemeral document-analysis sessions.
+
+    One row per active session. Deleted (via conversation cascade) when the user
+    sends /end_session or a reset command. At most one row per user_id at any time,
+    enforced by a UNIQUE INDEX in the migration.
+    """
+    __tablename__ = "ephemeral_sessions"
+    id              = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id       = Column(UUID(as_uuid=True), ForeignKey("tenants.id",       ondelete="CASCADE"), nullable=False)
+    user_id         = Column(UUID(as_uuid=True), ForeignKey("users.id",         ondelete="CASCADE"), nullable=False)
+    conversation_id = Column(UUID(as_uuid=True), ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False)
+    n8n_session_id  = Column(UUID(as_uuid=True), nullable=False)
+    status          = Column(String(30),  nullable=False, default="awaiting_document")
+    total_chunks    = Column(Integer,     nullable=False, default=0)
+    doc_count       = Column(Integer,     nullable=False, default=0)
+    expires_at      = Column(DateTime(timezone=True), nullable=True)
+    created_at      = Column(DateTime(timezone=True), nullable=False,
+                             default=lambda: datetime.now(timezone.utc))
