@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import ChatAuthGuard from '../../../components/chat/ChatAuthGuard';
 import ChatLayout from '../../../components/chat/ChatLayout';
 import MessageList from '../../../components/chat/MessageList';
@@ -19,7 +20,7 @@ function createMessageId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-export default function NewChatPage() {
+function NewChatDraft() {
   const [messages, setMessages] = useState<ChatMessageOut[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [lastResponse, setLastResponse] = useState<ChatQueryResponse | null>(null);
@@ -100,4 +101,14 @@ export default function NewChatPage() {
       </ChatLayout>
     </ChatAuthGuard>
   );
+}
+
+export default function NewChatPage() {
+  const searchParams = useSearchParams();
+  // Clicking "New Chat" while already on /chat/new is otherwise a no-op
+  // navigation (same URL), which left a finished draft's messages on
+  // screen. ConversationList bumps `reset` on every click; keying on it
+  // forces this component to remount with empty state instead of reusing
+  // whatever draft/conversation was already in progress.
+  return <NewChatDraft key={searchParams.get('reset') ?? 'initial'} />;
 }

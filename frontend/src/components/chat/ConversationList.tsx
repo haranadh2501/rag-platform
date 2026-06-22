@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { deleteConversation, listConversations } from '../../lib/chat/chatApi';
 import type { ConversationOut } from '../../../chat/types/chat';
 
@@ -17,11 +18,20 @@ export default function ConversationList({ activeConversationId }: ConversationL
   const [conversations, setConversations] = useState<ConversationOut[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
 
   // /chat/new renders this with no id until the first message resolves —
   // that's the only caller that omits the prop, so its absence unambiguously
   // means "draft, not yet a real conversation" (no fetch/persistence involved).
   const isDraft = activeConversationId === undefined;
+
+  // A plain "/chat/new" href is a no-op click when we're already on that
+  // exact URL (same-URL navigations don't fire), which is what left a
+  // finished draft's old messages on screen. Bumping a query param forces a
+  // real navigation — and therefore a fresh draft — every time.
+  const newChatHref =
+    pathname === '/chat/new' ? `/chat/new?reset=${Number(searchParams.get('reset') ?? '0') + 1}` : '/chat/new';
 
   function load() {
     setIsLoading(true);
@@ -52,7 +62,7 @@ export default function ConversationList({ activeConversationId }: ConversationL
     <div className="flex flex-1 flex-col overflow-y-auto">
       <div className="px-4 py-3">
         <Link
-          href="/chat/new"
+          href={newChatHref}
           className="block rounded-md bg-indigo-600 px-3 py-2 text-center text-xs font-medium text-white hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600 focus-visible:ring-offset-2"
         >
           New Chat
