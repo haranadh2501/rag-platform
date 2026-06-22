@@ -53,6 +53,197 @@
     },
     {
       "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cond-is-pdf-url",
+              "leftValue": "={{ $json.body.source_url }}",
+              "rightValue": ".pdf",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-is-pdf-url-001",
+      "name": "IF: Is PDF URL?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -24,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $('Webhook /ingest').first().json.body.source_url }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "fetch-pdf-binary-001",
+      "name": "Fetch PDF Binary",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        200,
+        -250
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cond-file-too-large",
+              "leftValue": "={{ (() => { const s = $binary.data.fileSize || '0'; const n = parseFloat(s); if (s.includes('GB')) return n * 1073741824; if (s.includes('MB')) return n * 1048576; if (s.toLowerCase().includes('kb')) return n * 1024; return n; })() }}",
+              "rightValue": 20971520,
+              "operator": {
+                "type": "number",
+                "operation": "larger"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-file-too-large-001",
+      "name": "IF: File Too Large?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        450,
+        -250
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "size-err-docid",
+              "name": "document_id",
+              "value": "={{ $('Webhook /ingest').first().json.body.document_id }}",
+              "type": "string"
+            },
+            {
+              "id": "size-err-msg",
+              "name": "error_message",
+              "value": "=File too large: {{ $binary.data.fileSize }} exceeds the 20MB limit. Please split the document and re-upload.",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-size-error-001",
+      "name": "Set: Size Error",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        672,
+        -400
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "binaryPropertyName": "data"
+      },
+      "id": "extract-pdf-text-001",
+      "name": "Extract PDF Text",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        672,
+        -250
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "map-text",
+              "name": "text",
+              "value": "={{ $json.text || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "map-document_id",
+              "name": "document_id",
+              "value": "={{ $('Webhook /ingest').first().json.body.document_id }}",
+              "type": "string"
+            },
+            {
+              "id": "map-tenant_id",
+              "name": "tenant_id",
+              "value": "={{ $('Webhook /ingest').first().json.body.tenant_id }}",
+              "type": "string"
+            },
+            {
+              "id": "map-title",
+              "name": "title",
+              "value": "={{ $('Webhook /ingest').first().json.body.title }}",
+              "type": "string"
+            },
+            {
+              "id": "map-source_type",
+              "name": "source_type",
+              "value": "url",
+              "type": "string"
+            },
+            {
+              "id": "map-page_count",
+              "name": "page_count",
+              "value": 1,
+              "type": "number"
+            },
+            {
+              "id": "map-used_ocr",
+              "name": "used_ocr",
+              "value": false,
+              "type": "boolean"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "map-pdf-url-fields-001",
+      "name": "Map PDF URL Fields",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        900,
+        -250
+      ]
+    },
+    {
+      "parameters": {
         "url": "={{ $json.body.source_url }}",
         "options": {
           "response": {
@@ -68,8 +259,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        0,
-        0
+        200,
+        96
       ],
       "onError": "continueErrorOutput"
     },
@@ -188,8 +379,8 @@
         "options": {
           "batching": {
             "batch": {
-              "batchSize": 1,
-              "batchInterval": 20000
+              "batchSize": 10,
+              "batchInterval": 500
             }
           },
           "timeout": 120000
@@ -355,8 +546,8 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        208,
-        -48
+        408,
+        96
       ],
       "id": "3e68335c-458c-4fe2-9b5a-e340e953958e",
       "name": "Edit Fields"
@@ -569,7 +760,7 @@
       "main": [
         [
           {
-            "node": "Fetch URL",
+            "node": "IF: Is PDF URL?",
             "type": "main",
             "index": 0
           }
@@ -577,6 +768,100 @@
         [
           {
             "node": "Extract File Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: Is PDF URL?": {
+      "main": [
+        [
+          {
+            "node": "Fetch PDF Binary",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fetch URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch PDF Binary": {
+      "main": [
+        [
+          {
+            "node": "IF: File Too Large?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: File Too Large?": {
+      "main": [
+        [
+          {
+            "node": "Set: Size Error",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Extract PDF Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set: Size Error": {
+      "main": [
+        [
+          {
+            "node": "Callback: Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract PDF Text": {
+      "main": [
+        [
+          {
+            "node": "Map PDF URL Fields",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Map PDF URL Fields": {
+      "main": [
+        [
+          {
+            "node": "chunk node",
             "type": "main",
             "index": 0
           }
