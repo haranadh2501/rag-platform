@@ -1,0 +1,336 @@
+{
+  "generated_at": "2026-06-21T16:47:08.450690+00:00",
+  "summary": {
+    "case_count": 5,
+    "answerable_case_count": 4,
+    "unanswerable_case_count": 1,
+    "citation_coverage": 1.0,
+    "negative_abstention_rate": 0.0,
+    "latency_ms": {
+      "mean": 18969.214,
+      "p95": 19713.11,
+      "max": 19713.11
+    },
+    "observability": {
+      "source_return_rate": 1.0,
+      "average_sources_per_case": 3.0,
+      "metadata_coverage": 1.0,
+      "total_retry_count": 0,
+      "max_attempts": 1
+    },
+    "ragas": null,
+    "batch": {
+      "batch_index": 10,
+      "batch_size": 5,
+      "total_batches": 30,
+      "total_cases_before_batching": 148,
+      "start_position": 46,
+      "end_position": 50
+    },
+    "quality_gate": {
+      "passed": null,
+      "reason": "RAGAS scoring was skipped",
+      "checks": {}
+    },
+    "applications": {
+      "bug_reporting": {
+        "case_count": 5,
+        "answerable_case_count": 4,
+        "unanswerable_case_count": 1,
+        "citation_coverage": 1.0,
+        "negative_abstention_rate": 0.0,
+        "latency_ms": {
+          "mean": 18969.214,
+          "p95": 19713.11,
+          "max": 19713.11
+        },
+        "observability": {
+          "source_return_rate": 1.0,
+          "average_sources_per_case": 3.0,
+          "metadata_coverage": 1.0,
+          "total_retry_count": 0,
+          "max_attempts": 1
+        },
+        "ragas": null
+      }
+    }
+  },
+  "cases": [
+    {
+      "id": "BUG-EVAL-016",
+      "application": "bug_reporting",
+      "question": "What should an iOS 17 user do when notifications remain missing after enabling permission?",
+      "ground_truth": "Reinstall the app to refresh the notification token.",
+      "reference_contexts": [
+        "BUG-MOB-103 affects iOS 17 users on app version 5.3.1 when notification permission was denied during first launch and enabled later from system settings. Reinstalling the app refreshes the notification token. The issue is fixed in version 5.3.2."
+      ],
+      "expected_sources": [
+        {
+          "document": "bug-reporting/mobile_app_known_issues.txt",
+          "section": "BUG-MOB-103 Missing iOS notifications"
+        }
+      ],
+      "category": "factoid",
+      "answerable": true,
+      "tags": [
+        "mobile",
+        "workaround"
+      ],
+      "answer": "An iOS 17 user should reinstall the app to refresh the notification token when notifications remain missing after enabling permission.",
+      "contexts": [
+        "Mobile Application Known Issues\n\nSection: BUG-MOB-101 Android login loop\nBUG-MOB-101 affects Android 14 devices running mobile app versions 5.4.0 through 5.4.2. After successful authentication, the app may return to the login screen when battery optimization is enabled. The temporary workaround is to disable battery optimization for the app and sign in again. The permanent fix is included in version 5.4.3.\n\nSection: BUG-MOB-102 Attachment crash\nBUG-MOB-102 affects Android and iOS app version 5.5.0. Adding a video attachment larger than 50 MB to a bug report can close the app before the draft is saved. Users should compress the video below 50 MB or upload it through the web portal. A fix is planned for version 5.5.1.\n\nSection: BUG-MOB-103 Missing iOS notifications\nBUG-MOB-103 affects iOS 17 users on app version 5.3.1 when notification permission was denied during first launch and enabled later from system settings. Reinstalling the app refreshes the notification token. The issue is fixed in version 5.3.2.\n\nSection: Mobile evidence collection\nFor mobile crashes, collect the app version, operating system version, device model, timestamp with timezone, reproduction steps, and the diagnostic bundle from Settings > Help > Export diagnostics. Screen recordings are useful but must not display passwords, tokens, or personal customer data.\n",
+        "NovaHub Troubleshooting\n\nSection: Factory reset\nTo reset NovaHub, hold the rear reset button for 10 seconds until the status light flashes amber. The reset removes local settings but does not cancel the subscription.\n\nSection: Offline status\nIf NovaHub shows offline, verify power, restart the router, and move the device within eight metres of the access point. If still offline, collect the diagnostic code.\n\nSection: Escalation\nEscalate when three resets fail, the device overheats, or a diagnostic code begins with HW-. Overheating devices must be unplugged immediately.\n",
+        "Bug Triage Playbook\n\nSection: Required report fields\nEvery bug report must include a concise title, affected product and version, environment, reproduction steps, expected behavior, actual behavior, frequency, business impact, and relevant logs or screenshots. Reports containing customer data must be redacted before submission.\n\nSection: Severity S1\nSeverity S1 is reserved for a production outage, active security compromise, irreversible data loss, or a complete blocker affecting most customers with no workaround. The on-call engineer must acknowledge an S1 report within 15 minutes and open an incident channel immediately.\n\nSection: Severity S2\nSeverity S2 covers major functionality that is unavailable for multiple customers, severe performance degradation, or a high-impact defect with only a difficult workaround. The owning team must acknowledge an S2 report within 2 business hours.\n\nSection: Severity S3 and S4\nSeverity S3 covers limited-impact defects with a practical workaround and should be acknowledged within 1 business day. Severity S4 covers cosmetic problems, documentation mistakes, and low-impact enhancement requests and should be acknowledged within 3 business days.\n\nSection: Duplicate handling\nWhen a new report matches an existing issue, mark it as a duplicate, link the canonical issue, copy any new evidence to the canonical issue, and notify the reporter. Do not close the canonical issue merely because a duplicate was filed.\n\nSection: Security and privacy\nSuspected vulnerabilities must be tagged security-sensitive and moved to the restricted security queue. Secrets, access tokens, personal data, and customer payloads must never be pasted into a public issue. Replace them with redacted samples.\n\nSection: Escalation\nEscalate to the incident process when an issue meets S1 criteria, when an S2 issue affects more than 25 percent of active tenants, or when support receives five or more matching reports within 30 minutes.\n"
+      ],
+      "retrieved_documents": [
+        "source-1",
+        "source-2",
+        "source-3"
+      ],
+      "expected_documents": [
+        "bug-reporting/mobile_app_known_issues.txt"
+      ],
+      "system_faithfulness": null,
+      "requires_clarification": false,
+      "latency_ms": 19065.51,
+      "source_count": 3,
+      "observability": {
+        "source_count": 3,
+        "has_sources": true,
+        "metadata_key_count": 3,
+        "metadata_keys": [
+          "evaluation_target",
+          "n8n_attempts",
+          "n8n_retry_count"
+        ],
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      },
+      "response_metadata": {
+        "evaluation_target": "direct_n8n",
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      }
+    },
+    {
+      "id": "BUG-EVAL-017",
+      "application": "bug_reporting",
+      "question": "Which version fixes the missing iOS notification issue?",
+      "ground_truth": "BUG-MOB-103 is fixed in mobile app version 5.3.2.",
+      "reference_contexts": [
+        "BUG-MOB-103 affects iOS 17 users on app version 5.3.1 when notification permission was denied during first launch and enabled later from system settings. Reinstalling the app refreshes the notification token. The issue is fixed in version 5.3.2."
+      ],
+      "expected_sources": [
+        {
+          "document": "bug-reporting/mobile_app_known_issues.txt",
+          "section": "BUG-MOB-103 Missing iOS notifications"
+        }
+      ],
+      "category": "factoid",
+      "answerable": true,
+      "tags": [
+        "mobile",
+        "version"
+      ],
+      "answer": "The missing iOS notification issue is fixed in version 5.3.2.",
+      "contexts": [
+        "Mobile Application Known Issues\n\nSection: BUG-MOB-101 Android login loop\nBUG-MOB-101 affects Android 14 devices running mobile app versions 5.4.0 through 5.4.2. After successful authentication, the app may return to the login screen when battery optimization is enabled. The temporary workaround is to disable battery optimization for the app and sign in again. The permanent fix is included in version 5.4.3.\n\nSection: BUG-MOB-102 Attachment crash\nBUG-MOB-102 affects Android and iOS app version 5.5.0. Adding a video attachment larger than 50 MB to a bug report can close the app before the draft is saved. Users should compress the video below 50 MB or upload it through the web portal. A fix is planned for version 5.5.1.\n\nSection: BUG-MOB-103 Missing iOS notifications\nBUG-MOB-103 affects iOS 17 users on app version 5.3.1 when notification permission was denied during first launch and enabled later from system settings. Reinstalling the app refreshes the notification token. The issue is fixed in version 5.3.2.\n\nSection: Mobile evidence collection\nFor mobile crashes, collect the app version, operating system version, device model, timestamp with timezone, reproduction steps, and the diagnostic bundle from Settings > Help > Export diagnostics. Screen recordings are useful but must not display passwords, tokens, or personal customer data.\n",
+        "API Known Issues and Troubleshooting\n\nSection: BUG-API-201 Rate limiting after token rotation\nBUG-API-201 affects API clients that rotate an access token while keeping HTTP/2 connections open. Requests may receive HTTP 429 for up to five minutes because the old and new token buckets are temporarily combined. Closing the connection pool after rotation is the recommended workaround. The server-side fix was deployed in API release 2026.06.2.\n\nSection: BUG-API-202 Duplicate webhook delivery\nBUG-API-202 can deliver the same webhook event twice when the first acknowledgement arrives after the ten-second timeout. Consumers must treat the event_id field as an idempotency key and return a 2xx response within ten seconds. Duplicate delivery does not indicate duplicate data was stored by the platform.\n\nSection: Webhook signature troubleshooting\nWebhook signatures use HMAC-SHA256 over the exact raw request body. Signature validation fails if middleware parses and reserializes JSON before verification, if the wrong tenant secret is used, or if the timestamp differs from server time by more than five minutes.\n\nSection: API evidence collection\nAPI bug reports should include the request method, redacted URL, response status, request_id response header, timestamp with timezone, SDK name and version, and a minimal reproducible request. Authorization headers and complete access tokens must be removed.\n",
+        "Bug Triage Playbook\n\nSection: Required report fields\nEvery bug report must include a concise title, affected product and version, environment, reproduction steps, expected behavior, actual behavior, frequency, business impact, and relevant logs or screenshots. Reports containing customer data must be redacted before submission.\n\nSection: Severity S1\nSeverity S1 is reserved for a production outage, active security compromise, irreversible data loss, or a complete blocker affecting most customers with no workaround. The on-call engineer must acknowledge an S1 report within 15 minutes and open an incident channel immediately.\n\nSection: Severity S2\nSeverity S2 covers major functionality that is unavailable for multiple customers, severe performance degradation, or a high-impact defect with only a difficult workaround. The owning team must acknowledge an S2 report within 2 business hours.\n\nSection: Severity S3 and S4\nSeverity S3 covers limited-impact defects with a practical workaround and should be acknowledged within 1 business day. Severity S4 covers cosmetic problems, documentation mistakes, and low-impact enhancement requests and should be acknowledged within 3 business days.\n\nSection: Duplicate handling\nWhen a new report matches an existing issue, mark it as a duplicate, link the canonical issue, copy any new evidence to the canonical issue, and notify the reporter. Do not close the canonical issue merely because a duplicate was filed.\n\nSection: Security and privacy\nSuspected vulnerabilities must be tagged security-sensitive and moved to the restricted security queue. Secrets, access tokens, personal data, and customer payloads must never be pasted into a public issue. Replace them with redacted samples.\n\nSection: Escalation\nEscalate to the incident process when an issue meets S1 criteria, when an S2 issue affects more than 25 percent of active tenants, or when support receives five or more matching reports within 30 minutes.\n"
+      ],
+      "retrieved_documents": [
+        "source-1",
+        "source-2",
+        "source-3"
+      ],
+      "expected_documents": [
+        "bug-reporting/mobile_app_known_issues.txt"
+      ],
+      "system_faithfulness": null,
+      "requires_clarification": false,
+      "latency_ms": 17730.27,
+      "source_count": 3,
+      "observability": {
+        "source_count": 3,
+        "has_sources": true,
+        "metadata_key_count": 3,
+        "metadata_keys": [
+          "evaluation_target",
+          "n8n_attempts",
+          "n8n_retry_count"
+        ],
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      },
+      "response_metadata": {
+        "evaluation_target": "direct_n8n",
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      }
+    },
+    {
+      "id": "BUG-EVAL-018",
+      "application": "bug_reporting",
+      "question": "What evidence should be collected for a mobile crash report?",
+      "ground_truth": "For mobile crashes, collect the app version, operating system version, device model, timestamp with timezone, reproduction steps, and the diagnostic bundle from Settings > Help > Export diagnostics. Screen recordings are useful but must not display passwords, tokens, or personal customer data.",
+      "reference_contexts": [
+        "For mobile crashes, collect the app version, operating system version, device model, timestamp with timezone, reproduction steps, and the diagnostic bundle from Settings > Help > Export diagnostics. Screen recordings are useful but must not display passwords, tokens, or personal customer data."
+      ],
+      "expected_sources": [
+        {
+          "document": "bug-reporting/mobile_app_known_issues.txt",
+          "section": "Mobile evidence collection"
+        }
+      ],
+      "category": "procedural",
+      "answerable": true,
+      "tags": [
+        "mobile",
+        "evidence"
+      ],
+      "answer": "For a mobile crash report, collect the app version, operating system version, device model, timestamp with timezone, reproduction steps, and the diagnostic bundle from Settings > Help > Export diagnostics. Screen recordings are also useful but must not display passwords, tokens, or personal customer data.",
+      "contexts": [
+        "Mobile Application Known Issues\n\nSection: BUG-MOB-101 Android login loop\nBUG-MOB-101 affects Android 14 devices running mobile app versions 5.4.0 through 5.4.2. After successful authentication, the app may return to the login screen when battery optimization is enabled. The temporary workaround is to disable battery optimization for the app and sign in again. The permanent fix is included in version 5.4.3.\n\nSection: BUG-MOB-102 Attachment crash\nBUG-MOB-102 affects Android and iOS app version 5.5.0. Adding a video attachment larger than 50 MB to a bug report can close the app before the draft is saved. Users should compress the video below 50 MB or upload it through the web portal. A fix is planned for version 5.5.1.\n\nSection: BUG-MOB-103 Missing iOS notifications\nBUG-MOB-103 affects iOS 17 users on app version 5.3.1 when notification permission was denied during first launch and enabled later from system settings. Reinstalling the app refreshes the notification token. The issue is fixed in version 5.3.2.\n\nSection: Mobile evidence collection\nFor mobile crashes, collect the app version, operating system version, device model, timestamp with timezone, reproduction steps, and the diagnostic bundle from Settings > Help > Export diagnostics. Screen recordings are useful but must not display passwords, tokens, or personal customer data.\n",
+        "Bug Triage Playbook\n\nSection: Required report fields\nEvery bug report must include a concise title, affected product and version, environment, reproduction steps, expected behavior, actual behavior, frequency, business impact, and relevant logs or screenshots. Reports containing customer data must be redacted before submission.\n\nSection: Severity S1\nSeverity S1 is reserved for a production outage, active security compromise, irreversible data loss, or a complete blocker affecting most customers with no workaround. The on-call engineer must acknowledge an S1 report within 15 minutes and open an incident channel immediately.\n\nSection: Severity S2\nSeverity S2 covers major functionality that is unavailable for multiple customers, severe performance degradation, or a high-impact defect with only a difficult workaround. The owning team must acknowledge an S2 report within 2 business hours.\n\nSection: Severity S3 and S4\nSeverity S3 covers limited-impact defects with a practical workaround and should be acknowledged within 1 business day. Severity S4 covers cosmetic problems, documentation mistakes, and low-impact enhancement requests and should be acknowledged within 3 business days.\n\nSection: Duplicate handling\nWhen a new report matches an existing issue, mark it as a duplicate, link the canonical issue, copy any new evidence to the canonical issue, and notify the reporter. Do not close the canonical issue merely because a duplicate was filed.\n\nSection: Security and privacy\nSuspected vulnerabilities must be tagged security-sensitive and moved to the restricted security queue. Secrets, access tokens, personal data, and customer payloads must never be pasted into a public issue. Replace them with redacted samples.\n\nSection: Escalation\nEscalate to the incident process when an issue meets S1 criteria, when an S2 issue affects more than 25 percent of active tenants, or when support receives five or more matching reports within 30 minutes.\n",
+        "Recovery and Review\n\nSection: Rollback\nPrefer rollback when a recent deployment correlates with impact and rollback is tested. Record the deployment identifier and validation checks before execution.\n\nSection: Evidence preservation\nPreserve logs, traces, alerts, command history, and configuration snapshots. Do not edit original evidence; store analysis in a separate document.\n\nSection: Post-incident review\nA review is due within five business days for SEV-1 and SEV-2 incidents. It must include contributing factors, timeline, corrective actions, owners, and due dates.\n"
+      ],
+      "retrieved_documents": [
+        "source-1",
+        "source-2",
+        "source-3"
+      ],
+      "expected_documents": [
+        "bug-reporting/mobile_app_known_issues.txt"
+      ],
+      "system_faithfulness": null,
+      "requires_clarification": false,
+      "latency_ms": 19658.61,
+      "source_count": 3,
+      "observability": {
+        "source_count": 3,
+        "has_sources": true,
+        "metadata_key_count": 3,
+        "metadata_keys": [
+          "evaluation_target",
+          "n8n_attempts",
+          "n8n_retry_count"
+        ],
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      },
+      "response_metadata": {
+        "evaluation_target": "direct_n8n",
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      }
+    },
+    {
+      "id": "BUG-EVAL-019",
+      "application": "bug_reporting",
+      "question": "Compare the workarounds for BUG-MOB-101 and BUG-MOB-102.",
+      "ground_truth": "For BUG-MOB-101, disable battery optimization and sign in again. For BUG-MOB-102, compress the video below 50 MB or use the web portal.",
+      "reference_contexts": [
+        "BUG-MOB-101 affects Android 14 devices running mobile app versions 5.4.0 through 5.4.2. After successful authentication, the app may return to the login screen when battery optimization is enabled. The temporary workaround is to disable battery optimization for the app and sign in again. The permanent fix is included in version 5.4.3.",
+        "BUG-MOB-102 affects Android and iOS app version 5.5.0. Adding a video attachment larger than 50 MB to a bug report can close the app before the draft is saved. Users should compress the video below 50 MB or upload it through the web portal. A fix is planned for version 5.5.1."
+      ],
+      "expected_sources": [
+        {
+          "document": "bug-reporting/mobile_app_known_issues.txt",
+          "section": "BUG-MOB-101 Android login loop"
+        },
+        {
+          "document": "bug-reporting/mobile_app_known_issues.txt",
+          "section": "BUG-MOB-102 Attachment crash"
+        }
+      ],
+      "category": "multi_hop",
+      "answerable": true,
+      "tags": [
+        "mobile",
+        "workaround"
+      ],
+      "answer": "The workaround for BUG-MOB-101 involves disabling battery optimization for the app and signing in again to prevent the app from returning to the login screen on Android 14 devices. In contrast, the workaround for BUG-MOB-102 suggests compressing video attachments to below 50 MB or uploading them through the web portal to avoid app crashes when adding large attachments.",
+      "contexts": [
+        "Mobile Application Known Issues\n\nSection: BUG-MOB-101 Android login loop\nBUG-MOB-101 affects Android 14 devices running mobile app versions 5.4.0 through 5.4.2. After successful authentication, the app may return to the login screen when battery optimization is enabled. The temporary workaround is to disable battery optimization for the app and sign in again. The permanent fix is included in version 5.4.3.\n\nSection: BUG-MOB-102 Attachment crash\nBUG-MOB-102 affects Android and iOS app version 5.5.0. Adding a video attachment larger than 50 MB to a bug report can close the app before the draft is saved. Users should compress the video below 50 MB or upload it through the web portal. A fix is planned for version 5.5.1.\n\nSection: BUG-MOB-103 Missing iOS notifications\nBUG-MOB-103 affects iOS 17 users on app version 5.3.1 when notification permission was denied during first launch and enabled later from system settings. Reinstalling the app refreshes the notification token. The issue is fixed in version 5.3.2.\n\nSection: Mobile evidence collection\nFor mobile crashes, collect the app version, operating system version, device model, timestamp with timezone, reproduction steps, and the diagnostic bundle from Settings > Help > Export diagnostics. Screen recordings are useful but must not display passwords, tokens, or personal customer data.\n",
+        "Bug Triage Playbook\n\nSection: Required report fields\nEvery bug report must include a concise title, affected product and version, environment, reproduction steps, expected behavior, actual behavior, frequency, business impact, and relevant logs or screenshots. Reports containing customer data must be redacted before submission.\n\nSection: Severity S1\nSeverity S1 is reserved for a production outage, active security compromise, irreversible data loss, or a complete blocker affecting most customers with no workaround. The on-call engineer must acknowledge an S1 report within 15 minutes and open an incident channel immediately.\n\nSection: Severity S2\nSeverity S2 covers major functionality that is unavailable for multiple customers, severe performance degradation, or a high-impact defect with only a difficult workaround. The owning team must acknowledge an S2 report within 2 business hours.\n\nSection: Severity S3 and S4\nSeverity S3 covers limited-impact defects with a practical workaround and should be acknowledged within 1 business day. Severity S4 covers cosmetic problems, documentation mistakes, and low-impact enhancement requests and should be acknowledged within 3 business days.\n\nSection: Duplicate handling\nWhen a new report matches an existing issue, mark it as a duplicate, link the canonical issue, copy any new evidence to the canonical issue, and notify the reporter. Do not close the canonical issue merely because a duplicate was filed.\n\nSection: Security and privacy\nSuspected vulnerabilities must be tagged security-sensitive and moved to the restricted security queue. Secrets, access tokens, personal data, and customer payloads must never be pasted into a public issue. Replace them with redacted samples.\n\nSection: Escalation\nEscalate to the incident process when an issue meets S1 criteria, when an S2 issue affects more than 25 percent of active tenants, or when support receives five or more matching reports within 30 minutes.\n",
+        "API Known Issues and Troubleshooting\n\nSection: BUG-API-201 Rate limiting after token rotation\nBUG-API-201 affects API clients that rotate an access token while keeping HTTP/2 connections open. Requests may receive HTTP 429 for up to five minutes because the old and new token buckets are temporarily combined. Closing the connection pool after rotation is the recommended workaround. The server-side fix was deployed in API release 2026.06.2.\n\nSection: BUG-API-202 Duplicate webhook delivery\nBUG-API-202 can deliver the same webhook event twice when the first acknowledgement arrives after the ten-second timeout. Consumers must treat the event_id field as an idempotency key and return a 2xx response within ten seconds. Duplicate delivery does not indicate duplicate data was stored by the platform.\n\nSection: Webhook signature troubleshooting\nWebhook signatures use HMAC-SHA256 over the exact raw request body. Signature validation fails if middleware parses and reserializes JSON before verification, if the wrong tenant secret is used, or if the timestamp differs from server time by more than five minutes.\n\nSection: API evidence collection\nAPI bug reports should include the request method, redacted URL, response status, request_id response header, timestamp with timezone, SDK name and version, and a minimal reproducible request. Authorization headers and complete access tokens must be removed.\n"
+      ],
+      "retrieved_documents": [
+        "source-1",
+        "source-2",
+        "source-3"
+      ],
+      "expected_documents": [
+        "bug-reporting/mobile_app_known_issues.txt",
+        "bug-reporting/mobile_app_known_issues.txt"
+      ],
+      "system_faithfulness": null,
+      "requires_clarification": false,
+      "latency_ms": 18678.57,
+      "source_count": 3,
+      "observability": {
+        "source_count": 3,
+        "has_sources": true,
+        "metadata_key_count": 3,
+        "metadata_keys": [
+          "evaluation_target",
+          "n8n_attempts",
+          "n8n_retry_count"
+        ],
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      },
+      "response_metadata": {
+        "evaluation_target": "direct_n8n",
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      }
+    },
+    {
+      "id": "BUG-EVAL-020",
+      "application": "bug_reporting",
+      "question": "What is the official password reset policy for the mobile app?",
+      "ground_truth": "The supplied bug-reporting documents do not contain a password reset policy.",
+      "reference_contexts": [],
+      "expected_sources": [],
+      "category": "unanswerable",
+      "answerable": false,
+      "tags": [
+        "negative"
+      ],
+      "answer": "The context provided does not include specific details about a password reset policy for the mobile app.",
+      "contexts": [
+        "IT Helpdesk Access Guide\n\nSection: Password reset\nEmployees reset a forgotten password at access.example.test/reset. The reset link expires after 20 minutes. After five failed attempts, the account is locked for 30 minutes.\n\nSection: VPN troubleshooting\nFor VPN error 720, restart the SecureLink service, remove any saved VPN profile, and import the current profile from the IT portal. Escalate if the error remains after one retry.\n\nSection: MFA device replacement\nA user replacing a phone must keep the old authenticator until the new device is enrolled. If the old phone is unavailable, the service desk verifies identity with the manager and issues a 15-minute recovery code.\n",
+        "Mobile Application Known Issues\n\nSection: BUG-MOB-101 Android login loop\nBUG-MOB-101 affects Android 14 devices running mobile app versions 5.4.0 through 5.4.2. After successful authentication, the app may return to the login screen when battery optimization is enabled. The temporary workaround is to disable battery optimization for the app and sign in again. The permanent fix is included in version 5.4.3.\n\nSection: BUG-MOB-102 Attachment crash\nBUG-MOB-102 affects Android and iOS app version 5.5.0. Adding a video attachment larger than 50 MB to a bug report can close the app before the draft is saved. Users should compress the video below 50 MB or upload it through the web portal. A fix is planned for version 5.5.1.\n\nSection: BUG-MOB-103 Missing iOS notifications\nBUG-MOB-103 affects iOS 17 users on app version 5.3.1 when notification permission was denied during first launch and enabled later from system settings. Reinstalling the app refreshes the notification token. The issue is fixed in version 5.3.2.\n\nSection: Mobile evidence collection\nFor mobile crashes, collect the app version, operating system version, device model, timestamp with timezone, reproduction steps, and the diagnostic bundle from Settings > Help > Export diagnostics. Screen recordings are useful but must not display passwords, tokens, or personal customer data.\n",
+        "Data Governance Policy\n\nSection: Classification\nData is classified Public, Internal, Confidential, or Restricted. Customer identifiers, authentication data, and payment records are Restricted.\n\nSection: Retention\nSupport tickets are retained for three years. Security audit logs are retained for seven years. Expired records are deleted through the approved disposal workflow.\n\nSection: Access review\nOwners review access to Restricted data quarterly. Removed users must lose access within four hours of the approved removal request.\n"
+      ],
+      "retrieved_documents": [
+        "source-1",
+        "source-2",
+        "source-3"
+      ],
+      "expected_documents": [],
+      "system_faithfulness": null,
+      "requires_clarification": false,
+      "latency_ms": 19713.11,
+      "source_count": 3,
+      "observability": {
+        "source_count": 3,
+        "has_sources": true,
+        "metadata_key_count": 3,
+        "metadata_keys": [
+          "evaluation_target",
+          "n8n_attempts",
+          "n8n_retry_count"
+        ],
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      },
+      "response_metadata": {
+        "evaluation_target": "direct_n8n",
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      }
+    }
+  ]
+}

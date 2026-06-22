@@ -1,0 +1,51 @@
+# RAG Evaluation Report
+
+Generated: `2026-06-21T16:26:16.578321+00:00`
+
+## Aggregate Results
+
+| Metric | Score | Threshold | Pass |
+|---|---:|---:|:---:|
+| faithfulness | - | - | - |
+| answer_relevancy | - | - | - |
+| context_precision | - | - | - |
+| context_recall | - | - | - |
+
+- Cases: 5
+- Citation coverage: 1.000
+- Negative abstention rate: 0.000
+- Mean latency: 18380.690 ms
+- p95 latency: 20750.970 ms
+
+## Batch
+
+- Batch: 1 of 30
+- Batch size: 5
+- Case positions: 1 to 5
+- Total cases before batching: 148
+
+## Observability
+
+| Signal | Value |
+|---|---:|
+| Source return rate | 1.000 |
+| Average sources per case | 3.000 |
+| Metadata coverage | 1.000 |
+| Total retry count | 0 |
+| Max attempts | 1 |
+
+## Application Results
+
+| Application | Cases | Faithfulness | Relevancy | Context precision | Context recall |
+|---|---:|---:|---:|---:|---:|
+| kubernetes_troubleshooting | 5 | - | - | - | - |
+
+## Failed or Unscored Cases
+
+| ID | Application | Category | Notes |
+|---|---|---|---|
+| K8S-EVAL-001 | kubernetes_troubleshooting | factoid | One or more RAGAS metrics were not produced |
+| K8S-EVAL-002 | kubernetes_troubleshooting | procedural | One or more RAGAS metrics were not produced |
+| K8S-EVAL-003 | kubernetes_troubleshooting | procedural | One or more RAGAS metrics were not produced |
+| K8S-EVAL-004 | kubernetes_troubleshooting | procedural | One or more RAGAS metrics were not produced |
+| K8S-EVAL-005 | kubernetes_troubleshooting | factoid | One or more RAGAS metrics were not produced |

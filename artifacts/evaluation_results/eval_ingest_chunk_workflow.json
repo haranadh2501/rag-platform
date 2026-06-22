@@ -1,0 +1,127 @@
+{
+  "id": "evaluation-corpus-ingest-helper",
+  "name": "Evaluation Corpus Ingest Helper",
+  "active": true,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "eval-ingest-chunk",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        200,
+        240
+      ],
+      "id": "eval-ingest-webhook",
+      "name": "Webhook",
+      "webhookId": "eval-ingest-chunk-webhook"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.voyageai.com/v1/embeddings",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { input: [$('Webhook').item.json.body.content], model: 'voyage-4-large', input_type: 'document' } }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        440,
+        240
+      ],
+      "id": "eval-ingest-embed",
+      "name": "Embed Chunk",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "gzpoAEqkCy5p3O8N",
+          "name": "Voyage API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "{{ (() => {\n  const body = $('Webhook').item.json.body;\n  const esc = (value) => String(value ?? '').replace(/'/g, \"''\");\n  const tenantId = esc(body.tenant_id || '11111111-1111-1111-1111-111111111111');\n  const documentId = esc(body.document_id);\n  const title = esc(body.title || body.document || documentId);\n  const documentPath = esc(body.document || title);\n  const content = esc(body.content || '');\n  const chunkIndex = Number(body.chunk_index || 0);\n  const tokenCount = Number(body.token_count || String(body.content || '').split(/\\s+/).length);\n  const metadata = esc(JSON.stringify({ title: body.title, document: body.document, source: body.document, application: body.application }));\n  const tenantSlug = esc('evaluation-' + tenantId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 12));\n  const embedding = '[' + $('Embed Chunk').item.json.data[0].embedding.join(',') + ']';\n  return `\nINSERT INTO tenants (id, name, slug)\nVALUES ('${tenantId}', 'Evaluation Tenant', '${tenantSlug}')\nON CONFLICT (id) DO NOTHING;\nINSERT INTO documents (id, tenant_id, title, source_type, file_path, status, chunk_count)\nVALUES ('${documentId}', '${tenantId}', '${title}', 'txt', '${documentPath}', 'completed', 1)\nON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, status = 'completed', chunk_count = 1;\nDELETE FROM document_chunks WHERE document_id = '${documentId}' AND chunk_index = ${chunkIndex};\nINSERT INTO document_chunks (tenant_id, document_id, content, embedding, chunk_index, page_number, token_count, metadata)\nVALUES ('${tenantId}', '${documentId}', '${content}', '${embedding}'::vector, ${chunkIndex}, NULL, ${tokenCount}, '${metadata}'::jsonb);\nSELECT '${documentId}' AS document_id, ${chunkIndex} AS chunk_index;\n`;\n})() }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        680,
+        240
+      ],
+      "id": "eval-ingest-upsert",
+      "name": "Upsert Chunk",
+      "credentials": {
+        "postgres": {
+          "id": "gKyDrIX2zBtF4h61",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { ok: true, document_id: $json.document_id, chunk_index: $json.chunk_index } }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        920,
+        240
+      ],
+      "id": "eval-ingest-respond",
+      "name": "Respond to Webhook"
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Embed Chunk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embed Chunk": {
+      "main": [
+        [
+          {
+            "node": "Upsert Chunk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert Chunk": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}

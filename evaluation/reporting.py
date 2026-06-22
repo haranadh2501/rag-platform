@@ -4,13 +4,21 @@ from __future__ import annotations
 import csv
 import html
 import json
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 
-def utc_stamp() -> str:
-    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+def local_stamp() -> str:
+    """Local-time stamp for human-facing artifact filenames.
+
+    Uses the machine's local timezone (no trailing 'Z', which would imply UTC).
+    """
+    return datetime.now().astimezone().strftime("%Y%m%dT%H%M%S")
+
+
+# Back-compat alias: callers/imports that still say utc_stamp get local time now.
+utc_stamp = local_stamp
 
 
 def _format_score(value: Any) -> str:
@@ -48,6 +56,34 @@ def render_evaluation_markdown(report: dict[str, Any]) -> str:
             f"- Negative abstention rate: {_format_score(summary.get('negative_abstention_rate'))}",
             f"- Mean latency: {_format_score(summary.get('latency_ms', {}).get('mean'))} ms",
             f"- p95 latency: {_format_score(summary.get('latency_ms', {}).get('p95'))} ms",
+        "",
+        ]
+    )
+    batch = summary.get("batch")
+    if batch:
+        lines.extend(
+            [
+                "## Batch",
+                "",
+                f"- Batch: {batch.get('batch_index')} of {batch.get('total_batches')}",
+                f"- Batch size: {batch.get('batch_size')}",
+                f"- Case positions: {batch.get('start_position')} to {batch.get('end_position')}",
+                f"- Total cases before batching: {batch.get('total_cases_before_batching')}",
+                "",
+            ]
+        )
+    observability = summary.get("observability") or {}
+    lines.extend(
+        [
+            "## Observability",
+            "",
+            "| Signal | Value |",
+            "|---|---:|",
+            f"| Source return rate | {_format_score(observability.get('source_return_rate'))} |",
+            f"| Average sources per case | {_format_score(observability.get('average_sources_per_case'))} |",
+            f"| Metadata coverage | {_format_score(observability.get('metadata_coverage'))} |",
+            f"| Total retry count | {observability.get('total_retry_count', 0)} |",
+            f"| Max attempts | {observability.get('max_attempts', 1)} |",
             "",
             "## Application Results",
             "",
@@ -105,7 +141,7 @@ def write_evaluation_bundle(
     prefix: str = "application_suite_eval",
 ) -> dict[str, Path]:
     results_dir.mkdir(parents=True, exist_ok=True)
-    stamp = utc_stamp()
+    stamp = local_stamp()
     paths = {
         "json": results_dir / f"{prefix}_{stamp}.json",
         "csv": results_dir / f"{prefix}_{stamp}.csv",
@@ -130,6 +166,7 @@ def write_evaluation_bundle(
         "answer_relevancy",
         "context_precision",
         "context_recall",
+        "source_count",
     ]
     with paths["csv"].open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=fields, extrasaction="ignore")
@@ -184,7 +221,7 @@ def render_preflight_markdown(report: dict[str, Any]) -> str:
 
 def write_preflight_bundle(results_dir: Path, report: dict[str, Any]) -> dict[str, Path]:
     results_dir.mkdir(parents=True, exist_ok=True)
-    stamp = utc_stamp()
+    stamp = local_stamp()
     paths = {
         "json": results_dir / f"evaluation_preflight_{stamp}.json",
         "markdown": results_dir / f"evaluation_preflight_{stamp}.md",

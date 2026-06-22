@@ -1,0 +1,52 @@
+<!doctype html><html><head><meta charset="utf-8"><title>RAG Evaluation Report</title><style>body{font-family:system-ui;max-width:1100px;margin:2rem auto;padding:0 1rem}pre{white-space:pre-wrap;line-height:1.45}</style></head><body><pre># RAG Evaluation Report
+
+Generated: `2026-06-21T17:05:20.078884+00:00`
+
+## Aggregate Results
+
+| Metric | Score | Threshold | Pass |
+|---|---:|---:|:---:|
+| faithfulness | - | - | - |
+| answer_relevancy | - | - | - |
+| context_precision | - | - | - |
+| context_recall | - | - | - |
+
+- Cases: 5
+- Citation coverage: 1.000
+- Negative abstention rate: 0.000
+- Mean latency: 18643.270 ms
+- p95 latency: 20999.540 ms
+
+## Batch
+
+- Batch: 22 of 30
+- Batch size: 5
+- Case positions: 106 to 110
+- Total cases before batching: 148
+
+## Observability
+
+| Signal | Value |
+|---|---:|
+| Source return rate | 1.000 |
+| Average sources per case | 3.000 |
+| Metadata coverage | 1.000 |
+| Total retry count | 0 |
+| Max attempts | 1 |
+
+## Application Results
+
+| Application | Cases | Faithfulness | Relevancy | Context precision | Context recall |
+|---|---:|---:|---:|---:|---:|
+| compliance_policy | 3 | - | - | - | - |
+| education_assistant | 2 | - | - | - | - |
+
+## Failed or Unscored Cases
+
+| ID | Application | Category | Notes |
+|---|---|---|---|
+| COMPLIANCE_POLICY-006 | compliance_policy | reasoning | One or more RAGAS metrics were not produced |
+| COMPLIANCE_POLICY-007 | compliance_policy | multi_hop | One or more RAGAS metrics were not produced |
+| EDUCATION_ASSISTANT-001 | education_assistant | factoid | One or more RAGAS metrics were not produced |
+| EDUCATION_ASSISTANT-002 | education_assistant | factoid | One or more RAGAS metrics were not produced |
+</pre></body></html>

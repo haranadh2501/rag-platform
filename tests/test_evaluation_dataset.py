@@ -13,9 +13,11 @@ from evaluation.generate_kubernetes_dataset import generate as generate_kubernet
 from evaluation.reporting import write_evaluation_bundle, write_preflight_bundle
 from evaluation.run_eval import (
     _is_mock_response,
+    _normalise_direct_n8n_response,
     build_application_summaries,
     build_quality_gate,
     build_summary,
+    select_batch,
 )
 from evaluation.validate_dataset import validate_dataset
 
@@ -131,13 +133,59 @@ class EvaluationDatasetTests(unittest.TestCase):
     def test_mock_response_detection_checks_metadata_and_answer(self) -> None:
         self.assertTrue(_is_mock_response({"answer": "ok", "metadata": {"mock": True}}))
         self.assertTrue(_is_mock_response({"answer": "This is a mock response"}))
+        self.assertTrue(
+            _is_mock_response({"answer": "This is a sample response from the mock pipeline"})
+        )
         self.assertFalse(_is_mock_response({"answer": "Grounded production response"}))
+
+    def test_direct_n8n_response_normalizes_sources(self) -> None:
+        payload = {
+            "answer": "Use the documented rollout steps.",
+            "contexts": [
+                {
+                    "document": "runbook.txt",
+                    "content": "Rollouts must include a canary and rollback window.",
+                    "score": 0.87,
+                }
+            ],
+        }
+
+        response = _normalise_direct_n8n_response(payload)
+
+        self.assertEqual(response["answer"], "Use the documented rollout steps.")
+        self.assertEqual(response["sources"][0]["title"], "runbook.txt")
+        self.assertEqual(
+            response["sources"][0]["chunk_text"],
+            "Rollouts must include a canary and rollback window.",
+        )
+
+    def test_direct_n8n_response_extracts_llm_text(self) -> None:
+        payload = {
+            "choices": [
+                {
+                    "message": {
+                        "content": "Grounded answer from an OpenAI-compatible response."
+                    }
+                }
+            ],
+            "sources": ["Evidence excerpt"],
+        }
+
+        response = _normalise_direct_n8n_response(payload)
+
+        self.assertEqual(
+            response["answer"],
+            "Grounded answer from an OpenAI-compatible response.",
+        )
+        self.assertEqual(response["sources"][0]["chunk_text"], "Evidence excerpt")
 
     def test_summary_separates_ragas_and_negative_cases(self) -> None:
         outputs = [
             {
                 "answerable": True,
                 "contexts": ["retrieved context"],
+                "source_count": 1,
+                "observability": {"metadata_key_count": 2, "n8n_retry_count": 1, "n8n_attempts": 2},
                 "requires_clarification": False,
                 "answer": "Grounded answer",
                 "latency_ms": 100.0,
@@ -145,6 +193,8 @@ class EvaluationDatasetTests(unittest.TestCase):
             {
                 "answerable": False,
                 "contexts": [],
+                "source_count": 0,
+                "observability": {"metadata_key_count": 0, "n8n_retry_count": 0, "n8n_attempts": 1},
                 "requires_clarification": True,
                 "answer": "I need more information.",
                 "latency_ms": 300.0,
@@ -157,6 +207,22 @@ class EvaluationDatasetTests(unittest.TestCase):
         self.assertEqual(summary["negative_abstention_rate"], 1.0)
         self.assertEqual(summary["latency_ms"]["mean"], 200.0)
         self.assertEqual(summary["ragas"]["faithfulness"], 0.9)
+        self.assertEqual(summary["observability"]["source_return_rate"], 0.5)
+        self.assertEqual(summary["observability"]["average_sources_per_case"], 0.5)
+        self.assertEqual(summary["observability"]["metadata_coverage"], 0.5)
+        self.assertEqual(summary["observability"]["total_retry_count"], 1)
+        self.assertEqual(summary["observability"]["max_attempts"], 2)
+
+    def test_select_batch_uses_one_based_indices(self) -> None:
+        cases = [{"id": f"case-{index}"} for index in range(1, 8)]
+
+        selected, info = select_batch(cases, batch_size=3, batch_index=2)
+
+        self.assertEqual([case["id"] for case in selected], ["case-4", "case-5", "case-6"])
+        self.assertEqual(info["batch_index"], 2)
+        self.assertEqual(info["total_batches"], 3)
+        self.assertEqual(info["start_position"], 4)
+        self.assertEqual(info["end_position"], 6)
 
     def test_quality_gate_reports_failed_metric(self) -> None:
         gate = build_quality_gate(

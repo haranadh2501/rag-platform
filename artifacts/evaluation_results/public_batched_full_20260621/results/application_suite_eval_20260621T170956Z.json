@@ -1,0 +1,357 @@
+{
+  "generated_at": "2026-06-21T17:09:56.105706+00:00",
+  "summary": {
+    "case_count": 5,
+    "answerable_case_count": 4,
+    "unanswerable_case_count": 1,
+    "citation_coverage": 1.0,
+    "negative_abstention_rate": 0.0,
+    "latency_ms": {
+      "mean": 18867.286,
+      "p95": 23960.92,
+      "max": 23960.92
+    },
+    "observability": {
+      "source_return_rate": 1.0,
+      "average_sources_per_case": 3.0,
+      "metadata_coverage": 1.0,
+      "total_retry_count": 0,
+      "max_attempts": 1
+    },
+    "ragas": null,
+    "batch": {
+      "batch_index": 25,
+      "batch_size": 5,
+      "total_batches": 30,
+      "total_cases_before_batching": 148,
+      "start_position": 121,
+      "end_position": 125
+    },
+    "quality_gate": {
+      "passed": null,
+      "reason": "RAGAS scoring was skipped",
+      "checks": {}
+    },
+    "applications": {
+      "healthcare_administration": {
+        "case_count": 4,
+        "answerable_case_count": 3,
+        "unanswerable_case_count": 1,
+        "citation_coverage": 1.0,
+        "negative_abstention_rate": 0.0,
+        "latency_ms": {
+          "mean": 19368.9875,
+          "p95": 23960.92,
+          "max": 23960.92
+        },
+        "observability": {
+          "source_return_rate": 1.0,
+          "average_sources_per_case": 3.0,
+          "metadata_coverage": 1.0,
+          "total_retry_count": 0,
+          "max_attempts": 1
+        },
+        "ragas": null
+      },
+      "legal_document_navigation": {
+        "case_count": 1,
+        "answerable_case_count": 1,
+        "unanswerable_case_count": 0,
+        "citation_coverage": 1.0,
+        "negative_abstention_rate": 0.0,
+        "latency_ms": {
+          "mean": 16860.48,
+          "p95": 16860.48,
+          "max": 16860.48
+        },
+        "observability": {
+          "source_return_rate": 1.0,
+          "average_sources_per_case": 3.0,
+          "metadata_coverage": 1.0,
+          "total_retry_count": 0,
+          "max_attempts": 1
+        },
+        "ragas": null
+      }
+    }
+  },
+  "cases": [
+    {
+      "id": "HEALTHCARE_ADMINISTRATION-005",
+      "application": "healthcare_administration",
+      "question": "What details are needed for a billing dispute?",
+      "ground_truth": "The invoice number, service date, disputed line item, and contact details.",
+      "reference_contexts": [
+        "Billing disputes require the invoice number, service date, disputed line item, and contact details. Clinical staff must not promise that a charge will be removed."
+      ],
+      "expected_sources": [
+        {
+          "document": "healthcare_administration/secondary_guide.txt",
+          "section": "Billing questions"
+        }
+      ],
+      "category": "procedural",
+      "answerable": true,
+      "tags": [
+        "healthcare_administration",
+        "procedural"
+      ],
+      "answer": "For a billing dispute, you need the invoice number, service date, disputed line item, and contact details.",
+      "contexts": [
+        "Billing and Privacy Procedures\n\nSection: Billing questions\nBilling disputes require the invoice number, service date, disputed line item, and contact details. Clinical staff must not promise that a charge will be removed.\n\nSection: Privacy incidents\nMisdirected records or unauthorized chart access must be reported to the Privacy Office immediately. Staff should preserve evidence and avoid contacting the unintended recipient without instructions.\n\nSection: Administrative boundary\nAdministrative staff may explain scheduling, records, billing, and privacy procedures. They must not diagnose conditions, interpret test results, or recommend treatment.\n",
+        "Synthetic Services Agreement\n\nSection: Term\nThe agreement begins on 1 July 2026 and continues for 12 months. It renews for additional 12-month terms unless either party gives 30 days written notice.\n\nSection: Payment\nInvoices are due within 30 days. Undisputed late amounts accrue interest at one percent per month.\n\nSection: Confidentiality\nConfidential information may be used only to perform the agreement and must be protected with reasonable safeguards. The obligation survives termination for three years.\n",
+        "Synthetic Contract Procedures\n\nSection: Notices\nFormal notices must be sent by tracked courier or email to the notice addresses in Schedule A. Email notice is effective when receipt is acknowledged.\n\nSection: Termination\nEither party may terminate for material breach if the breach is not cured within 15 days after written notice. Insolvency permits immediate termination.\n\nSection: Navigation boundary\nThe contract assistant may locate and summarize clauses from supplied documents. It must not predict court outcomes or replace review by qualified counsel.\n"
+      ],
+      "retrieved_documents": [
+        "source-1",
+        "source-2",
+        "source-3"
+      ],
+      "expected_documents": [
+        "healthcare_administration/secondary_guide.txt"
+      ],
+      "system_faithfulness": null,
+      "requires_clarification": false,
+      "latency_ms": 17766.34,
+      "source_count": 3,
+      "observability": {
+        "source_count": 3,
+        "has_sources": true,
+        "metadata_key_count": 3,
+        "metadata_keys": [
+          "evaluation_target",
+          "n8n_attempts",
+          "n8n_retry_count"
+        ],
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      },
+      "response_metadata": {
+        "evaluation_target": "direct_n8n",
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      }
+    },
+    {
+      "id": "HEALTHCARE_ADMINISTRATION-006",
+      "application": "healthcare_administration",
+      "question": "What should staff do after records are sent to the wrong recipient?",
+      "ground_truth": "Report immediately to the Privacy Office, preserve evidence, and wait for instructions before contacting the recipient.",
+      "reference_contexts": [
+        "Misdirected records or unauthorized chart access must be reported to the Privacy Office immediately. Staff should preserve evidence and avoid contacting the unintended recipient without instructions."
+      ],
+      "expected_sources": [
+        {
+          "document": "healthcare_administration/secondary_guide.txt",
+          "section": "Privacy incidents"
+        }
+      ],
+      "category": "procedural",
+      "answerable": true,
+      "tags": [
+        "healthcare_administration",
+        "procedural"
+      ],
+      "answer": "After records are sent to the wrong recipient, staff should report the incident to the Privacy Office immediately, preserve any evidence, and avoid contacting the unintended recipient without receiving instructions.",
+      "contexts": [
+        "Billing and Privacy Procedures\n\nSection: Billing questions\nBilling disputes require the invoice number, service date, disputed line item, and contact details. Clinical staff must not promise that a charge will be removed.\n\nSection: Privacy incidents\nMisdirected records or unauthorized chart access must be reported to the Privacy Office immediately. Staff should preserve evidence and avoid contacting the unintended recipient without instructions.\n\nSection: Administrative boundary\nAdministrative staff may explain scheduling, records, billing, and privacy procedures. They must not diagnose conditions, interpret test results, or recommend treatment.\n",
+        "Recovery and Review\n\nSection: Rollback\nPrefer rollback when a recent deployment correlates with impact and rollback is tested. Record the deployment identifier and validation checks before execution.\n\nSection: Evidence preservation\nPreserve logs, traces, alerts, command history, and configuration snapshots. Do not edit original evidence; store analysis in a separate document.\n\nSection: Post-incident review\nA review is due within five business days for SEV-1 and SEV-2 incidents. It must include contributing factors, timeline, corrective actions, owners, and due dates.\n",
+        "Clinic Administration Manual\n\nSection: Appointments\nRoutine appointments may be rescheduled without charge up to 24 hours before the visit. Later changes are marked late cancellation unless waived by clinic management.\n\nSection: Records requests\nPatients submit record requests using form MR-12 with identity verification. The records team acknowledges requests within two business days and normally completes them within ten business days.\n\nSection: Interpreter services\nProfessional interpreter services are available without charge. Staff must not ask minor children to interpret clinical or consent discussions.\n"
+      ],
+      "retrieved_documents": [
+        "source-1",
+        "source-2",
+        "source-3"
+      ],
+      "expected_documents": [
+        "healthcare_administration/secondary_guide.txt"
+      ],
+      "system_faithfulness": null,
+      "requires_clarification": false,
+      "latency_ms": 17298.68,
+      "source_count": 3,
+      "observability": {
+        "source_count": 3,
+        "has_sources": true,
+        "metadata_key_count": 3,
+        "metadata_keys": [
+          "evaluation_target",
+          "n8n_attempts",
+          "n8n_retry_count"
+        ],
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      },
+      "response_metadata": {
+        "evaluation_target": "direct_n8n",
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      }
+    },
+    {
+      "id": "HEALTHCARE_ADMINISTRATION-007",
+      "application": "healthcare_administration",
+      "question": "Can administrative staff explain a laboratory result while handling a records request?",
+      "ground_truth": "No. They may explain the records process but must not interpret test results.",
+      "reference_contexts": [
+        "Patients submit record requests using form MR-12 with identity verification. The records team acknowledges requests within two business days and normally completes them within ten business days.",
+        "Administrative staff may explain scheduling, records, billing, and privacy procedures. They must not diagnose conditions, interpret test results, or recommend treatment."
+      ],
+      "expected_sources": [
+        {
+          "document": "healthcare_administration/primary_guide.txt",
+          "section": "Records requests"
+        },
+        {
+          "document": "healthcare_administration/secondary_guide.txt",
+          "section": "Administrative boundary"
+        }
+      ],
+      "category": "reasoning",
+      "answerable": true,
+      "tags": [
+        "healthcare_administration",
+        "reasoning"
+      ],
+      "answer": "No, administrative staff cannot explain a laboratory result while handling a records request, as they must not interpret test results or recommend treatment according to the administrative boundary guidelines.",
+      "contexts": [
+        "Billing and Privacy Procedures\n\nSection: Billing questions\nBilling disputes require the invoice number, service date, disputed line item, and contact details. Clinical staff must not promise that a charge will be removed.\n\nSection: Privacy incidents\nMisdirected records or unauthorized chart access must be reported to the Privacy Office immediately. Staff should preserve evidence and avoid contacting the unintended recipient without instructions.\n\nSection: Administrative boundary\nAdministrative staff may explain scheduling, records, billing, and privacy procedures. They must not diagnose conditions, interpret test results, or recommend treatment.\n",
+        "Clinic Administration Manual\n\nSection: Appointments\nRoutine appointments may be rescheduled without charge up to 24 hours before the visit. Later changes are marked late cancellation unless waived by clinic management.\n\nSection: Records requests\nPatients submit record requests using form MR-12 with identity verification. The records team acknowledges requests within two business days and normally completes them within ten business days.\n\nSection: Interpreter services\nProfessional interpreter services are available without charge. Staff must not ask minor children to interpret clinical or consent discussions.\n",
+        "Data Governance Policy\n\nSection: Classification\nData is classified Public, Internal, Confidential, or Restricted. Customer identifiers, authentication data, and payment records are Restricted.\n\nSection: Retention\nSupport tickets are retained for three years. Security audit logs are retained for seven years. Expired records are deleted through the approved disposal workflow.\n\nSection: Access review\nOwners review access to Restricted data quarterly. Removed users must lose access within four hours of the approved removal request.\n"
+      ],
+      "retrieved_documents": [
+        "source-1",
+        "source-2",
+        "source-3"
+      ],
+      "expected_documents": [
+        "healthcare_administration/primary_guide.txt",
+        "healthcare_administration/secondary_guide.txt"
+      ],
+      "system_faithfulness": null,
+      "requires_clarification": false,
+      "latency_ms": 18450.01,
+      "source_count": 3,
+      "observability": {
+        "source_count": 3,
+        "has_sources": true,
+        "metadata_key_count": 3,
+        "metadata_keys": [
+          "evaluation_target",
+          "n8n_attempts",
+          "n8n_retry_count"
+        ],
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      },
+      "response_metadata": {
+        "evaluation_target": "direct_n8n",
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      }
+    },
+    {
+      "id": "HEALTHCARE_ADMINISTRATION-008",
+      "application": "healthcare_administration",
+      "question": "Which medication should a patient take for a fever?",
+      "ground_truth": "The supplied administrative documents do not provide treatment recommendations, and administrative staff must not recommend treatment.",
+      "reference_contexts": [],
+      "expected_sources": [],
+      "category": "unanswerable",
+      "answerable": false,
+      "tags": [
+        "healthcare_administration",
+        "unanswerable"
+      ],
+      "answer": "The Clinic Administration Manual does not provide information about medications or medical advice for treating conditions such as a fever. It focuses on appointment scheduling, records requests, interpreter services, billing, privacy procedures, and administration. For medical advice, patients should consult their healthcare provider.",
+      "contexts": [
+        "Clinic Administration Manual\n\nSection: Appointments\nRoutine appointments may be rescheduled without charge up to 24 hours before the visit. Later changes are marked late cancellation unless waived by clinic management.\n\nSection: Records requests\nPatients submit record requests using form MR-12 with identity verification. The records team acknowledges requests within two business days and normally completes them within ten business days.\n\nSection: Interpreter services\nProfessional interpreter services are available without charge. Staff must not ask minor children to interpret clinical or consent discussions.\n",
+        "Billing and Privacy Procedures\n\nSection: Billing questions\nBilling disputes require the invoice number, service date, disputed line item, and contact details. Clinical staff must not promise that a charge will be removed.\n\nSection: Privacy incidents\nMisdirected records or unauthorized chart access must be reported to the Privacy Office immediately. Staff should preserve evidence and avoid contacting the unintended recipient without instructions.\n\nSection: Administrative boundary\nAdministrative staff may explain scheduling, records, billing, and privacy procedures. They must not diagnose conditions, interpret test results, or recommend treatment.\n",
+        "Hydraulic Press Safety Guide\n\nSection: Lockout\nMaintenance inside the guarded area requires electrical and hydraulic lockout, stored-pressure release, and zero-energy verification by the technician.\n\nSection: Overheating\nStop the press when hydraulic fluid exceeds 75 degrees Celsius. Check the cooler fan and oil level, and resume only below 60 degrees Celsius.\n\nSection: Service records\nRecord operating hours, inspection findings, parts replaced, technician name, and return-to-service checks after maintenance.\n"
+      ],
+      "retrieved_documents": [
+        "source-1",
+        "source-2",
+        "source-3"
+      ],
+      "expected_documents": [],
+      "system_faithfulness": null,
+      "requires_clarification": false,
+      "latency_ms": 23960.92,
+      "source_count": 3,
+      "observability": {
+        "source_count": 3,
+        "has_sources": true,
+        "metadata_key_count": 3,
+        "metadata_keys": [
+          "evaluation_target",
+          "n8n_attempts",
+          "n8n_retry_count"
+        ],
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      },
+      "response_metadata": {
+        "evaluation_target": "direct_n8n",
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      }
+    },
+    {
+      "id": "LEGAL_DOCUMENT_NAVIGATION-001",
+      "application": "legal_document_navigation",
+      "question": "When does the agreement begin and how long is the initial term?",
+      "ground_truth": "It begins on 1 July 2026 and has a 12-month initial term.",
+      "reference_contexts": [
+        "The agreement begins on 1 July 2026 and continues for 12 months. It renews for additional 12-month terms unless either party gives 30 days written notice."
+      ],
+      "expected_sources": [
+        {
+          "document": "legal_document_navigation/primary_guide.txt",
+          "section": "Term"
+        }
+      ],
+      "category": "factoid",
+      "answerable": true,
+      "tags": [
+        "legal_document_navigation",
+        "factoid"
+      ],
+      "answer": "The agreement begins on 1 July 2026 and the initial term is 12 months.",
+      "contexts": [
+        "Synthetic Services Agreement\n\nSection: Term\nThe agreement begins on 1 July 2026 and continues for 12 months. It renews for additional 12-month terms unless either party gives 30 days written notice.\n\nSection: Payment\nInvoices are due within 30 days. Undisputed late amounts accrue interest at one percent per month.\n\nSection: Confidentiality\nConfidential information may be used only to perform the agreement and must be protected with reasonable safeguards. The obligation survives termination for three years.\n",
+        "Synthetic Contract Procedures\n\nSection: Notices\nFormal notices must be sent by tracked courier or email to the notice addresses in Schedule A. Email notice is effective when receipt is acknowledged.\n\nSection: Termination\nEither party may terminate for material breach if the breach is not cured within 15 days after written notice. Insolvency permits immediate termination.\n\nSection: Navigation boundary\nThe contract assistant may locate and summarize clauses from supplied documents. It must not predict court outcomes or replace review by qualified counsel.\n",
+        "Customer Support Policy\n\nSection: Warranty\nThe NovaHub device has a two-year limited hardware warranty from the purchase date. Accidental damage and unauthorized repairs are excluded.\n\nSection: Returns\nUnopened products may be returned within 30 calendar days. Opened defective products require a support case number and prepaid return label.\n\nSection: Replacement SLA\nApproved in-warranty replacements ship within two business days. Expedited shipping is available only for premium support customers.\n"
+      ],
+      "retrieved_documents": [
+        "source-1",
+        "source-2",
+        "source-3"
+      ],
+      "expected_documents": [
+        "legal_document_navigation/primary_guide.txt"
+      ],
+      "system_faithfulness": null,
+      "requires_clarification": false,
+      "latency_ms": 16860.48,
+      "source_count": 3,
+      "observability": {
+        "source_count": 3,
+        "has_sources": true,
+        "metadata_key_count": 3,
+        "metadata_keys": [
+          "evaluation_target",
+          "n8n_attempts",
+          "n8n_retry_count"
+        ],
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      },
+      "response_metadata": {
+        "evaluation_target": "direct_n8n",
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      }
+    }
+  ]
+}

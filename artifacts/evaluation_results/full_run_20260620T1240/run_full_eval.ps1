@@ -1,0 +1,2 @@
+python -m evaluation.run_eval --suite-dataset --n8n-url http://localhost:5678/webhook/retrieve-eval --n8n-tenant-id 22222222-2222-2222-2222-222222222222 --skip-ragas --timeout 180 --max-chunks-per-query 5 1> artifacts/evaluation_results/full_run_20260620T1240/stdout.log 2> artifacts/evaluation_results/full_run_20260620T1240/stderr.log
+$LASTEXITCODE | Set-Content -Path artifacts/evaluation_results/full_run_20260620T1240/exit_code.txt -Encoding ascii

@@ -1,0 +1,71 @@
+{
+  "generated_at": "2026-06-21T06:27:16.012002+00:00",
+  "summary": {
+    "case_count": 1,
+    "answerable_case_count": 1,
+    "unanswerable_case_count": 0,
+    "citation_coverage": 0.0,
+    "negative_abstention_rate": 0.0,
+    "latency_ms": {
+      "mean": 36956.77,
+      "p95": 36956.77,
+      "max": 36956.77
+    },
+    "ragas": null,
+    "quality_gate": {
+      "passed": null,
+      "reason": "RAGAS scoring was skipped",
+      "checks": {}
+    },
+    "applications": {
+      "kubernetes_troubleshooting": {
+        "case_count": 1,
+        "answerable_case_count": 1,
+        "unanswerable_case_count": 0,
+        "citation_coverage": 0.0,
+        "negative_abstention_rate": 0.0,
+        "latency_ms": {
+          "mean": 36956.77,
+          "p95": 36956.77,
+          "max": 36956.77
+        },
+        "ragas": null
+      }
+    }
+  },
+  "cases": [
+    {
+      "id": "K8S-EVAL-001",
+      "application": "kubernetes_troubleshooting",
+      "question": "Which sources should the Kubernetes troubleshooting knowledge base prioritize first?",
+      "ground_truth": "The Kubernetes troubleshooting knowledge base should prioritize the official Kubernetes debugging tasks, API reference, and kubectl command reference before community blogs, practical problem repositories, Kubernetes failure stories, and post-mortems. Managed service notes for EKS, GKE, and AKS should be layered after the core Kubernetes material.",
+      "reference_contexts": [
+        "The Kubernetes troubleshooting knowledge base should prioritize the official Kubernetes debugging tasks, API reference, and kubectl command reference before community blogs, practical problem repositories, Kubernetes failure stories, and post-mortems. Managed service notes for EKS, GKE, and AKS should be layered after the core Kubernetes material."
+      ],
+      "expected_sources": [
+        {
+          "document": "kubernetes_troubleshooting/cluster_debugging_runbook.txt",
+          "section": "Knowledge base source strategy"
+        }
+      ],
+      "category": "factoid",
+      "answerable": true,
+      "tags": [
+        "kubernetes",
+        "source-priority"
+      ],
+      "answer": "I don't have enough information to answer this.",
+      "contexts": [],
+      "retrieved_documents": [],
+      "expected_documents": [
+        "kubernetes_troubleshooting/cluster_debugging_runbook.txt"
+      ],
+      "system_faithfulness": null,
+      "requires_clarification": false,
+      "latency_ms": 36956.77,
+      "response_metadata": {
+        "evaluation_target": "direct_n8n"
+      }
+    }
+  ]
+}

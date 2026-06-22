@@ -1,0 +1,357 @@
+{
+  "generated_at": "2026-06-21T17:13:37.007414+00:00",
+  "summary": {
+    "case_count": 5,
+    "answerable_case_count": 4,
+    "unanswerable_case_count": 1,
+    "citation_coverage": 1.0,
+    "negative_abstention_rate": 0.0,
+    "latency_ms": {
+      "mean": 26704.727999999996,
+      "p95": 41658.92,
+      "max": 41658.92
+    },
+    "observability": {
+      "source_return_rate": 1.0,
+      "average_sources_per_case": 3.0,
+      "metadata_coverage": 1.0,
+      "total_retry_count": 0,
+      "max_attempts": 1
+    },
+    "ragas": null,
+    "batch": {
+      "batch_index": 27,
+      "batch_size": 5,
+      "total_batches": 30,
+      "total_cases_before_batching": 148,
+      "start_position": 131,
+      "end_position": 135
+    },
+    "quality_gate": {
+      "passed": null,
+      "reason": "RAGAS scoring was skipped",
+      "checks": {}
+    },
+    "applications": {
+      "equipment_maintenance": {
+        "case_count": 3,
+        "answerable_case_count": 3,
+        "unanswerable_case_count": 0,
+        "citation_coverage": 1.0,
+        "negative_abstention_rate": 0.0,
+        "latency_ms": {
+          "mean": 30688.399999999998,
+          "p95": 41658.92,
+          "max": 41658.92
+        },
+        "observability": {
+          "source_return_rate": 1.0,
+          "average_sources_per_case": 3.0,
+          "metadata_coverage": 1.0,
+          "total_retry_count": 0,
+          "max_attempts": 1
+        },
+        "ragas": null
+      },
+      "legal_document_navigation": {
+        "case_count": 2,
+        "answerable_case_count": 1,
+        "unanswerable_case_count": 1,
+        "citation_coverage": 1.0,
+        "negative_abstention_rate": 0.0,
+        "latency_ms": {
+          "mean": 20729.22,
+          "p95": 21820.5,
+          "max": 21820.5
+        },
+        "observability": {
+          "source_return_rate": 1.0,
+          "average_sources_per_case": 3.0,
+          "metadata_coverage": 1.0,
+          "total_retry_count": 0,
+          "max_attempts": 1
+        },
+        "ragas": null
+      }
+    }
+  },
+  "cases": [
+    {
+      "id": "LEGAL_DOCUMENT_NAVIGATION-007",
+      "application": "legal_document_navigation",
+      "question": "How should a party terminate for uncured material breach?",
+      "ground_truth": "Send formal written notice using the permitted notice method, then allow the 15-day cure period before termination.",
+      "reference_contexts": [
+        "Formal notices must be sent by tracked courier or email to the notice addresses in Schedule A. Email notice is effective when receipt is acknowledged.",
+        "Either party may terminate for material breach if the breach is not cured within 15 days after written notice. Insolvency permits immediate termination."
+      ],
+      "expected_sources": [
+        {
+          "document": "legal_document_navigation/secondary_guide.txt",
+          "section": "Notices"
+        },
+        {
+          "document": "legal_document_navigation/secondary_guide.txt",
+          "section": "Termination"
+        }
+      ],
+      "category": "multi_hop",
+      "answerable": true,
+      "tags": [
+        "legal_document_navigation",
+        "multi_hop"
+      ],
+      "answer": "A party may terminate for an uncured material breach if the breach is not cured within 15 days after written notice has been provided.",
+      "contexts": [
+        "Synthetic Contract Procedures\n\nSection: Notices\nFormal notices must be sent by tracked courier or email to the notice addresses in Schedule A. Email notice is effective when receipt is acknowledged.\n\nSection: Termination\nEither party may terminate for material breach if the breach is not cured within 15 days after written notice. Insolvency permits immediate termination.\n\nSection: Navigation boundary\nThe contract assistant may locate and summarize clauses from supplied documents. It must not predict court outcomes or replace review by qualified counsel.\n",
+        "Synthetic Services Agreement\n\nSection: Term\nThe agreement begins on 1 July 2026 and continues for 12 months. It renews for additional 12-month terms unless either party gives 30 days written notice.\n\nSection: Payment\nInvoices are due within 30 days. Undisputed late amounts accrue interest at one percent per month.\n\nSection: Confidentiality\nConfidential information may be used only to perform the agreement and must be protected with reasonable safeguards. The obligation survives termination for three years.\n",
+        "Vendor and Incident Compliance\n\nSection: Vendor assessment\nVendors processing Confidential or Restricted data require security review, a data-processing agreement, and annual reassessment.\n\nSection: Breach notification\nSuspected exposure of Restricted data must be reported to Security within one hour. Legal and Privacy determine external notification obligations.\n\nSection: Evidence\nCompliance evidence must identify the control, system, owner, collection date, and source. Screenshots without timestamps are insufficient.\n"
+      ],
+      "retrieved_documents": [
+        "source-1",
+        "source-2",
+        "source-3"
+      ],
+      "expected_documents": [
+        "legal_document_navigation/secondary_guide.txt",
+        "legal_document_navigation/secondary_guide.txt"
+      ],
+      "system_faithfulness": null,
+      "requires_clarification": false,
+      "latency_ms": 19637.94,
+      "source_count": 3,
+      "observability": {
+        "source_count": 3,
+        "has_sources": true,
+        "metadata_key_count": 3,
+        "metadata_keys": [
+          "evaluation_target",
+          "n8n_attempts",
+          "n8n_retry_count"
+        ],
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      },
+      "response_metadata": {
+        "evaluation_target": "direct_n8n",
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      }
+    },
+    {
+      "id": "LEGAL_DOCUMENT_NAVIGATION-008",
+      "application": "legal_document_navigation",
+      "question": "Will a court enforce the renewal clause?",
+      "ground_truth": "The supplied documents cannot predict a court outcome; qualified legal counsel must review that question.",
+      "reference_contexts": [],
+      "expected_sources": [],
+      "category": "unanswerable",
+      "answerable": false,
+      "tags": [
+        "legal_document_navigation",
+        "unanswerable"
+      ],
+      "answer": "The context provided does not offer information regarding court enforcement or legal validity of contract clauses, including the renewal clause. It is advisable to consult a qualified legal professional for guidance on such matters.",
+      "contexts": [
+        "Synthetic Services Agreement\n\nSection: Term\nThe agreement begins on 1 July 2026 and continues for 12 months. It renews for additional 12-month terms unless either party gives 30 days written notice.\n\nSection: Payment\nInvoices are due within 30 days. Undisputed late amounts accrue interest at one percent per month.\n\nSection: Confidentiality\nConfidential information may be used only to perform the agreement and must be protected with reasonable safeguards. The obligation survives termination for three years.\n",
+        "Synthetic Contract Procedures\n\nSection: Notices\nFormal notices must be sent by tracked courier or email to the notice addresses in Schedule A. Email notice is effective when receipt is acknowledged.\n\nSection: Termination\nEither party may terminate for material breach if the breach is not cured within 15 days after written notice. Insolvency permits immediate termination.\n\nSection: Navigation boundary\nThe contract assistant may locate and summarize clauses from supplied documents. It must not predict court outcomes or replace review by qualified counsel.\n",
+        "Customer Support Policy\n\nSection: Warranty\nThe NovaHub device has a two-year limited hardware warranty from the purchase date. Accidental damage and unauthorized repairs are excluded.\n\nSection: Returns\nUnopened products may be returned within 30 calendar days. Opened defective products require a support case number and prepaid return label.\n\nSection: Replacement SLA\nApproved in-warranty replacements ship within two business days. Expedited shipping is available only for premium support customers.\n"
+      ],
+      "retrieved_documents": [
+        "source-1",
+        "source-2",
+        "source-3"
+      ],
+      "expected_documents": [],
+      "system_faithfulness": null,
+      "requires_clarification": false,
+      "latency_ms": 21820.5,
+      "source_count": 3,
+      "observability": {
+        "source_count": 3,
+        "has_sources": true,
+        "metadata_key_count": 3,
+        "metadata_keys": [
+          "evaluation_target",
+          "n8n_attempts",
+          "n8n_retry_count"
+        ],
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      },
+      "response_metadata": {
+        "evaluation_target": "direct_n8n",
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      }
+    },
+    {
+      "id": "EQUIPMENT_MAINTENANCE-001",
+      "application": "equipment_maintenance",
+      "question": "What must be inspected before each shift?",
+      "ground_truth": "Inspect guards, hoses, fluid level, emergency stop, and visible leaks.",
+      "reference_contexts": [
+        "Before each shift, inspect guards, hoses, fluid level, emergency stop, and visible leaks. Do not operate if a guard is missing or a hose shows exposed reinforcement."
+      ],
+      "expected_sources": [
+        {
+          "document": "equipment_maintenance/primary_guide.txt",
+          "section": "Daily inspection"
+        }
+      ],
+      "category": "procedural",
+      "answerable": true,
+      "tags": [
+        "equipment_maintenance",
+        "procedural"
+      ],
+      "answer": "Before each shift, guards, hoses, fluid level, emergency stop, and visible leaks must be inspected.",
+      "contexts": [
+        "Hydraulic Press Maintenance Manual\n\nSection: Daily inspection\nBefore each shift, inspect guards, hoses, fluid level, emergency stop, and visible leaks. Do not operate if a guard is missing or a hose shows exposed reinforcement.\n\nSection: Lubrication\nLubricate guide rails every 250 operating hours with grease type GX-4. Over-lubrication can contaminate the position sensor.\n\nSection: Pressure drift\nIf pressure drifts more than five percent, check fluid temperature, filter restriction, and relief-valve setting before replacing the pump.\n",
+        "Hydraulic Press Safety Guide\n\nSection: Lockout\nMaintenance inside the guarded area requires electrical and hydraulic lockout, stored-pressure release, and zero-energy verification by the technician.\n\nSection: Overheating\nStop the press when hydraulic fluid exceeds 75 degrees Celsius. Check the cooler fan and oil level, and resume only below 60 degrees Celsius.\n\nSection: Service records\nRecord operating hours, inspection findings, parts replaced, technician name, and return-to-service checks after maintenance.\n",
+        "Kubernetes Cluster Debugging Runbook\n\nSection: Knowledge base source strategy\nThe Kubernetes troubleshooting knowledge base should prioritize the official Kubernetes debugging tasks, API reference, and kubectl command reference before community blogs, practical problem repositories, Kubernetes failure stories, and post-mortems. Managed service notes for EKS, GKE, and AKS should be layered after the core Kubernetes material.\n\nSection: Initial triage packet\nEvery Kubernetes incident ticket should include the namespace, workload name and kind, affected node, image tag, recent deployment time, exact user-visible symptom, kubectl get output, kubectl describe output, relevant events, pod logs, and any recent configuration or secret changes. Secrets, tokens, and customer payloads must be redacted.\n\nSection: Pending pods\nWhen a pod remains Pending, inspect kubectl describe pod events first. Common causes are insufficient CPU or memory, unsatisfied node selectors or affinity, taints without tolerations, missing persistent volumes, and image pull secrets that are referenced but not present.\n\nSection: CrashLoopBackOff\nFor CrashLoopBackOff, compare the current container logs with kubectl logs --previous. Check the exit code, command arguments, environment variables, mounted configuration, liveness probe behavior, and whether the process exits before the readiness gate can succeed.\n\nSection: ImagePullBackOff\nImagePullBackOff usually means the kubelet cannot fetch the image. Validate the image name and tag, registry reachability, imagePullSecrets, service account permissions, and whether the registry is throttling or returning authentication failures.\n\nSection: CreateContainerConfigError\nCreateContainerConfigError commonly indicates that the pod spec references a missing ConfigMap, missing Secret, invalid key, or malformed environment variable source. Describe the pod and compare referenced names and keys with the objects in the same namespace.\n\nSection: Node pressure and evictions\nNode pressure evictions are driven by kubelet thresholds for memory, disk, PID, or ephemeral storage pressure. Inspect node conditions, eviction events, container ephemeral-storage usage, log growth, and whether requests and limits reflect actual workload behavior.\n\nSection: Control plane health\nControl-plane troubleshooting starts with kube-apiserver reachability, etcd health, scheduler and controller-manager status, certificate validity, and admission webhook latency. Avoid restarting multiple control-plane components at once unless an approved recovery runbook requires it.\n"
+      ],
+      "retrieved_documents": [
+        "source-1",
+        "source-2",
+        "source-3"
+      ],
+      "expected_documents": [
+        "equipment_maintenance/primary_guide.txt"
+      ],
+      "system_faithfulness": null,
+      "requires_clarification": false,
+      "latency_ms": 41658.92,
+      "source_count": 3,
+      "observability": {
+        "source_count": 3,
+        "has_sources": true,
+        "metadata_key_count": 3,
+        "metadata_keys": [
+          "evaluation_target",
+          "n8n_attempts",
+          "n8n_retry_count"
+        ],
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      },
+      "response_metadata": {
+        "evaluation_target": "direct_n8n",
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      }
+    },
+    {
+      "id": "EQUIPMENT_MAINTENANCE-002",
+      "application": "equipment_maintenance",
+      "question": "When must the press not be operated?",
+      "ground_truth": "Do not operate it with a missing guard or a hose showing exposed reinforcement.",
+      "reference_contexts": [
+        "Before each shift, inspect guards, hoses, fluid level, emergency stop, and visible leaks. Do not operate if a guard is missing or a hose shows exposed reinforcement."
+      ],
+      "expected_sources": [
+        {
+          "document": "equipment_maintenance/primary_guide.txt",
+          "section": "Daily inspection"
+        }
+      ],
+      "category": "safety",
+      "answerable": true,
+      "tags": [
+        "equipment_maintenance",
+        "safety"
+      ],
+      "answer": "The press must not be operated if a guard is missing or a hose shows exposed reinforcement.",
+      "contexts": [
+        "Hydraulic Press Safety Guide\n\nSection: Lockout\nMaintenance inside the guarded area requires electrical and hydraulic lockout, stored-pressure release, and zero-energy verification by the technician.\n\nSection: Overheating\nStop the press when hydraulic fluid exceeds 75 degrees Celsius. Check the cooler fan and oil level, and resume only below 60 degrees Celsius.\n\nSection: Service records\nRecord operating hours, inspection findings, parts replaced, technician name, and return-to-service checks after maintenance.\n",
+        "Hydraulic Press Maintenance Manual\n\nSection: Daily inspection\nBefore each shift, inspect guards, hoses, fluid level, emergency stop, and visible leaks. Do not operate if a guard is missing or a hose shows exposed reinforcement.\n\nSection: Lubrication\nLubricate guide rails every 250 operating hours with grease type GX-4. Over-lubrication can contaminate the position sensor.\n\nSection: Pressure drift\nIf pressure drifts more than five percent, check fluid temperature, filter restriction, and relief-valve setting before replacing the pump.\n",
+        "NovaHub Troubleshooting\n\nSection: Factory reset\nTo reset NovaHub, hold the rear reset button for 10 seconds until the status light flashes amber. The reset removes local settings but does not cancel the subscription.\n\nSection: Offline status\nIf NovaHub shows offline, verify power, restart the router, and move the device within eight metres of the access point. If still offline, collect the diagnostic code.\n\nSection: Escalation\nEscalate when three resets fail, the device overheats, or a diagnostic code begins with HW-. Overheating devices must be unplugged immediately.\n"
+      ],
+      "retrieved_documents": [
+        "source-1",
+        "source-2",
+        "source-3"
+      ],
+      "expected_documents": [
+        "equipment_maintenance/primary_guide.txt"
+      ],
+      "system_faithfulness": null,
+      "requires_clarification": false,
+      "latency_ms": 31102.34,
+      "source_count": 3,
+      "observability": {
+        "source_count": 3,
+        "has_sources": true,
+        "metadata_key_count": 3,
+        "metadata_keys": [
+          "evaluation_target",
+          "n8n_attempts",
+          "n8n_retry_count"
+        ],
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      },
+      "response_metadata": {
+        "evaluation_target": "direct_n8n",
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      }
+    },
+    {
+      "id": "EQUIPMENT_MAINTENANCE-003",
+      "application": "equipment_maintenance",
+      "question": "How often are the guide rails lubricated?",
+      "ground_truth": "Every 250 operating hours using GX-4 grease.",
+      "reference_contexts": [
+        "Lubricate guide rails every 250 operating hours with grease type GX-4. Over-lubrication can contaminate the position sensor."
+      ],
+      "expected_sources": [
+        {
+          "document": "equipment_maintenance/primary_guide.txt",
+          "section": "Lubrication"
+        }
+      ],
+      "category": "factoid",
+      "answerable": true,
+      "tags": [
+        "equipment_maintenance",
+        "factoid"
+      ],
+      "answer": "The guide rails are lubricated every 250 operating hours with grease type GX-4.",
+      "contexts": [
+        "Hydraulic Press Maintenance Manual\n\nSection: Daily inspection\nBefore each shift, inspect guards, hoses, fluid level, emergency stop, and visible leaks. Do not operate if a guard is missing or a hose shows exposed reinforcement.\n\nSection: Lubrication\nLubricate guide rails every 250 operating hours with grease type GX-4. Over-lubrication can contaminate the position sensor.\n\nSection: Pressure drift\nIf pressure drifts more than five percent, check fluid temperature, filter restriction, and relief-valve setting before replacing the pump.\n",
+        "Hydraulic Press Safety Guide\n\nSection: Lockout\nMaintenance inside the guarded area requires electrical and hydraulic lockout, stored-pressure release, and zero-energy verification by the technician.\n\nSection: Overheating\nStop the press when hydraulic fluid exceeds 75 degrees Celsius. Check the cooler fan and oil level, and resume only below 60 degrees Celsius.\n\nSection: Service records\nRecord operating hours, inspection findings, parts replaced, technician name, and return-to-service checks after maintenance.\n",
+        "Incident Response Runbook\n\nSection: Declaration\nDeclare an incident when customer impact is ongoing, security is suspected, or recovery needs coordination across two or more teams. The incident commander owns decisions and timeline updates.\n\nSection: First fifteen minutes\nWithin 15 minutes, create the incident channel, assign commander and scribe, record impact, freeze risky deployments, and publish an initial internal update.\n\nSection: Customer updates\nFor severity SEV-1, publish customer updates every 30 minutes. For SEV-2, update every 60 minutes while impact continues.\n"
+      ],
+      "retrieved_documents": [
+        "source-1",
+        "source-2",
+        "source-3"
+      ],
+      "expected_documents": [
+        "equipment_maintenance/primary_guide.txt"
+      ],
+      "system_faithfulness": null,
+      "requires_clarification": false,
+      "latency_ms": 19303.94,
+      "source_count": 3,
+      "observability": {
+        "source_count": 3,
+        "has_sources": true,
+        "metadata_key_count": 3,
+        "metadata_keys": [
+          "evaluation_target",
+          "n8n_attempts",
+          "n8n_retry_count"
+        ],
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      },
+      "response_metadata": {
+        "evaluation_target": "direct_n8n",
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      }
+    }
+  ]
+}

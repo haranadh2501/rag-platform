@@ -1,0 +1,6 @@
+id,application,category,answerable,question,ground_truth,answer,latency_ms,system_faithfulness,faithfulness,answer_relevancy,context_precision,context_recall,source_count
+LEGAL_DOCUMENT_NAVIGATION-002,legal_document_navigation,factoid,True,How much renewal notice is required?,Either party must give 30 days written notice to prevent renewal.,A renewal notice of 30 days is required according to the Synthetic Services Agreement.,18067.55,,,,,,3
+LEGAL_DOCUMENT_NAVIGATION-003,legal_document_navigation,factoid,True,When are invoices due?,Within 30 days.,Invoices are due within 30 days.,17235.39,,,,,,3
+LEGAL_DOCUMENT_NAVIGATION-004,legal_document_navigation,factoid,True,How long does confidentiality survive termination?,For three years after termination.,Confidentiality survives termination for three years.,15747.88,,,,,,3
+LEGAL_DOCUMENT_NAVIGATION-005,legal_document_navigation,factoid,True,When is an email notice effective?,When receipt is acknowledged.,An email notice is effective when receipt is acknowledged.,17082.72,,,,,,3
+LEGAL_DOCUMENT_NAVIGATION-006,legal_document_navigation,procedural,True,What cure period applies to a material breach?,The breaching party has 15 days after written notice to cure.,"A cure period of 15 days applies to a material breach, after written notice is given.",17321.86,,,,,,3

@@ -1,0 +1,88 @@
+{
+  "id": "evaluation-db-count-helper",
+  "name": "Evaluation DB Count Helper",
+  "active": true,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "eval-db-count",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        200,
+        240
+      ],
+      "id": "eval-db-count-webhook",
+      "name": "Webhook",
+      "webhookId": "eval-db-count-webhook"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT count(*) AS total_chunks, count(*) FILTER (WHERE metadata ? 'application') AS eval_chunks, count(*) FILTER (WHERE content ILIKE '%CreateContainerConfigError%') AS create_container_config_chunks, min(created_at) AS oldest, max(created_at) AS newest FROM document_chunks WHERE tenant_id = '11111111-1111-1111-1111-111111111111';",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        440,
+        240
+      ],
+      "id": "eval-db-count-query",
+      "name": "Count Chunks",
+      "credentials": {
+        "postgres": {
+          "id": "gKyDrIX2zBtF4h61",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        680,
+        240
+      ],
+      "id": "eval-db-count-respond",
+      "name": "Respond to Webhook"
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Count Chunks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Count Chunks": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}

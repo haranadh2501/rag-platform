@@ -1,0 +1,283 @@
+{
+  "case_count": 148,
+  "answerable_case_count": 132,
+  "unanswerable_case_count": 16,
+  "citation_coverage": 1.0,
+  "negative_abstention_rate": 1.0,
+  "latency_ms": {
+    "mean": 7174.040743243243,
+    "p95": 17613.67,
+    "max": 143953.7
+  },
+  "ragas": {
+    "faithfulness": 0.7824116743471582,
+    "answer_relevancy": 0.8427413325377707,
+    "context_precision": 0.9398430873228434,
+    "context_recall": 0.9347826086956522
+  },
+  "quality_gate": {
+    "passed": false,
+    "checks": {
+      "faithfulness": {
+        "score": 0.7824116743471582,
+        "threshold": 0.85,
+        "passed": false
+      },
+      "answer_relevancy": {
+        "score": 0.8427413325377707,
+        "threshold": 0.8,
+        "passed": true
+      },
+      "context_precision": {
+        "score": 0.9398430873228434,
+        "threshold": 0.75,
+        "passed": true
+      },
+      "context_recall": {
+        "score": 0.9347826086956522,
+        "threshold": 0.8,
+        "passed": true
+      }
+    }
+  },
+  "applications": {
+    "bug_reporting": {
+      "case_count": 30,
+      "answerable_case_count": 27,
+      "unanswerable_case_count": 3,
+      "citation_coverage": 1.0,
+      "negative_abstention_rate": 1.0,
+      "latency_ms": {
+        "mean": 7329.473666666667,
+        "p95": 18765.94,
+        "max": 39841.15
+      },
+      "ragas": {
+        "faithfulness": 0.8185185185185185,
+        "answer_relevancy": 0.847166089437786,
+        "context_precision": 0.9362654320578073,
+        "context_recall": 1.0
+      }
+    },
+    "compliance_policy": {
+      "case_count": 8,
+      "answerable_case_count": 7,
+      "unanswerable_case_count": 1,
+      "citation_coverage": 1.0,
+      "negative_abstention_rate": 1.0,
+      "latency_ms": {
+        "mean": 4069.8875,
+        "p95": 5093.87,
+        "max": 5093.87
+      },
+      "ragas": {
+        "faithfulness": 0.8571428571428571,
+        "answer_relevancy": 0.9496116347173514,
+        "context_precision": 0.9312499999763021,
+        "context_recall": 1.0
+      }
+    },
+    "customer_support": {
+      "case_count": 8,
+      "answerable_case_count": 7,
+      "unanswerable_case_count": 1,
+      "citation_coverage": 1.0,
+      "negative_abstention_rate": 1.0,
+      "latency_ms": {
+        "mean": 4045.99375,
+        "p95": 4540.58,
+        "max": 4540.58
+      },
+      "ragas": {
+        "faithfulness": 0.7714285714285715,
+        "answer_relevancy": 0.9440572529489373,
+        "context_precision": 0.9531746031023545,
+        "context_recall": 0.8571428571428571
+      }
+    },
+    "developer_documentation": {
+      "case_count": 8,
+      "answerable_case_count": 7,
+      "unanswerable_case_count": 1,
+      "citation_coverage": 1.0,
+      "negative_abstention_rate": 1.0,
+      "latency_ms": {
+        "mean": 6213.9025,
+        "p95": 19186.59,
+        "max": 19186.59
+      },
+      "ragas": {
+        "faithfulness": 0.9047619047619048,
+        "answer_relevancy": 0.7775953067197788,
+        "context_precision": 0.919047618986746,
+        "context_recall": 1.0
+      }
+    },
+    "education_assistant": {
+      "case_count": 8,
+      "answerable_case_count": 7,
+      "unanswerable_case_count": 1,
+      "citation_coverage": 1.0,
+      "negative_abstention_rate": 1.0,
+      "latency_ms": {
+        "mean": 4237.05,
+        "p95": 5204.46,
+        "max": 5204.46
+      },
+      "ragas": {
+        "faithfulness": 0.8571428571428571,
+        "answer_relevancy": 0.7776900767346621,
+        "context_precision": 0.8960317459870568,
+        "context_recall": 0.8571428571428571
+      }
+    },
+    "employee_onboarding": {
+      "case_count": 8,
+      "answerable_case_count": 7,
+      "unanswerable_case_count": 1,
+      "citation_coverage": 1.0,
+      "negative_abstention_rate": 1.0,
+      "latency_ms": {
+        "mean": 6863.7,
+        "p95": 26750.52,
+        "max": 26750.52
+      },
+      "ragas": {
+        "faithfulness": 0.6666666666666667,
+        "answer_relevancy": 0.7955226766668904,
+        "context_precision": 0.9577380951995487,
+        "context_recall": 0.8333333333333334
+      }
+    },
+    "equipment_maintenance": {
+      "case_count": 8,
+      "answerable_case_count": 7,
+      "unanswerable_case_count": 1,
+      "citation_coverage": 1.0,
+      "negative_abstention_rate": 1.0,
+      "latency_ms": {
+        "mean": 4782.965,
+        "p95": 7286.87,
+        "max": 7286.87
+      },
+      "ragas": {
+        "faithfulness": 0.6666666666666667,
+        "answer_relevancy": 0.7714243214319122,
+        "context_precision": 0.9666666666319444,
+        "context_recall": 0.8571428571428571
+      }
+    },
+    "healthcare_administration": {
+      "case_count": 8,
+      "answerable_case_count": 7,
+      "unanswerable_case_count": 1,
+      "citation_coverage": 1.0,
+      "negative_abstention_rate": 1.0,
+      "latency_ms": {
+        "mean": 4154.5175,
+        "p95": 6171.54,
+        "max": 6171.54
+      },
+      "ragas": {
+        "faithfulness": 0.8333333333333333,
+        "answer_relevancy": 0.9082148615850121,
+        "context_precision": 0.9696428571102828,
+        "context_recall": 1.0
+      }
+    },
+    "incident_response": {
+      "case_count": 8,
+      "answerable_case_count": 7,
+      "unanswerable_case_count": 1,
+      "citation_coverage": 1.0,
+      "negative_abstention_rate": 1.0,
+      "latency_ms": {
+        "mean": 5365.3875,
+        "p95": 10854.58,
+        "max": 10854.58
+      },
+      "ragas": {
+        "faithfulness": 0.619047619047619,
+        "answer_relevancy": 0.8006769353827252,
+        "context_precision": 0.972023809502366,
+        "context_recall": 0.7142857142857143
+      }
+    },
+    "it_helpdesk": {
+      "case_count": 8,
+      "answerable_case_count": 7,
+      "unanswerable_case_count": 1,
+      "citation_coverage": 1.0,
+      "negative_abstention_rate": 1.0,
+      "latency_ms": {
+        "mean": 4398.49125,
+        "p95": 5551.71,
+        "max": 5551.71
+      },
+      "ragas": {
+        "faithfulness": 0.8333333333333334,
+        "answer_relevancy": 0.8891015982343047,
+        "context_precision": 0.8595238094755159,
+        "context_recall": 1.0
+      }
+    },
+    "kubernetes_troubleshooting": {
+      "case_count": 30,
+      "answerable_case_count": 28,
+      "unanswerable_case_count": 2,
+      "citation_coverage": 1.0,
+      "negative_abstention_rate": 1.0,
+      "latency_ms": {
+        "mean": 13865.974,
+        "p95": 104665.31,
+        "max": 143953.7
+      },
+      "ragas": {
+        "faithfulness": 0.6978354978354978,
+        "answer_relevancy": 0.8672274049462813,
+        "context_precision": 0.9559523809214484,
+        "context_recall": 0.9210526315789473
+      }
+    },
+    "legal_document_navigation": {
+      "case_count": 8,
+      "answerable_case_count": 7,
+      "unanswerable_case_count": 1,
+      "citation_coverage": 1.0,
+      "negative_abstention_rate": 1.0,
+      "latency_ms": {
+        "mean": 4413.86875,
+        "p95": 5530.13,
+        "max": 5530.13
+      },
+      "ragas": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.9508768799115066,
+        "context_precision": 0.9261904761522223,
+        "context_recall": 1.0
+      }
+    },
+    "sales_enablement": {
+      "case_count": 8,
+      "answerable_case_count": 7,
+      "unanswerable_case_count": 1,
+      "citation_coverage": 1.0,
+      "negative_abstention_rate": 1.0,
+      "latency_ms": {
+        "mean": 4691.06125,
+        "p95": 7167.48,
+        "max": 7167.48
+      },
+      "ragas": {
+        "faithfulness": 0.7222222222222222,
+        "answer_relevancy": 0.6043639458531592,
+        "context_precision": 0.9351190475767213,
+        "context_recall": 1.0
+      }
+    }
+  }
+}
+Json report: C:\Users\yasha\Desktop\Mtech\DL\course_project\rag-platform\artifacts\evaluation_results\application_suite_eval_20260621T074025Z.json
+Csv report: C:\Users\yasha\Desktop\Mtech\DL\course_project\rag-platform\artifacts\evaluation_results\application_suite_eval_20260621T074025Z.csv
+Markdown report: C:\Users\yasha\Desktop\Mtech\DL\course_project\rag-platform\artifacts\evaluation_results\application_suite_eval_20260621T074025Z.md
+Html report: C:\Users\yasha\Desktop\Mtech\DL\course_project\rag-platform\artifacts\evaluation_results\application_suite_eval_20260621T074025Z.html

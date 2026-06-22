@@ -1,0 +1,3 @@
+Set-Location -LiteralPath 'C:\Users\yasha\Desktop\Mtech\DL\course_project\rag-platform'
+python -m evaluation.run_eval --suite-dataset --n8n-url http://localhost:5678/webhook/retrieve-eval --n8n-tenant-id 22222222-2222-2222-2222-222222222222 --skip-ragas --timeout 180 --max-chunks-per-query 5 1> 'C:\Users\yasha\Desktop\Mtech\DL\course_project\rag-platform\artifacts\evaluation_results\local_full_run_20260621T105234\stdout.log' 2> 'C:\Users\yasha\Desktop\Mtech\DL\course_project\rag-platform\artifacts\evaluation_results\local_full_run_20260621T105234\stderr.log'
+$LASTEXITCODE | Set-Content -Path 'C:\Users\yasha\Desktop\Mtech\DL\course_project\rag-platform\artifacts\evaluation_results\local_full_run_20260621T105234\exit_code.txt' -Encoding ascii

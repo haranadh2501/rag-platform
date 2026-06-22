@@ -1,0 +1,65 @@
+<!doctype html><html><head><meta charset="utf-8"><title>RAG Evaluation Report</title><style>body{font-family:system-ui;max-width:1100px;margin:2rem auto;padding:0 1rem}pre{white-space:pre-wrap;line-height:1.45}</style></head><body><pre># RAG Evaluation Report
+
+Generated: `2026-06-21T07:40:25.174177+00:00`
+
+## Aggregate Results
+
+| Metric | Score | Threshold | Pass |
+|---|---:|---:|:---:|
+| faithfulness | 0.782 | 0.850 | no |
+| answer_relevancy | 0.843 | 0.800 | yes |
+| context_precision | 0.940 | 0.750 | yes |
+| context_recall | 0.935 | 0.800 | yes |
+
+- Cases: 148
+- Citation coverage: 1.000
+- Negative abstention rate: 1.000
+- Mean latency: 7174.041 ms
+- p95 latency: 17613.670 ms
+
+## Application Results
+
+| Application | Cases | Faithfulness | Relevancy | Context precision | Context recall |
+|---|---:|---:|---:|---:|---:|
+| bug_reporting | 30 | 0.819 | 0.847 | 0.936 | 1.000 |
+| compliance_policy | 8 | 0.857 | 0.950 | 0.931 | 1.000 |
+| customer_support | 8 | 0.771 | 0.944 | 0.953 | 0.857 |
+| developer_documentation | 8 | 0.905 | 0.778 | 0.919 | 1.000 |
+| education_assistant | 8 | 0.857 | 0.778 | 0.896 | 0.857 |
+| employee_onboarding | 8 | 0.667 | 0.796 | 0.958 | 0.833 |
+| equipment_maintenance | 8 | 0.667 | 0.771 | 0.967 | 0.857 |
+| healthcare_administration | 8 | 0.833 | 0.908 | 0.970 | 1.000 |
+| incident_response | 8 | 0.619 | 0.801 | 0.972 | 0.714 |
+| it_helpdesk | 8 | 0.833 | 0.889 | 0.860 | 1.000 |
+| kubernetes_troubleshooting | 30 | 0.698 | 0.867 | 0.956 | 0.921 |
+| legal_document_navigation | 8 | 1.000 | 0.951 | 0.926 | 1.000 |
+| sales_enablement | 8 | 0.722 | 0.604 | 0.935 | 1.000 |
+
+## Failed or Unscored Cases
+
+| ID | Application | Category | Notes |
+|---|---|---|---|
+| K8S-EVAL-001 | kubernetes_troubleshooting | factoid | One or more RAGAS metrics were not produced |
+| K8S-EVAL-003 | kubernetes_troubleshooting | procedural | One or more RAGAS metrics were not produced |
+| K8S-EVAL-004 | kubernetes_troubleshooting | procedural | One or more RAGAS metrics were not produced |
+| K8S-EVAL-006 | kubernetes_troubleshooting | factoid | One or more RAGAS metrics were not produced |
+| K8S-EVAL-008 | kubernetes_troubleshooting | procedural | One or more RAGAS metrics were not produced |
+| K8S-EVAL-010 | kubernetes_troubleshooting | procedural | One or more RAGAS metrics were not produced |
+| K8S-EVAL-011 | kubernetes_troubleshooting | procedural | One or more RAGAS metrics were not produced |
+| K8S-EVAL-014 | kubernetes_troubleshooting | procedural | One or more RAGAS metrics were not produced |
+| K8S-EVAL-015 | kubernetes_troubleshooting | reasoning | One or more RAGAS metrics were not produced |
+| K8S-EVAL-025 | kubernetes_troubleshooting | multi_hop | One or more RAGAS metrics were not produced |
+| K8S-EVAL-026 | kubernetes_troubleshooting | multi_hop | One or more RAGAS metrics were not produced |
+| K8S-EVAL-028 | kubernetes_troubleshooting | safety | One or more RAGAS metrics were not produced |
+| BUG-EVAL-005 | bug_reporting | reasoning | One or more RAGAS metrics were not produced |
+| BUG-EVAL-012 | bug_reporting | factoid | One or more RAGAS metrics were not produced |
+| BUG-EVAL-014 | bug_reporting | factoid | One or more RAGAS metrics were not produced |
+| BUG-EVAL-016 | bug_reporting | factoid | One or more RAGAS metrics were not produced |
+| BUG-EVAL-019 | bug_reporting | multi_hop | One or more RAGAS metrics were not produced |
+| BUG-EVAL-021 | bug_reporting | factoid | One or more RAGAS metrics were not produced |
+| BUG-EVAL-022 | bug_reporting | factoid | One or more RAGAS metrics were not produced |
+| IT_HELPDESK-005 | it_helpdesk | reasoning | One or more RAGAS metrics were not produced |
+| EMPLOYEE_ONBOARDING-004 | employee_onboarding | factoid | One or more RAGAS metrics were not produced |
+| COMPLIANCE_POLICY-002 | compliance_policy | factoid | One or more RAGAS metrics were not produced |
+| SALES_ENABLEMENT-002 | sales_enablement | factoid | One or more RAGAS metrics were not produced |
+</pre></body></html>

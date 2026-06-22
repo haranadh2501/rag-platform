@@ -1,0 +1,865 @@
+{
+    "name":  "Retrieval Eval Sources Check",
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "method":  "POST",
+                                         "url":  "https://api.voyageai.com/v1/embeddings",
+                                         "authentication":  "genericCredentialType",
+                                         "genericAuthType":  "httpHeaderAuth",
+                                         "sendBody":  true,
+                                         "specifyBody":  "json",
+                                         "jsonBody":  "={{ { input: [($(\u0027Webhook\u0027).item.json.body.query || $(\u0027Webhook\u0027).item.json.body.Query || $(\u0027Webhook\u0027).item.json.body.question || \u0027\u0027)], model: \u0027voyage-4-large\u0027, input_type: \u0027query\u0027 } }}",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.httpRequest",
+                      "typeVersion":  4.4,
+                      "position":  [
+                                       432,
+                                       240
+                                   ],
+                      "id":  "f1778051-148a-40d7-a4e0-e677b3bfa64b",
+                      "name":  "Embed Query",
+                      "credentials":  {
+                                          "httpHeaderAuth":  {
+                                                                 "id":  "gzpoAEqkCy5p3O8N",
+                                                                 "name":  "Voyage API"
+                                                             }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "WITH query_embedding AS (\n  SELECT (\u0027[\u0027 || \u0027{{ $(\u0027Embed Query\u0027).item.json.data[0].embedding.join(\u0027,\u0027) }}\u0027 || \u0027]\u0027)::vector AS embedding\n)\nSELECT dc.id, dc.content, dc.metadata, 1 - (dc.embedding \u003c=\u003e qe.embedding) AS score\nFROM document_chunks dc, query_embedding qe\nWHERE dc.tenant_id = \u0027{{ $(\u0027Webhook\u0027).item.json.body.tenant_id || \"11111111-1111-1111-1111-111111111111\" }}\u0027\nORDER BY dc.embedding \u003c=\u003e qe.embedding\nLIMIT {{ Number($(\u0027Webhook\u0027).item.json.body.max_chunks || 10) }};",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.6,
+                      "position":  [
+                                       656,
+                                       240
+                                   ],
+                      "id":  "2f8a3c46-e434-4f94-9273-a134688d0950",
+                      "name":  "Vector Search",
+                      "retryOnFail":  true,
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "gKyDrIX2zBtF4h61",
+                                                           "name":  "Postgres account"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "method":  "POST",
+                                         "url":  "https://api.voyageai.com/v1/rerank",
+                                         "authentication":  "genericCredentialType",
+                                         "genericAuthType":  "httpHeaderAuth",
+                                         "sendBody":  true,
+                                         "specifyBody":  "json",
+                                         "jsonBody":  "={{ { query: ($(\u0027Webhook\u0027).item.json.body.query || $(\u0027Webhook\u0027).item.json.body.Query || $(\u0027Webhook\u0027).item.json.body.question || \u0027\u0027), documents: $(\u0027Vector Search\u0027).all().map(item =\u003e item.json.content), model: \u0027rerank-2.5\u0027, top_k: Number($(\u0027Webhook\u0027).item.json.body.max_chunks || 3) } }}",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.httpRequest",
+                      "typeVersion":  4.4,
+                      "position":  [
+                                       1088,
+                                       240
+                                   ],
+                      "id":  "f371fd76-aa07-440e-b612-7fbf4983d546",
+                      "name":  "Rerank Results",
+                      "credentials":  {
+                                          "httpHeaderAuth":  {
+                                                                 "id":  "gzpoAEqkCy5p3O8N",
+                                                                 "name":  "Voyage API"
+                                                             }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "method":  "POST",
+                                         "url":  "https://api.deepseek.com/v1/chat/completions",
+                                         "authentication":  "genericCredentialType",
+                                         "genericAuthType":  "httpHeaderAuth",
+                                         "sendBody":  true,
+                                         "specifyBody":  "json",
+                                         "jsonBody":  "={\n  \"model\": \"deepseek-chat\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are a precise document assistant. Answer ONLY using the provided context. If the answer is not in the context, say \u0027I don\u0027t have enough information to answer this.\u0027 Never make up information. Be concise and accurate.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": {{ JSON.stringify(\u0027Context: \u0027 + $(\u0027Vector Search\u0027).all().map(item =\u003e item.json.content).join(\u0027 | \u0027) + \u0027 Question: \u0027 + $(\u0027Webhook\u0027).item.json.body.query) }}\n    }\n  ]\n}",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.httpRequest",
+                      "typeVersion":  4.4,
+                      "position":  [
+                                       1312,
+                                       240
+                                   ],
+                      "id":  "835550f4-aed2-42a2-a74b-e5f8570a5e95",
+                      "name":  "DeepSeek Generate",
+                      "retryOnFail":  true,
+                      "credentials":  {
+                                          "httpHeaderAuth":  {
+                                                                 "id":  "LUwJyp28ZD7PAtVX",
+                                                                 "name":  "DeepSeek API"
+                                                             }
+                                      },
+                      "onError":  "continueErrorOutput"
+                  },
+                  {
+                      "parameters":  {
+                                         "method":  "POST",
+                                         "url":  "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent",
+                                         "authentication":  "genericCredentialType",
+                                         "genericAuthType":  "httpHeaderAuth",
+                                         "sendBody":  true,
+                                         "specifyBody":  "json",
+                                         "jsonBody":  "={\n  \"contents\": [\n    {\n      \"parts\": [\n        {\n          \"text\": {{ JSON.stringify(\u0027You are a fact-checker. Given this context and answer, reply with only PASS or FAIL. Context: \u0027 + $(\u0027Vector Search\u0027).all()[0].json.content + \u0027 Question: \u0027 + $(\u0027Webhook\u0027).item.json.body.query + \u0027 Answer: \u0027 + $(\u0027DeepSeek Generate\u0027).item.json.choices[0].message.content) }}\n        }\n      ]\n    }\n  ]\n}",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.httpRequest",
+                      "typeVersion":  4.4,
+                      "position":  [
+                                       1760,
+                                       -80
+                                   ],
+                      "id":  "8d61d4e3-cddd-419e-b0d8-1191f8092f79",
+                      "name":  "Gemini Self-Check",
+                      "retryOnFail":  true,
+                      "credentials":  {
+                                          "httpHeaderAuth":  {
+                                                                 "id":  "vGFeL8kHQs8F0oPV",
+                                                                 "name":  "Gemini API"
+                                                             }
+                                      },
+                      "onError":  "continueErrorOutput"
+                  },
+                  {
+                      "parameters":  {
+                                         "conditions":  {
+                                                            "options":  {
+                                                                            "caseSensitive":  true,
+                                                                            "leftValue":  "",
+                                                                            "typeValidation":  "strict",
+                                                                            "version":  3
+                                                                        },
+                                                            "conditions":  [
+                                                                               {
+                                                                                   "id":  "c1eddf19-2c3f-46cf-9a65-ea8c9fcc713c",
+                                                                                   "leftValue":  "=={{ $json.candidates[0].content.parts[0].text }}",
+                                                                                   "rightValue":  "PASS",
+                                                                                   "operator":  {
+                                                                                                    "type":  "string",
+                                                                                                    "operation":  "contains"
+                                                                                                }
+                                                                               }
+                                                                           ],
+                                                            "combinator":  "and"
+                                                        },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.if",
+                      "typeVersion":  2.3,
+                      "position":  [
+                                       1984,
+                                       -224
+                                   ],
+                      "id":  "fd765536-dccc-4976-9d62-5f07c78586e0",
+                      "name":  "Gemini Says PASS?"
+                  },
+                  {
+                      "parameters":  {
+                                         "assignments":  {
+                                                             "assignments":  [
+                                                                                 {
+                                                                                     "id":  "5f0a7b78-1946-4bf0-8a29-3ca7514f1474",
+                                                                                     "name":  "answer",
+                                                                                     "value":  "={{ $(\u0027DeepSeek Generate\u0027).item.json.choices[0].message.content }}",
+                                                                                     "type":  "string"
+                                                                                 },
+                                                                                 {
+                                                                                     "id":  "9c336788-905f-491f-b397-a3238d31ae4b",
+                                                                                     "name":  "model_used",
+                                                                                     "value":  "deepseek",
+                                                                                     "type":  "string"
+                                                                                 }
+                                                                             ]
+                                                         },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.set",
+                      "typeVersion":  3.4,
+                      "position":  [
+                                       2432,
+                                       -272
+                                   ],
+                      "id":  "d707c968-873e-4b0b-8e50-752235126bd3",
+                      "name":  "Return DeepSeek Answer"
+                  },
+                  {
+                      "parameters":  {
+                                         "method":  "POST",
+                                         "url":  "https://api.openai.com/v1/chat/completions",
+                                         "authentication":  "genericCredentialType",
+                                         "genericAuthType":  "httpHeaderAuth",
+                                         "sendBody":  true,
+                                         "specifyBody":  "json",
+                                         "jsonBody":  "={\n  \"model\": \"gpt-4o\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are a precise document assistant. Answer ONLY using the provided context. If the answer is not in the context, say \u0027I don\u0027t have enough information to answer this.\u0027 Never make up information. Be concise and accurate.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"={{ \u0027Context: \u0027 + $(\u0027Vector Search\u0027).all().map(item =\u003e item.json.content).join(\u0027 | \u0027) + \u0027 Question: \u0027 + $(\u0027Webhook\u0027).item.json.Query }}\"\n    }\n  ]\n}",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.httpRequest",
+                      "typeVersion":  4.4,
+                      "position":  [
+                                       2208,
+                                       16
+                                   ],
+                      "id":  "091c7e6d-47cb-4296-87a7-91f92437768d",
+                      "name":  "OpenAI Final Answer",
+                      "retryOnFail":  true,
+                      "credentials":  {
+                                          "httpHeaderAuth":  {
+                                                                 "id":  "gg8ZzCskKH0lJ2yG",
+                                                                 "name":  "OpenAI API"
+                                                             }
+                                      },
+                      "onError":  "continueErrorOutput"
+                  },
+                  {
+                      "parameters":  {
+                                         "assignments":  {
+                                                             "assignments":  [
+                                                                                 {
+                                                                                     "id":  "6e5ba77d-2109-4f00-97d4-44cb89735980",
+                                                                                     "name":  "answer",
+                                                                                     "value":  "={{ $(\u0027OpenAI Final Answer\u0027).item.json.choices[0].message.content }}",
+                                                                                     "type":  "string"
+                                                                                 },
+                                                                                 {
+                                                                                     "id":  "6e880f9b-b290-43b5-9b41-0ee3b1670a8e",
+                                                                                     "name":  "model_used",
+                                                                                     "value":  "openai",
+                                                                                     "type":  "string"
+                                                                                 }
+                                                                             ]
+                                                         },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.set",
+                      "typeVersion":  3.4,
+                      "position":  [
+                                       2432,
+                                       -80
+                                   ],
+                      "id":  "01ce7aa5-d854-4f2d-8c86-4c3f290650d0",
+                      "name":  "Return OpenAI Answer"
+                  },
+                  {
+                      "parameters":  {
+                                         "assignments":  {
+                                                             "assignments":  [
+                                                                                 {
+                                                                                     "id":  "369af02d-2863-497c-8f39-773af819c888",
+                                                                                     "name":  "answer",
+                                                                                     "value":  "All AI models are currently unavailable. Please try again later.",
+                                                                                     "type":  "string"
+                                                                                 },
+                                                                                 {
+                                                                                     "id":  "fecb1a0d-829b-47ba-a4cc-f7c13200d00b",
+                                                                                     "name":  "model_used",
+                                                                                     "value":  "none",
+                                                                                     "type":  "string"
+                                                                                 },
+                                                                                 {
+                                                                                     "id":  "e0d1b40b-8e0b-4842-b2cf-5049c83438ec",
+                                                                                     "name":  "error",
+                                                                                     "value":  "true",
+                                                                                     "type":  "string"
+                                                                                 }
+                                                                             ]
+                                                         },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.set",
+                      "typeVersion":  3.4,
+                      "position":  [
+                                       2432,
+                                       112
+                                   ],
+                      "id":  "56250a79-2eb0-4ccc-a4ec-2c8553c0e841",
+                      "name":  "All Models Failed"
+                  },
+                  {
+                      "parameters":  {
+                                         "method":  "POST",
+                                         "url":  "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent",
+                                         "authentication":  "genericCredentialType",
+                                         "genericAuthType":  "httpHeaderAuth",
+                                         "sendBody":  true,
+                                         "specifyBody":  "json",
+                                         "jsonBody":  "={\n  \"contents\": [\n    {\n      \"parts\": [\n        {\n          \"text\": \"={{ \u0027You are a precise document assistant. Answer ONLY using the provided context. If the answer is not in the context, say I do not have enough information to answer this. Context: \u0027 + $(\u0027Vector Search\u0027).all().map(item =\u003e item.json.content).join(\u0027 | \u0027) + \u0027 Question: \u0027 + $(\u0027Webhook\u0027).item.json.Query }}\"\n        }\n      ]\n    }\n  ]\n}",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.httpRequest",
+                      "typeVersion":  4.4,
+                      "position":  [
+                                       1536,
+                                       528
+                                   ],
+                      "id":  "cd624dba-323a-439f-9b3e-8623b089c907",
+                      "name":  "Gemini Fallback Answer",
+                      "retryOnFail":  true,
+                      "credentials":  {
+                                          "httpHeaderAuth":  {
+                                                                 "id":  "vGFeL8kHQs8F0oPV",
+                                                                 "name":  "Gemini API"
+                                                             }
+                                      },
+                      "onError":  "continueErrorOutput"
+                  },
+                  {
+                      "parameters":  {
+                                         "method":  "POST",
+                                         "url":  "https://api.openai.com/v1/chat/completions",
+                                         "authentication":  "genericCredentialType",
+                                         "genericAuthType":  "httpHeaderAuth",
+                                         "sendBody":  true,
+                                         "specifyBody":  "json",
+                                         "jsonBody":  "={\n  \"model\": \"gpt-4o\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are a fact-checker. Given this context and answer, reply with only PASS or FAIL.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"={{ \u0027Context: \u0027 + $(\u0027Vector Search\u0027).all()[0].json.content + \u0027 Question: \u0027 + $(\u0027Webhook\u0027).item.json.Query + \u0027 Answer: \u0027 + $(\u0027Gemini Fallback Answer\u0027).item.json.candidates[0].content.parts[0].text }}\"\n    }\n  ]\n}",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.httpRequest",
+                      "typeVersion":  4.4,
+                      "position":  [
+                                       1760,
+                                       592
+                                   ],
+                      "id":  "7fab1bbf-76db-4bc7-ab4c-1de07ca9778f",
+                      "name":  "OpenAI Validates Gemini",
+                      "credentials":  {
+                                          "httpHeaderAuth":  {
+                                                                 "id":  "gg8ZzCskKH0lJ2yG",
+                                                                 "name":  "OpenAI API"
+                                                             }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "conditions":  {
+                                                            "options":  {
+                                                                            "caseSensitive":  true,
+                                                                            "leftValue":  "",
+                                                                            "typeValidation":  "strict",
+                                                                            "version":  3
+                                                                        },
+                                                            "conditions":  [
+                                                                               {
+                                                                                   "id":  "975d6bcf-3e18-4b22-8c30-5a9d4fbd0f0d",
+                                                                                   "leftValue":  "=={{ $json.choices[0].message.content }}",
+                                                                                   "rightValue":  "PASS",
+                                                                                   "operator":  {
+                                                                                                    "type":  "string",
+                                                                                                    "operation":  "contains"
+                                                                                                }
+                                                                               }
+                                                                           ],
+                                                            "combinator":  "and"
+                                                        },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.if",
+                      "typeVersion":  2.3,
+                      "position":  [
+                                       1984,
+                                       592
+                                   ],
+                      "id":  "6185b2aa-1ab1-44be-b3ba-2ec69b445b0f",
+                      "name":  "OpenAI Says PASS?"
+                  },
+                  {
+                      "parameters":  {
+                                         "assignments":  {
+                                                             "assignments":  [
+                                                                                 {
+                                                                                     "id":  "51271ddd-5bbe-4212-9367-be113ff57f6a",
+                                                                                     "name":  "answer",
+                                                                                     "value":  "={{ $(\u0027Gemini Fallback Answer\u0027).item.json.candidates[0].content.parts[0].text }}",
+                                                                                     "type":  "string"
+                                                                                 },
+                                                                                 {
+                                                                                     "id":  "b63f3f00-8f9e-45e3-8719-27538abf41eb",
+                                                                                     "name":  "model_used",
+                                                                                     "value":  "gemini",
+                                                                                     "type":  "string"
+                                                                                 }
+                                                                             ]
+                                                         },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.set",
+                      "typeVersion":  3.4,
+                      "position":  [
+                                       2432,
+                                       736
+                                   ],
+                      "id":  "e8f7ac66-53e3-4b0c-bc70-8a838931d0be",
+                      "name":  "Return Gemini Answer"
+                  },
+                  {
+                      "parameters":  {
+                                         "method":  "POST",
+                                         "url":  "https://api.openai.com/v1/chat/completions",
+                                         "authentication":  "genericCredentialType",
+                                         "genericAuthType":  "httpHeaderAuth",
+                                         "sendBody":  true,
+                                         "specifyBody":  "json",
+                                         "jsonBody":  "={\n  \"model\": \"gpt-4o\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are a precise document assistant. Answer ONLY using the provided context. If the answer is not in the context, say \u0027I don\u0027t have enough information to answer this.\u0027 Never make up information. Be concise and accurate.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"={{ \u0027Context: \u0027 + $(\u0027Vector Search\u0027).all().map(item =\u003e item.json.content).join(\u0027 | \u0027) + \u0027 Question: \u0027 + $(\u0027Webhook\u0027).item.json.Query }}\"\n    }\n  ]\n}",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.httpRequest",
+                      "typeVersion":  4.4,
+                      "position":  [
+                                       2208,
+                                       496
+                                   ],
+                      "id":  "a7d38838-00a2-4f8c-98c2-90bb3503da70",
+                      "name":  "OpenAI Direct Answer",
+                      "retryOnFail":  true,
+                      "credentials":  {
+                                          "httpHeaderAuth":  {
+                                                                 "id":  "gg8ZzCskKH0lJ2yG",
+                                                                 "name":  "OpenAI API"
+                                                             }
+                                      },
+                      "onError":  "continueErrorOutput"
+                  },
+                  {
+                      "parameters":  {
+                                         "assignments":  {
+                                                             "assignments":  [
+                                                                                 {
+                                                                                     "id":  "b51ebe94-c017-4b07-b9c5-ba6fcb611c72",
+                                                                                     "name":  "answer",
+                                                                                     "value":  "={{ $(\u0027OpenAI Direct Answer\u0027).item.json.choices[0].message.content }}",
+                                                                                     "type":  "string"
+                                                                                 },
+                                                                                 {
+                                                                                     "id":  "41fc63e1-e024-4a36-a3c1-a0a1bd9dfdf1",
+                                                                                     "name":  "model_used",
+                                                                                     "value":  "openai-direct",
+                                                                                     "type":  "string"
+                                                                                 }
+                                                                             ]
+                                                         },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.set",
+                      "typeVersion":  3.4,
+                      "position":  [
+                                       2432,
+                                       544
+                                   ],
+                      "id":  "fba1b210-db11-442e-8c97-06a66fa9807f",
+                      "name":  "Return OpenAI Direct Answer"
+                  },
+                  {
+                      "parameters":  {
+                                         "assignments":  {
+                                                             "assignments":  [
+                                                                                 {
+                                                                                     "id":  "2efb94a4-879e-45a3-aae9-a7c6b04897ab",
+                                                                                     "name":  "answer",
+                                                                                     "value":  "All AI models are currently unavailable. Please try again later.",
+                                                                                     "type":  "string"
+                                                                                 },
+                                                                                 {
+                                                                                     "id":  "413fb5bd-504e-4a06-bcc2-94da55de7c4b",
+                                                                                     "name":  "model_used",
+                                                                                     "value":  "none",
+                                                                                     "type":  "string"
+                                                                                 },
+                                                                                 {
+                                                                                     "id":  "2c1685b6-5084-46c7-afba-1747262894d0",
+                                                                                     "name":  "error",
+                                                                                     "value":  "true",
+                                                                                     "type":  "string"
+                                                                                 }
+                                                                             ]
+                                                         },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.set",
+                      "typeVersion":  3.4,
+                      "position":  [
+                                       2432,
+                                       336
+                                   ],
+                      "id":  "04489699-bca8-49fe-b239-bdcd3c511fae",
+                      "name":  "All Models Failed 2"
+                  },
+                  {
+                      "parameters":  {
+                                         "respondWith":  "json",
+                                         "responseBody":  "={{ { answer: $json.answer, model_used: $json.model_used, sources: $(\u0027Vector Search\u0027).all().slice(0, Number($(\u0027Webhook\u0027).item.json.body.max_chunks || 5)).map((item, index) =\u003e ({ document_id: item.json.id, title: item.json.metadata?.source || item.json.metadata?.document || item.json.metadata?.title || (\u0027source-\u0027 + (index + 1)), chunk_text: item.json.content, score: item.json.score, metadata: item.json.metadata || {} })), metadata: { chunks_retrieved: $(\u0027Vector Search\u0027).all().length, evaluation_target: \u0027direct_n8n\u0027, tenant_id: $(\u0027Webhook\u0027).item.json.body.tenant_id || \u002711111111-1111-1111-1111-111111111111\u0027 } } }}",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.respondToWebhook",
+                      "typeVersion":  1.5,
+                      "position":  [
+                                       2656,
+                                       240
+                                   ],
+                      "id":  "d9537130-6417-4e00-b40e-30695a784d55",
+                      "name":  "Respond to Webhook"
+                  },
+                  {
+                      "parameters":  {
+                                         "httpMethod":  "POST",
+                                         "path":  "retrieve-eval",
+                                         "responseMode":  "responseNode",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.webhook",
+                      "typeVersion":  2.1,
+                      "position":  [
+                                       208,
+                                       240
+                                   ],
+                      "id":  "95c95076-f277-4ffc-aca8-81228143fe8f",
+                      "name":  "Webhook",
+                      "webhookId":  "retrieve-eval-sources-check"
+                  },
+                  {
+                      "parameters":  {
+                                         "aggregate":  "aggregateAllItemData",
+                                         "destinationFieldName":  "content",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.aggregate",
+                      "typeVersion":  1,
+                      "position":  [
+                                       864,
+                                       240
+                                   ],
+                      "id":  "a57196bd-fd12-4afc-910f-5fdbb138c814",
+                      "name":  "Aggregate"
+                  }
+              ],
+    "pinData":  {
+
+                },
+    "connections":  {
+                        "Embed Query":  {
+                                            "main":  [
+                                                         [
+                                                             {
+                                                                 "node":  "Vector Search",
+                                                                 "type":  "main",
+                                                                 "index":  0
+                                                             }
+                                                         ]
+                                                     ]
+                                        },
+                        "Vector Search":  {
+                                              "main":  [
+                                                           [
+                                                               {
+                                                                   "node":  "Aggregate",
+                                                                   "type":  "main",
+                                                                   "index":  0
+                                                               }
+                                                           ]
+                                                       ]
+                                          },
+                        "Rerank Results":  {
+                                               "main":  [
+                                                            [
+                                                                {
+                                                                    "node":  "DeepSeek Generate",
+                                                                    "type":  "main",
+                                                                    "index":  0
+                                                                }
+                                                            ]
+                                                        ]
+                                           },
+                        "DeepSeek Generate":  {
+                                                  "main":  [
+                                                               [
+                                                                   {
+                                                                       "node":  "Gemini Self-Check",
+                                                                       "type":  "main",
+                                                                       "index":  0
+                                                                   }
+                                                               ],
+                                                               [
+                                                                   {
+                                                                       "node":  "Gemini Fallback Answer",
+                                                                       "type":  "main",
+                                                                       "index":  0
+                                                                   }
+                                                               ]
+                                                           ]
+                                              },
+                        "Gemini Self-Check":  {
+                                                  "main":  [
+                                                               [
+                                                                   {
+                                                                       "node":  "Gemini Says PASS?",
+                                                                       "type":  "main",
+                                                                       "index":  0
+                                                                   }
+                                                               ],
+                                                               [
+                                                                   {
+                                                                       "node":  "OpenAI Final Answer",
+                                                                       "type":  "main",
+                                                                       "index":  0
+                                                                   }
+                                                               ]
+                                                           ]
+                                              },
+                        "Gemini Says PASS?":  {
+                                                  "main":  [
+                                                               [
+                                                                   {
+                                                                       "node":  "Return DeepSeek Answer",
+                                                                       "type":  "main",
+                                                                       "index":  0
+                                                                   }
+                                                               ],
+                                                               [
+                                                                   {
+                                                                       "node":  "OpenAI Final Answer",
+                                                                       "type":  "main",
+                                                                       "index":  0
+                                                                   }
+                                                               ]
+                                                           ]
+                                              },
+                        "OpenAI Final Answer":  {
+                                                    "main":  [
+                                                                 [
+                                                                     {
+                                                                         "node":  "Return OpenAI Answer",
+                                                                         "type":  "main",
+                                                                         "index":  0
+                                                                     }
+                                                                 ],
+                                                                 [
+                                                                     {
+                                                                         "node":  "All Models Failed",
+                                                                         "type":  "main",
+                                                                         "index":  0
+                                                                     }
+                                                                 ]
+                                                             ]
+                                                },
+                        "Gemini Fallback Answer":  {
+                                                       "main":  [
+                                                                    [
+                                                                        {
+                                                                            "node":  "OpenAI Validates Gemini",
+                                                                            "type":  "main",
+                                                                            "index":  0
+                                                                        }
+                                                                    ],
+                                                                    [
+                                                                        {
+                                                                            "node":  "All Models Failed 2",
+                                                                            "type":  "main",
+                                                                            "index":  0
+                                                                        }
+                                                                    ]
+                                                                ]
+                                                   },
+                        "OpenAI Validates Gemini":  {
+                                                        "main":  [
+                                                                     [
+                                                                         {
+                                                                             "node":  "OpenAI Says PASS?",
+                                                                             "type":  "main",
+                                                                             "index":  0
+                                                                         }
+                                                                     ]
+                                                                 ]
+                                                    },
+                        "OpenAI Says PASS?":  {
+                                                  "main":  [
+                                                               [
+                                                                   {
+                                                                       "node":  "Return Gemini Answer",
+                                                                       "type":  "main",
+                                                                       "index":  0
+                                                                   }
+                                                               ],
+                                                               [
+                                                                   {
+                                                                       "node":  "OpenAI Direct Answer",
+                                                                       "type":  "main",
+                                                                       "index":  0
+                                                                   }
+                                                               ]
+                                                           ]
+                                              },
+                        "OpenAI Direct Answer":  {
+                                                     "main":  [
+                                                                  [
+                                                                      {
+                                                                          "node":  "Return OpenAI Direct Answer",
+                                                                          "type":  "main",
+                                                                          "index":  0
+                                                                      }
+                                                                  ],
+                                                                  [
+                                                                      {
+                                                                          "node":  "All Models Failed 2",
+                                                                          "type":  "main",
+                                                                          "index":  0
+                                                                      }
+                                                                  ]
+                                                              ]
+                                                 },
+                        "Return OpenAI Answer":  {
+                                                     "main":  [
+                                                                  [
+                                                                      {
+                                                                          "node":  "Respond to Webhook",
+                                                                          "type":  "main",
+                                                                          "index":  0
+                                                                      }
+                                                                  ]
+                                                              ]
+                                                 },
+                        "Return DeepSeek Answer":  {
+                                                       "main":  [
+                                                                    [
+                                                                        {
+                                                                            "node":  "Respond to Webhook",
+                                                                            "type":  "main",
+                                                                            "index":  0
+                                                                        }
+                                                                    ]
+                                                                ]
+                                                   },
+                        "All Models Failed":  {
+                                                  "main":  [
+                                                               [
+                                                                   {
+                                                                       "node":  "Respond to Webhook",
+                                                                       "type":  "main",
+                                                                       "index":  0
+                                                                   }
+                                                               ]
+                                                           ]
+                                              },
+                        "All Models Failed 2":  {
+                                                    "main":  [
+                                                                 [
+                                                                     {
+                                                                         "node":  "Respond to Webhook",
+                                                                         "type":  "main",
+                                                                         "index":  0
+                                                                     }
+                                                                 ]
+                                                             ]
+                                                },
+                        "Return OpenAI Direct Answer":  {
+                                                            "main":  [
+                                                                         [
+                                                                             {
+                                                                                 "node":  "Respond to Webhook",
+                                                                                 "type":  "main",
+                                                                                 "index":  0
+                                                                             }
+                                                                         ]
+                                                                     ]
+                                                        },
+                        "Return Gemini Answer":  {
+                                                     "main":  [
+                                                                  [
+                                                                      {
+                                                                          "node":  "Respond to Webhook",
+                                                                          "type":  "main",
+                                                                          "index":  0
+                                                                      }
+                                                                  ]
+                                                              ]
+                                                 },
+                        "Webhook":  {
+                                        "main":  [
+                                                     [
+                                                         {
+                                                             "node":  "Embed Query",
+                                                             "type":  "main",
+                                                             "index":  0
+                                                         }
+                                                     ]
+                                                 ]
+                                    },
+                        "Aggregate":  {
+                                          "main":  [
+                                                       [
+                                                           {
+                                                               "node":  "Rerank Results",
+                                                               "type":  "main",
+                                                               "index":  0
+                                                           }
+                                                       ]
+                                                   ]
+                                      }
+                    },
+    "active":  true,
+    "settings":  {
+                     "executionOrder":  "v1",
+                     "binaryMode":  "separate",
+                     "availableInMCP":  false
+                 },
+    "versionId":  "1d4e8939-3323-4927-b242-dc1d19007e56",
+    "meta":  {
+                 "templateCredsSetupCompleted":  true,
+                 "instanceId":  "feef0b6ee87dcd39ec5fcc0e79b366a9f7ff3edd17efc049d248155895cb4e3f"
+             },
+    "nodeGroups":  [
+
+                   ],
+    "id":  "retrieval-eval-sources-check",
+    "tags":  [
+
+             ]
+}

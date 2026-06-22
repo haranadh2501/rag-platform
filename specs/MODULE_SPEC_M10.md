@@ -46,6 +46,102 @@ from ragas.metrics import faithfulness, answer_relevancy, context_precision, con
 # 5. Generate report as evaluation_results/report_{date}.json
 ```
 
+## Current Evaluation Suite
+
+The implemented suite now lives in `evaluation/application_suite.jsonl` and
+contains 148 cases across 13 applications. The Kubernetes troubleshooting suite
+is generated first so small smoke runs exercise the priority domain before the
+other applications.
+
+Quick preflight:
+
+```powershell
+python -m evaluation.run_test_suite
+```
+
+This regenerates deterministic synthetic data, validates reference contexts,
+runs `tests/test_evaluation_dataset.py`, and writes readiness reports under
+`artifacts/evaluation_results/`.
+
+Live smoke test:
+
+```powershell
+python -m evaluation.run_eval --suite-dataset --skip-ragas --max-cases 3
+```
+
+Full scored evaluation:
+
+```powershell
+python -m evaluation.run_eval --suite-dataset --enforce-thresholds
+```
+
+Use the smoke test before the full scored run. If the smoke test cannot reach
+the backend or receives a mock response, do not treat the result as evaluation
+evidence.
+
+Direct Railway n8n smoke test:
+
+```powershell
+$env:EVAL_N8N_URL = "https://<n8n-service>/webhook/<retrieval-path>"
+$env:EVAL_TENANT_ID = "<tenant-id-visible-to-ingested-docs>"
+
+python -m evaluation.run_eval --suite-dataset --n8n-url $env:EVAL_N8N_URL --skip-ragas --max-cases 3
+```
+
+Use direct n8n mode only when the retrieval workflow is deployed in Railway n8n
+but the FastAPI backend is not wired to that workflow yet. It validates retrieval
+and answer generation, but it does not validate backend auth, conversation
+history, tenant guards, or API response contracts.
+
+## Live Evaluation Prerequisites
+
+Full evaluation must run against the real n8n-backed pipeline, not mock mode.
+
+- `MOCK_N8N=false` in the backend environment.
+- Backend reachable at `EVAL_BASE_URL` and returning `mock_n8n: false` from
+  `/health`.
+- n8n workflows imported, credentialed, active, and reachable by the backend.
+- For direct n8n mode, a public retrieval webhook URL is available through
+  `EVAL_N8N_URL`.
+- Evaluation tenant has all `.txt` files under `evaluation/sample-data/`
+  ingested and completed.
+- Evaluator auth is configured with either `EVAL_BEARER_TOKEN` or both
+  `EVAL_EMAIL` and `EVAL_PASSWORD`.
+- `OPENAI_API_KEY` is set for independent RAGAS scoring.
+- Do not pass `--allow-mock` for quality evidence; it is only for plumbing
+  checks.
+
+Expected local setup:
+
+```powershell
+$env:EVAL_BASE_URL = "http://localhost:8000"
+$env:EVAL_EMAIL = "admin@iisc-demo.com"
+$env:EVAL_PASSWORD = "<password>"
+$env:OPENAI_API_KEY = "<independent-evaluator-key>"
+```
+
+## n8n Setup References
+
+n8n setup is documented elsewhere in the repo. M10 depends on these steps being
+complete before running live evaluation:
+
+- `docs/LOCAL_SETUP.md` - local Docker setup, `.env`, service URLs, and
+  troubleshooting.
+- `docs/DEPLOYMENT.md` - Railway backend+n8n deployment and workflow import.
+- `docs/CREDENTIALS_README.md` - n8n service variables, credentials, workflow
+  credential assignment, activation, and webhook test.
+- `specs/MODULE_SPEC_M5.md` - ingestion workflow ownership and setup notes.
+- `specs/MODULE_SPEC_M6.md` - retrieval/generation workflow ownership and setup
+  notes.
+- `specs/MODULE_SPEC_M11.md` - short n8n setup guide template for importing and
+  activating workflows.
+
+Workflow files are committed under `n8n-workflows/`:
+
+- `ingestion-pipeline.json`
+- `retrieval-pipeline.json`
+- `ingest-ephemeral.json`
+
 ## Multi-Tenant Isolation Test
 ```python
 # tests/test_isolation.py

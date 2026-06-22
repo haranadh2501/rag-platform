@@ -40,6 +40,11 @@ services:
       N8N_BASIC_AUTH_USER: admin
       N8N_BASIC_AUTH_PASSWORD: ${N8N_BASIC_AUTH_PASSWORD:-n8nadmin}
       WEBHOOK_URL: ${N8N_WEBHOOK_URL:-http://localhost:5678}
+      BACKEND_BASE_URL: http://backend:8000
+      N8N_CALLBACK_TOKEN: ${N8N_CALLBACK_TOKEN:-change-me-shared-secret-with-n8n}
+      VOYAGE_API_KEY: ${VOYAGE_API_KEY}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
     volumes:
       - n8n_data:/home/node/.n8n
@@ -62,6 +67,7 @@ services:
       N8N_INGEST_WEBHOOK_URL: http://n8n:5678/webhook/ingest
       N8N_RETRIEVE_WEBHOOK_URL: http://n8n:5678/webhook/retrieve
       N8N_EPHEMERAL_INGEST_WEBHOOK_URL: http://n8n:5678/webhook/ingest-ephemeral
+      PIPELINE_URL: http://n8n:5678/webhook/retrieve
     volumes:
       - uploads:/uploads
       - ./backend:/app   # hot reload in dev

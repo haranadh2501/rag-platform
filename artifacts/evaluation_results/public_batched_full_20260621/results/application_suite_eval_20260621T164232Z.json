@@ -1,0 +1,337 @@
+{
+  "generated_at": "2026-06-21T16:42:32.549731+00:00",
+  "summary": {
+    "case_count": 5,
+    "answerable_case_count": 5,
+    "unanswerable_case_count": 0,
+    "citation_coverage": 1.0,
+    "negative_abstention_rate": 0.0,
+    "latency_ms": {
+      "mean": 17877.818,
+      "p95": 18886.13,
+      "max": 18886.13
+    },
+    "observability": {
+      "source_return_rate": 1.0,
+      "average_sources_per_case": 3.0,
+      "metadata_coverage": 1.0,
+      "total_retry_count": 0,
+      "max_attempts": 1
+    },
+    "ragas": null,
+    "batch": {
+      "batch_index": 7,
+      "batch_size": 5,
+      "total_batches": 30,
+      "total_cases_before_batching": 148,
+      "start_position": 31,
+      "end_position": 35
+    },
+    "quality_gate": {
+      "passed": null,
+      "reason": "RAGAS scoring was skipped",
+      "checks": {}
+    },
+    "applications": {
+      "bug_reporting": {
+        "case_count": 5,
+        "answerable_case_count": 5,
+        "unanswerable_case_count": 0,
+        "citation_coverage": 1.0,
+        "negative_abstention_rate": 0.0,
+        "latency_ms": {
+          "mean": 17877.818,
+          "p95": 18886.13,
+          "max": 18886.13
+        },
+        "observability": {
+          "source_return_rate": 1.0,
+          "average_sources_per_case": 3.0,
+          "metadata_coverage": 1.0,
+          "total_retry_count": 0,
+          "max_attempts": 1
+        },
+        "ragas": null
+      }
+    }
+  },
+  "cases": [
+    {
+      "id": "BUG-EVAL-001",
+      "application": "bug_reporting",
+      "question": "What information is mandatory in a new bug report?",
+      "ground_truth": "Every bug report must include a concise title, affected product and version, environment, reproduction steps, expected behavior, actual behavior, frequency, business impact, and relevant logs or screenshots. Reports containing customer data must be redacted before submission.",
+      "reference_contexts": [
+        "Every bug report must include a concise title, affected product and version, environment, reproduction steps, expected behavior, actual behavior, frequency, business impact, and relevant logs or screenshots. Reports containing customer data must be redacted before submission."
+      ],
+      "expected_sources": [
+        {
+          "document": "bug-reporting/bug_triage_playbook.txt",
+          "section": "Required report fields"
+        }
+      ],
+      "category": "factoid",
+      "answerable": true,
+      "tags": [
+        "triage"
+      ],
+      "answer": "A new bug report must include a concise title, affected product and version, environment, reproduction steps, expected behavior, actual behavior, frequency, business impact, and relevant logs or screenshots. Any customer data in the report must be redacted before submission.",
+      "contexts": [
+        "Bug Triage Playbook\n\nSection: Required report fields\nEvery bug report must include a concise title, affected product and version, environment, reproduction steps, expected behavior, actual behavior, frequency, business impact, and relevant logs or screenshots. Reports containing customer data must be redacted before submission.\n\nSection: Severity S1\nSeverity S1 is reserved for a production outage, active security compromise, irreversible data loss, or a complete blocker affecting most customers with no workaround. The on-call engineer must acknowledge an S1 report within 15 minutes and open an incident channel immediately.\n\nSection: Severity S2\nSeverity S2 covers major functionality that is unavailable for multiple customers, severe performance degradation, or a high-impact defect with only a difficult workaround. The owning team must acknowledge an S2 report within 2 business hours.\n\nSection: Severity S3 and S4\nSeverity S3 covers limited-impact defects with a practical workaround and should be acknowledged within 1 business day. Severity S4 covers cosmetic problems, documentation mistakes, and low-impact enhancement requests and should be acknowledged within 3 business days.\n\nSection: Duplicate handling\nWhen a new report matches an existing issue, mark it as a duplicate, link the canonical issue, copy any new evidence to the canonical issue, and notify the reporter. Do not close the canonical issue merely because a duplicate was filed.\n\nSection: Security and privacy\nSuspected vulnerabilities must be tagged security-sensitive and moved to the restricted security queue. Secrets, access tokens, personal data, and customer payloads must never be pasted into a public issue. Replace them with redacted samples.\n\nSection: Escalation\nEscalate to the incident process when an issue meets S1 criteria, when an S2 issue affects more than 25 percent of active tenants, or when support receives five or more matching reports within 30 minutes.\n",
+        "Kubernetes Cluster Debugging Runbook\n\nSection: Knowledge base source strategy\nThe Kubernetes troubleshooting knowledge base should prioritize the official Kubernetes debugging tasks, API reference, and kubectl command reference before community blogs, practical problem repositories, Kubernetes failure stories, and post-mortems. Managed service notes for EKS, GKE, and AKS should be layered after the core Kubernetes material.\n\nSection: Initial triage packet\nEvery Kubernetes incident ticket should include the namespace, workload name and kind, affected node, image tag, recent deployment time, exact user-visible symptom, kubectl get output, kubectl describe output, relevant events, pod logs, and any recent configuration or secret changes. Secrets, tokens, and customer payloads must be redacted.\n\nSection: Pending pods\nWhen a pod remains Pending, inspect kubectl describe pod events first. Common causes are insufficient CPU or memory, unsatisfied node selectors or affinity, taints without tolerations, missing persistent volumes, and image pull secrets that are referenced but not present.\n\nSection: CrashLoopBackOff\nFor CrashLoopBackOff, compare the current container logs with kubectl logs --previous. Check the exit code, command arguments, environment variables, mounted configuration, liveness probe behavior, and whether the process exits before the readiness gate can succeed.\n\nSection: ImagePullBackOff\nImagePullBackOff usually means the kubelet cannot fetch the image. Validate the image name and tag, registry reachability, imagePullSecrets, service account permissions, and whether the registry is throttling or returning authentication failures.\n\nSection: CreateContainerConfigError\nCreateContainerConfigError commonly indicates that the pod spec references a missing ConfigMap, missing Secret, invalid key, or malformed environment variable source. Describe the pod and compare referenced names and keys with the objects in the same namespace.\n\nSection: Node pressure and evictions\nNode pressure evictions are driven by kubelet thresholds for memory, disk, PID, or ephemeral storage pressure. Inspect node conditions, eviction events, container ephemeral-storage usage, log growth, and whether requests and limits reflect actual workload behavior.\n\nSection: Control plane health\nControl-plane troubleshooting starts with kube-apiserver reachability, etcd health, scheduler and controller-manager status, certificate validity, and admission webhook latency. Avoid restarting multiple control-plane components at once unless an approved recovery runbook requires it.\n",
+        "Mobile Application Known Issues\n\nSection: BUG-MOB-101 Android login loop\nBUG-MOB-101 affects Android 14 devices running mobile app versions 5.4.0 through 5.4.2. After successful authentication, the app may return to the login screen when battery optimization is enabled. The temporary workaround is to disable battery optimization for the app and sign in again. The permanent fix is included in version 5.4.3.\n\nSection: BUG-MOB-102 Attachment crash\nBUG-MOB-102 affects Android and iOS app version 5.5.0. Adding a video attachment larger than 50 MB to a bug report can close the app before the draft is saved. Users should compress the video below 50 MB or upload it through the web portal. A fix is planned for version 5.5.1.\n\nSection: BUG-MOB-103 Missing iOS notifications\nBUG-MOB-103 affects iOS 17 users on app version 5.3.1 when notification permission was denied during first launch and enabled later from system settings. Reinstalling the app refreshes the notification token. The issue is fixed in version 5.3.2.\n\nSection: Mobile evidence collection\nFor mobile crashes, collect the app version, operating system version, device model, timestamp with timezone, reproduction steps, and the diagnostic bundle from Settings > Help > Export diagnostics. Screen recordings are useful but must not display passwords, tokens, or personal customer data.\n"
+      ],
+      "retrieved_documents": [
+        "source-1",
+        "source-2",
+        "source-3"
+      ],
+      "expected_documents": [
+        "bug-reporting/bug_triage_playbook.txt"
+      ],
+      "system_faithfulness": null,
+      "requires_clarification": false,
+      "latency_ms": 18593.7,
+      "source_count": 3,
+      "observability": {
+        "source_count": 3,
+        "has_sources": true,
+        "metadata_key_count": 3,
+        "metadata_keys": [
+          "evaluation_target",
+          "n8n_attempts",
+          "n8n_retry_count"
+        ],
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      },
+      "response_metadata": {
+        "evaluation_target": "direct_n8n",
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      }
+    },
+    {
+      "id": "BUG-EVAL-002",
+      "application": "bug_reporting",
+      "question": "Which situations qualify as severity S1?",
+      "ground_truth": "Severity S1 is reserved for a production outage, active security compromise, irreversible data loss, or a complete blocker affecting most customers with no workaround. The on-call engineer must acknowledge an S1 report within 15 minutes and open an incident channel immediately.",
+      "reference_contexts": [
+        "Severity S1 is reserved for a production outage, active security compromise, irreversible data loss, or a complete blocker affecting most customers with no workaround. The on-call engineer must acknowledge an S1 report within 15 minutes and open an incident channel immediately."
+      ],
+      "expected_sources": [
+        {
+          "document": "bug-reporting/bug_triage_playbook.txt",
+          "section": "Severity S1"
+        }
+      ],
+      "category": "factoid",
+      "answerable": true,
+      "tags": [
+        "severity"
+      ],
+      "answer": "Severity S1 is reserved for situations involving a production outage, an active security compromise, irreversible data loss, or a complete blocker affecting most customers with no workaround.",
+      "contexts": [
+        "Bug Triage Playbook\n\nSection: Required report fields\nEvery bug report must include a concise title, affected product and version, environment, reproduction steps, expected behavior, actual behavior, frequency, business impact, and relevant logs or screenshots. Reports containing customer data must be redacted before submission.\n\nSection: Severity S1\nSeverity S1 is reserved for a production outage, active security compromise, irreversible data loss, or a complete blocker affecting most customers with no workaround. The on-call engineer must acknowledge an S1 report within 15 minutes and open an incident channel immediately.\n\nSection: Severity S2\nSeverity S2 covers major functionality that is unavailable for multiple customers, severe performance degradation, or a high-impact defect with only a difficult workaround. The owning team must acknowledge an S2 report within 2 business hours.\n\nSection: Severity S3 and S4\nSeverity S3 covers limited-impact defects with a practical workaround and should be acknowledged within 1 business day. Severity S4 covers cosmetic problems, documentation mistakes, and low-impact enhancement requests and should be acknowledged within 3 business days.\n\nSection: Duplicate handling\nWhen a new report matches an existing issue, mark it as a duplicate, link the canonical issue, copy any new evidence to the canonical issue, and notify the reporter. Do not close the canonical issue merely because a duplicate was filed.\n\nSection: Security and privacy\nSuspected vulnerabilities must be tagged security-sensitive and moved to the restricted security queue. Secrets, access tokens, personal data, and customer payloads must never be pasted into a public issue. Replace them with redacted samples.\n\nSection: Escalation\nEscalate to the incident process when an issue meets S1 criteria, when an S2 issue affects more than 25 percent of active tenants, or when support receives five or more matching reports within 30 minutes.\n",
+        "Incident Response Runbook\n\nSection: Declaration\nDeclare an incident when customer impact is ongoing, security is suspected, or recovery needs coordination across two or more teams. The incident commander owns decisions and timeline updates.\n\nSection: First fifteen minutes\nWithin 15 minutes, create the incident channel, assign commander and scribe, record impact, freeze risky deployments, and publish an initial internal update.\n\nSection: Customer updates\nFor severity SEV-1, publish customer updates every 30 minutes. For SEV-2, update every 60 minutes while impact continues.\n",
+        "Recovery and Review\n\nSection: Rollback\nPrefer rollback when a recent deployment correlates with impact and rollback is tested. Record the deployment identifier and validation checks before execution.\n\nSection: Evidence preservation\nPreserve logs, traces, alerts, command history, and configuration snapshots. Do not edit original evidence; store analysis in a separate document.\n\nSection: Post-incident review\nA review is due within five business days for SEV-1 and SEV-2 incidents. It must include contributing factors, timeline, corrective actions, owners, and due dates.\n"
+      ],
+      "retrieved_documents": [
+        "source-1",
+        "source-2",
+        "source-3"
+      ],
+      "expected_documents": [
+        "bug-reporting/bug_triage_playbook.txt"
+      ],
+      "system_faithfulness": null,
+      "requires_clarification": false,
+      "latency_ms": 17965.9,
+      "source_count": 3,
+      "observability": {
+        "source_count": 3,
+        "has_sources": true,
+        "metadata_key_count": 3,
+        "metadata_keys": [
+          "evaluation_target",
+          "n8n_attempts",
+          "n8n_retry_count"
+        ],
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      },
+      "response_metadata": {
+        "evaluation_target": "direct_n8n",
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      }
+    },
+    {
+      "id": "BUG-EVAL-003",
+      "application": "bug_reporting",
+      "question": "How quickly must an S1 issue be acknowledged, and what else must happen?",
+      "ground_truth": "An S1 issue must be acknowledged within 15 minutes and an incident channel must be opened immediately.",
+      "reference_contexts": [
+        "Severity S1 is reserved for a production outage, active security compromise, irreversible data loss, or a complete blocker affecting most customers with no workaround. The on-call engineer must acknowledge an S1 report within 15 minutes and open an incident channel immediately."
+      ],
+      "expected_sources": [
+        {
+          "document": "bug-reporting/bug_triage_playbook.txt",
+          "section": "Severity S1"
+        }
+      ],
+      "category": "factoid",
+      "answerable": true,
+      "tags": [
+        "severity",
+        "sla"
+      ],
+      "answer": "An S1 issue must be acknowledged by the on-call engineer within 15 minutes, and an incident channel must be opened immediately.",
+      "contexts": [
+        "Bug Triage Playbook\n\nSection: Required report fields\nEvery bug report must include a concise title, affected product and version, environment, reproduction steps, expected behavior, actual behavior, frequency, business impact, and relevant logs or screenshots. Reports containing customer data must be redacted before submission.\n\nSection: Severity S1\nSeverity S1 is reserved for a production outage, active security compromise, irreversible data loss, or a complete blocker affecting most customers with no workaround. The on-call engineer must acknowledge an S1 report within 15 minutes and open an incident channel immediately.\n\nSection: Severity S2\nSeverity S2 covers major functionality that is unavailable for multiple customers, severe performance degradation, or a high-impact defect with only a difficult workaround. The owning team must acknowledge an S2 report within 2 business hours.\n\nSection: Severity S3 and S4\nSeverity S3 covers limited-impact defects with a practical workaround and should be acknowledged within 1 business day. Severity S4 covers cosmetic problems, documentation mistakes, and low-impact enhancement requests and should be acknowledged within 3 business days.\n\nSection: Duplicate handling\nWhen a new report matches an existing issue, mark it as a duplicate, link the canonical issue, copy any new evidence to the canonical issue, and notify the reporter. Do not close the canonical issue merely because a duplicate was filed.\n\nSection: Security and privacy\nSuspected vulnerabilities must be tagged security-sensitive and moved to the restricted security queue. Secrets, access tokens, personal data, and customer payloads must never be pasted into a public issue. Replace them with redacted samples.\n\nSection: Escalation\nEscalate to the incident process when an issue meets S1 criteria, when an S2 issue affects more than 25 percent of active tenants, or when support receives five or more matching reports within 30 minutes.\n",
+        "Incident Response Runbook\n\nSection: Declaration\nDeclare an incident when customer impact is ongoing, security is suspected, or recovery needs coordination across two or more teams. The incident commander owns decisions and timeline updates.\n\nSection: First fifteen minutes\nWithin 15 minutes, create the incident channel, assign commander and scribe, record impact, freeze risky deployments, and publish an initial internal update.\n\nSection: Customer updates\nFor severity SEV-1, publish customer updates every 30 minutes. For SEV-2, update every 60 minutes while impact continues.\n",
+        "Recovery and Review\n\nSection: Rollback\nPrefer rollback when a recent deployment correlates with impact and rollback is tested. Record the deployment identifier and validation checks before execution.\n\nSection: Evidence preservation\nPreserve logs, traces, alerts, command history, and configuration snapshots. Do not edit original evidence; store analysis in a separate document.\n\nSection: Post-incident review\nA review is due within five business days for SEV-1 and SEV-2 incidents. It must include contributing factors, timeline, corrective actions, owners, and due dates.\n"
+      ],
+      "retrieved_documents": [
+        "source-1",
+        "source-2",
+        "source-3"
+      ],
+      "expected_documents": [
+        "bug-reporting/bug_triage_playbook.txt"
+      ],
+      "system_faithfulness": null,
+      "requires_clarification": false,
+      "latency_ms": 18886.13,
+      "source_count": 3,
+      "observability": {
+        "source_count": 3,
+        "has_sources": true,
+        "metadata_key_count": 3,
+        "metadata_keys": [
+          "evaluation_target",
+          "n8n_attempts",
+          "n8n_retry_count"
+        ],
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      },
+      "response_metadata": {
+        "evaluation_target": "direct_n8n",
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      }
+    },
+    {
+      "id": "BUG-EVAL-004",
+      "application": "bug_reporting",
+      "question": "What is the acknowledgement target for an S2 report?",
+      "ground_truth": "The owning team must acknowledge an S2 report within 2 business hours.",
+      "reference_contexts": [
+        "Severity S2 covers major functionality that is unavailable for multiple customers, severe performance degradation, or a high-impact defect with only a difficult workaround. The owning team must acknowledge an S2 report within 2 business hours."
+      ],
+      "expected_sources": [
+        {
+          "document": "bug-reporting/bug_triage_playbook.txt",
+          "section": "Severity S2"
+        }
+      ],
+      "category": "factoid",
+      "answerable": true,
+      "tags": [
+        "severity",
+        "sla"
+      ],
+      "answer": "The acknowledgement target for an S2 report is within 2 business hours.",
+      "contexts": [
+        "Bug Triage Playbook\n\nSection: Required report fields\nEvery bug report must include a concise title, affected product and version, environment, reproduction steps, expected behavior, actual behavior, frequency, business impact, and relevant logs or screenshots. Reports containing customer data must be redacted before submission.\n\nSection: Severity S1\nSeverity S1 is reserved for a production outage, active security compromise, irreversible data loss, or a complete blocker affecting most customers with no workaround. The on-call engineer must acknowledge an S1 report within 15 minutes and open an incident channel immediately.\n\nSection: Severity S2\nSeverity S2 covers major functionality that is unavailable for multiple customers, severe performance degradation, or a high-impact defect with only a difficult workaround. The owning team must acknowledge an S2 report within 2 business hours.\n\nSection: Severity S3 and S4\nSeverity S3 covers limited-impact defects with a practical workaround and should be acknowledged within 1 business day. Severity S4 covers cosmetic problems, documentation mistakes, and low-impact enhancement requests and should be acknowledged within 3 business days.\n\nSection: Duplicate handling\nWhen a new report matches an existing issue, mark it as a duplicate, link the canonical issue, copy any new evidence to the canonical issue, and notify the reporter. Do not close the canonical issue merely because a duplicate was filed.\n\nSection: Security and privacy\nSuspected vulnerabilities must be tagged security-sensitive and moved to the restricted security queue. Secrets, access tokens, personal data, and customer payloads must never be pasted into a public issue. Replace them with redacted samples.\n\nSection: Escalation\nEscalate to the incident process when an issue meets S1 criteria, when an S2 issue affects more than 25 percent of active tenants, or when support receives five or more matching reports within 30 minutes.\n",
+        "Recovery and Review\n\nSection: Rollback\nPrefer rollback when a recent deployment correlates with impact and rollback is tested. Record the deployment identifier and validation checks before execution.\n\nSection: Evidence preservation\nPreserve logs, traces, alerts, command history, and configuration snapshots. Do not edit original evidence; store analysis in a separate document.\n\nSection: Post-incident review\nA review is due within five business days for SEV-1 and SEV-2 incidents. It must include contributing factors, timeline, corrective actions, owners, and due dates.\n",
+        "Incident Response Runbook\n\nSection: Declaration\nDeclare an incident when customer impact is ongoing, security is suspected, or recovery needs coordination across two or more teams. The incident commander owns decisions and timeline updates.\n\nSection: First fifteen minutes\nWithin 15 minutes, create the incident channel, assign commander and scribe, record impact, freeze risky deployments, and publish an initial internal update.\n\nSection: Customer updates\nFor severity SEV-1, publish customer updates every 30 minutes. For SEV-2, update every 60 minutes while impact continues.\n"
+      ],
+      "retrieved_documents": [
+        "source-1",
+        "source-2",
+        "source-3"
+      ],
+      "expected_documents": [
+        "bug-reporting/bug_triage_playbook.txt"
+      ],
+      "system_faithfulness": null,
+      "requires_clarification": false,
+      "latency_ms": 16841.76,
+      "source_count": 3,
+      "observability": {
+        "source_count": 3,
+        "has_sources": true,
+        "metadata_key_count": 3,
+        "metadata_keys": [
+          "evaluation_target",
+          "n8n_attempts",
+          "n8n_retry_count"
+        ],
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      },
+      "response_metadata": {
+        "evaluation_target": "direct_n8n",
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      }
+    },
+    {
+      "id": "BUG-EVAL-005",
+      "application": "bug_reporting",
+      "question": "How should a cosmetic documentation typo be classified and acknowledged?",
+      "ground_truth": "It should be classified as S4 and acknowledged within 3 business days.",
+      "reference_contexts": [
+        "Severity S3 covers limited-impact defects with a practical workaround and should be acknowledged within 1 business day. Severity S4 covers cosmetic problems, documentation mistakes, and low-impact enhancement requests and should be acknowledged within 3 business days."
+      ],
+      "expected_sources": [
+        {
+          "document": "bug-reporting/bug_triage_playbook.txt",
+          "section": "Severity S3 and S4"
+        }
+      ],
+      "category": "reasoning",
+      "answerable": true,
+      "tags": [
+        "severity"
+      ],
+      "answer": "A cosmetic documentation typo should be classified as severity S4 and acknowledged within 3 business days.",
+      "contexts": [
+        "Bug Triage Playbook\n\nSection: Required report fields\nEvery bug report must include a concise title, affected product and version, environment, reproduction steps, expected behavior, actual behavior, frequency, business impact, and relevant logs or screenshots. Reports containing customer data must be redacted before submission.\n\nSection: Severity S1\nSeverity S1 is reserved for a production outage, active security compromise, irreversible data loss, or a complete blocker affecting most customers with no workaround. The on-call engineer must acknowledge an S1 report within 15 minutes and open an incident channel immediately.\n\nSection: Severity S2\nSeverity S2 covers major functionality that is unavailable for multiple customers, severe performance degradation, or a high-impact defect with only a difficult workaround. The owning team must acknowledge an S2 report within 2 business hours.\n\nSection: Severity S3 and S4\nSeverity S3 covers limited-impact defects with a practical workaround and should be acknowledged within 1 business day. Severity S4 covers cosmetic problems, documentation mistakes, and low-impact enhancement requests and should be acknowledged within 3 business days.\n\nSection: Duplicate handling\nWhen a new report matches an existing issue, mark it as a duplicate, link the canonical issue, copy any new evidence to the canonical issue, and notify the reporter. Do not close the canonical issue merely because a duplicate was filed.\n\nSection: Security and privacy\nSuspected vulnerabilities must be tagged security-sensitive and moved to the restricted security queue. Secrets, access tokens, personal data, and customer payloads must never be pasted into a public issue. Replace them with redacted samples.\n\nSection: Escalation\nEscalate to the incident process when an issue meets S1 criteria, when an S2 issue affects more than 25 percent of active tenants, or when support receives five or more matching reports within 30 minutes.\n",
+        "IT Helpdesk Software Guide\n\nSection: Software installation\nStandard software is installed from Company Portal without administrator rights. Restricted software requires a manager-approved request and security review.\n\nSection: Laptop encryption\nAll company laptops must use full-disk encryption. A missing encryption status or recovery-key prompt must be reported as priority P2 and the laptop disconnected from sensitive systems.\n\nSection: Ticket evidence\nHelpdesk tickets should include the asset tag, operating system, exact error text, timestamp, network location, and troubleshooting already attempted. Passwords and recovery codes must never be attached.\n",
+        "Incident Response Runbook\n\nSection: Declaration\nDeclare an incident when customer impact is ongoing, security is suspected, or recovery needs coordination across two or more teams. The incident commander owns decisions and timeline updates.\n\nSection: First fifteen minutes\nWithin 15 minutes, create the incident channel, assign commander and scribe, record impact, freeze risky deployments, and publish an initial internal update.\n\nSection: Customer updates\nFor severity SEV-1, publish customer updates every 30 minutes. For SEV-2, update every 60 minutes while impact continues.\n"
+      ],
+      "retrieved_documents": [
+        "source-1",
+        "source-2",
+        "source-3"
+      ],
+      "expected_documents": [
+        "bug-reporting/bug_triage_playbook.txt"
+      ],
+      "system_faithfulness": null,
+      "requires_clarification": false,
+      "latency_ms": 17101.6,
+      "source_count": 3,
+      "observability": {
+        "source_count": 3,
+        "has_sources": true,
+        "metadata_key_count": 3,
+        "metadata_keys": [
+          "evaluation_target",
+          "n8n_attempts",
+          "n8n_retry_count"
+        ],
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      },
+      "response_metadata": {
+        "evaluation_target": "direct_n8n",
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      }
+    }
+  ]
+}

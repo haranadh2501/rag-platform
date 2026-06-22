@@ -1,0 +1,138 @@
+{
+  "generated_at": "2026-06-21T07:09:07.307576+00:00",
+  "summary": {
+    "case_count": 3,
+    "answerable_case_count": 3,
+    "unanswerable_case_count": 0,
+    "citation_coverage": 0.0,
+    "negative_abstention_rate": 0.0,
+    "latency_ms": {
+      "mean": 17585.616666666665,
+      "p95": 19148.15,
+      "max": 19148.15
+    },
+    "ragas": null,
+    "quality_gate": {
+      "passed": null,
+      "reason": "RAGAS scoring was skipped",
+      "checks": {}
+    },
+    "applications": {
+      "kubernetes_troubleshooting": {
+        "case_count": 3,
+        "answerable_case_count": 3,
+        "unanswerable_case_count": 0,
+        "citation_coverage": 0.0,
+        "negative_abstention_rate": 0.0,
+        "latency_ms": {
+          "mean": 17585.616666666665,
+          "p95": 19148.15,
+          "max": 19148.15
+        },
+        "ragas": null
+      }
+    }
+  },
+  "cases": [
+    {
+      "id": "K8S-EVAL-001",
+      "application": "kubernetes_troubleshooting",
+      "question": "Which sources should the Kubernetes troubleshooting knowledge base prioritize first?",
+      "ground_truth": "The Kubernetes troubleshooting knowledge base should prioritize the official Kubernetes debugging tasks, API reference, and kubectl command reference before community blogs, practical problem repositories, Kubernetes failure stories, and post-mortems. Managed service notes for EKS, GKE, and AKS should be layered after the core Kubernetes material.",
+      "reference_contexts": [
+        "The Kubernetes troubleshooting knowledge base should prioritize the official Kubernetes debugging tasks, API reference, and kubectl command reference before community blogs, practical problem repositories, Kubernetes failure stories, and post-mortems. Managed service notes for EKS, GKE, and AKS should be layered after the core Kubernetes material."
+      ],
+      "expected_sources": [
+        {
+          "document": "kubernetes_troubleshooting/cluster_debugging_runbook.txt",
+          "section": "Knowledge base source strategy"
+        }
+      ],
+      "category": "factoid",
+      "answerable": true,
+      "tags": [
+        "kubernetes",
+        "source-priority"
+      ],
+      "answer": "Based on the context, the Kubernetes troubleshooting knowledge base should prioritize sources that help identify the **first failing component** and the **downstream blast radius**, as post-mortems often show cascading failures from a small configuration change.",
+      "contexts": [],
+      "retrieved_documents": [],
+      "expected_documents": [
+        "kubernetes_troubleshooting/cluster_debugging_runbook.txt"
+      ],
+      "system_faithfulness": null,
+      "requires_clarification": false,
+      "latency_ms": 15731.9,
+      "response_metadata": {
+        "evaluation_target": "direct_n8n"
+      }
+    },
+    {
+      "id": "K8S-EVAL-002",
+      "application": "kubernetes_troubleshooting",
+      "question": "What fields belong in the initial triage packet for a Kubernetes incident?",
+      "ground_truth": "Every Kubernetes incident ticket should include the namespace, workload name and kind, affected node, image tag, recent deployment time, exact user-visible symptom, kubectl get output, kubectl describe output, relevant events, pod logs, and any recent configuration or secret changes. Secrets, tokens, and customer payloads must be redacted.",
+      "reference_contexts": [
+        "Every Kubernetes incident ticket should include the namespace, workload name and kind, affected node, image tag, recent deployment time, exact user-visible symptom, kubectl get output, kubectl describe output, relevant events, pod logs, and any recent configuration or secret changes. Secrets, tokens, and customer payloads must be redacted."
+      ],
+      "expected_sources": [
+        {
+          "document": "kubernetes_troubleshooting/cluster_debugging_runbook.txt",
+          "section": "Initial triage packet"
+        }
+      ],
+      "category": "procedural",
+      "answerable": true,
+      "tags": [
+        "kubernetes",
+        "triage"
+      ],
+      "answer": "Based on the provided context, the initial triage packet for a Kubernetes incident should include:\n\n- **Cloud-specific failure details:** For EKS, check `aws-node` logs and available subnet IP addresses; for GKE, review admission errors from Autopilot constraints; for AKS, compare affected node subnets and pod IP allocation.\n- **Workload and network status:** Verify Service endpoints (selector, pod labels, readiness), CoreDNS pod status and logs, NetworkPolicy configuration, and Ingress routing.\n- **Storage and scaling issues:** Check PersistentVolumeClaim events (storage class, provisioner), volume attach/detach failures (zone mismatch, CSI logs), and HorizontalPodAutoscaler conditions (metrics-server health, resource requests).\n- **Authentication and RBAC:** For EKS, verify the `aws-auth` ConfigMap and IAM role mapping.\n- **Post-mortem signal pattern:** Identify the first failing component (e.g., a small config change) and trace the downstream blast radius (retries, log floods, node pressure, evictions).",
+      "contexts": [],
+      "retrieved_documents": [],
+      "expected_documents": [
+        "kubernetes_troubleshooting/cluster_debugging_runbook.txt"
+      ],
+      "system_faithfulness": null,
+      "requires_clarification": false,
+      "latency_ms": 19148.15,
+      "response_metadata": {
+        "evaluation_target": "direct_n8n"
+      }
+    },
+    {
+      "id": "K8S-EVAL-003",
+      "application": "kubernetes_troubleshooting",
+      "question": "What should be checked first when a pod stays Pending?",
+      "ground_truth": "Inspect kubectl describe pod events first, then check CPU or memory scarcity, selectors, affinity, taints, tolerations, persistent volumes, and referenced image pull secrets.",
+      "reference_contexts": [
+        "When a pod remains Pending, inspect kubectl describe pod events first. Common causes are insufficient CPU or memory, unsatisfied node selectors or affinity, taints without tolerations, missing persistent volumes, and image pull secrets that are referenced but not present."
+      ],
+      "expected_sources": [
+        {
+          "document": "kubernetes_troubleshooting/cluster_debugging_runbook.txt",
+          "section": "Pending pods"
+        }
+      ],
+      "category": "procedural",
+      "answerable": true,
+      "tags": [
+        "kubernetes",
+        "pods",
+        "scheduling"
+      ],
+      "answer": "When a pod stays Pending, first check PersistentVolumeClaim (PVC) status. If the PVC is Pending, examine `storageClassName`, access modes, requested size, and provisioner events. Also confirm the PVC's PersistentVolume (PV) exists, or if dynamic provisioning can satisfy the request.",
+      "contexts": [],
+      "retrieved_documents": [],
+      "expected_documents": [
+        "kubernetes_troubleshooting/cluster_debugging_runbook.txt"
+      ],
+      "system_faithfulness": null,
+      "requires_clarification": false,
+      "latency_ms": 17876.8,
+      "response_metadata": {
+        "evaluation_target": "direct_n8n"
+      }
+    }
+  ]
+}

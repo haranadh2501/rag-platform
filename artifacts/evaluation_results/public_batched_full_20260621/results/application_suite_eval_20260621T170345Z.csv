@@ -1,0 +1,6 @@
+id,application,category,answerable,question,ground_truth,answer,latency_ms,system_faithfulness,faithfulness,answer_relevancy,context_precision,context_recall,source_count
+COMPLIANCE_POLICY-001,compliance_policy,factoid,True,How are payment records classified?,Payment records are Restricted data.,Payment records are classified as Restricted.,17522.57,,,,,,3
+COMPLIANCE_POLICY-002,compliance_policy,factoid,True,How long are support tickets retained?,They are retained for three years.,Support tickets are retained for three years.,17555.19,,,,,,3
+COMPLIANCE_POLICY-003,compliance_policy,factoid,True,How often is Restricted-data access reviewed?,Quarterly.,Access to Restricted data is reviewed quarterly by the owners.,17019.51,,,,,,3
+COMPLIANCE_POLICY-004,compliance_policy,procedural,True,What is required before a vendor processes Restricted data?,"Security review, a data-processing agreement, and annual reassessment are required.","Before a vendor processes Restricted data, a security review, a data-processing agreement, and an annual reassessment are required.",17748.3,,,,,,3
+COMPLIANCE_POLICY-005,compliance_policy,factoid,True,How quickly must suspected Restricted-data exposure be reported?,It must be reported to Security within one hour.,Suspected exposure of Restricted data must be reported to Security within one hour.,19837.85,,,,,,3

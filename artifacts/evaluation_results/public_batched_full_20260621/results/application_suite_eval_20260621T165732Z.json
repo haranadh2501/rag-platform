@@ -1,0 +1,357 @@
+{
+  "generated_at": "2026-06-21T16:57:32.137518+00:00",
+  "summary": {
+    "case_count": 5,
+    "answerable_case_count": 4,
+    "unanswerable_case_count": 1,
+    "citation_coverage": 1.0,
+    "negative_abstention_rate": 0.0,
+    "latency_ms": {
+      "mean": 17892.052,
+      "p95": 19789.11,
+      "max": 19789.11
+    },
+    "observability": {
+      "source_return_rate": 1.0,
+      "average_sources_per_case": 3.0,
+      "metadata_coverage": 1.0,
+      "total_retry_count": 0,
+      "max_attempts": 1
+    },
+    "ragas": null,
+    "batch": {
+      "batch_index": 17,
+      "batch_size": 5,
+      "total_batches": 30,
+      "total_cases_before_batching": 148,
+      "start_position": 81,
+      "end_position": 85
+    },
+    "quality_gate": {
+      "passed": null,
+      "reason": "RAGAS scoring was skipped",
+      "checks": {}
+    },
+    "applications": {
+      "developer_documentation": {
+        "case_count": 1,
+        "answerable_case_count": 1,
+        "unanswerable_case_count": 0,
+        "citation_coverage": 1.0,
+        "negative_abstention_rate": 0.0,
+        "latency_ms": {
+          "mean": 16185.85,
+          "p95": 16185.85,
+          "max": 16185.85
+        },
+        "observability": {
+          "source_return_rate": 1.0,
+          "average_sources_per_case": 3.0,
+          "metadata_coverage": 1.0,
+          "total_retry_count": 0,
+          "max_attempts": 1
+        },
+        "ragas": null
+      },
+      "employee_onboarding": {
+        "case_count": 4,
+        "answerable_case_count": 3,
+        "unanswerable_case_count": 1,
+        "citation_coverage": 1.0,
+        "negative_abstention_rate": 0.0,
+        "latency_ms": {
+          "mean": 18318.6025,
+          "p95": 19789.11,
+          "max": 19789.11
+        },
+        "observability": {
+          "source_return_rate": 1.0,
+          "average_sources_per_case": 3.0,
+          "metadata_coverage": 1.0,
+          "total_retry_count": 0,
+          "max_attempts": 1
+        },
+        "ragas": null
+      }
+    }
+  },
+  "cases": [
+    {
+      "id": "EMPLOYEE_ONBOARDING-005",
+      "application": "employee_onboarding",
+      "question": "When are probation check-ins held?",
+      "ground_truth": "They occur at 30, 60, and 90 days.",
+      "reference_contexts": [
+        "Probation check-ins occur at 30, 60, and 90 days. The employee and manager record goals and blockers in the people portal."
+      ],
+      "expected_sources": [
+        {
+          "document": "employee_onboarding/secondary_guide.txt",
+          "section": "Probation check-ins"
+        }
+      ],
+      "category": "factoid",
+      "answerable": true,
+      "tags": [
+        "employee_onboarding",
+        "factoid"
+      ],
+      "answer": "Probation check-ins are held at 30, 60, and 90 days.",
+      "contexts": [
+        "Workplace Policies\n\nSection: Probation check-ins\nProbation check-ins occur at 30, 60, and 90 days. The employee and manager record goals and blockers in the people portal.\n\nSection: Leave requests\nPlanned leave is requested in the people portal at least five business days in advance. Emergency leave may be reported to the manager on the same day.\n\nSection: Information handling\nConfidential documents must remain in approved storage. Personal cloud drives and personal email accounts are prohibited for company information.\n",
+        "Machine Learning Course Guide\n\nSection: Assessment\nThe final grade is 30 percent assignments, 20 percent quizzes, 20 percent midterm, and 30 percent project. A total score of 50 percent is required to pass.\n\nSection: Late work\nAssignments lose 10 percent per calendar day for up to three days. After three days, submissions are accepted only with an approved extension.\n\nSection: Project\nProjects are completed in teams of three or four. The proposal is due in week 5, checkpoint in week 9, and presentation in week 13.\n",
+        "Employee Onboarding Handbook\n\nSection: First day\nNew employees report at 9:30 AM, present government identification, collect a badge, and attend the security briefing before receiving system access.\n\nSection: Mandatory training\nSecurity awareness and data privacy training must be completed within five business days. Managers receive an alert when either course is overdue.\n\nSection: Equipment\nRemote employees receive a laptop and headset by courier. Damage must be reported within 24 hours of delivery with photographs of the packaging.\n"
+      ],
+      "retrieved_documents": [
+        "source-1",
+        "source-2",
+        "source-3"
+      ],
+      "expected_documents": [
+        "employee_onboarding/secondary_guide.txt"
+      ],
+      "system_faithfulness": null,
+      "requires_clarification": false,
+      "latency_ms": 17236.2,
+      "source_count": 3,
+      "observability": {
+        "source_count": 3,
+        "has_sources": true,
+        "metadata_key_count": 3,
+        "metadata_keys": [
+          "evaluation_target",
+          "n8n_attempts",
+          "n8n_retry_count"
+        ],
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      },
+      "response_metadata": {
+        "evaluation_target": "direct_n8n",
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      }
+    },
+    {
+      "id": "EMPLOYEE_ONBOARDING-006",
+      "application": "employee_onboarding",
+      "question": "How is planned leave requested?",
+      "ground_truth": "Submit it in the people portal at least five business days in advance.",
+      "reference_contexts": [
+        "Planned leave is requested in the people portal at least five business days in advance. Emergency leave may be reported to the manager on the same day."
+      ],
+      "expected_sources": [
+        {
+          "document": "employee_onboarding/secondary_guide.txt",
+          "section": "Leave requests"
+        }
+      ],
+      "category": "procedural",
+      "answerable": true,
+      "tags": [
+        "employee_onboarding",
+        "procedural"
+      ],
+      "answer": "Planned leave is requested in the people portal at least five business days in advance.",
+      "contexts": [
+        "Workplace Policies\n\nSection: Probation check-ins\nProbation check-ins occur at 30, 60, and 90 days. The employee and manager record goals and blockers in the people portal.\n\nSection: Leave requests\nPlanned leave is requested in the people portal at least five business days in advance. Emergency leave may be reported to the manager on the same day.\n\nSection: Information handling\nConfidential documents must remain in approved storage. Personal cloud drives and personal email accounts are prohibited for company information.\n",
+        "Clinic Administration Manual\n\nSection: Appointments\nRoutine appointments may be rescheduled without charge up to 24 hours before the visit. Later changes are marked late cancellation unless waived by clinic management.\n\nSection: Records requests\nPatients submit record requests using form MR-12 with identity verification. The records team acknowledges requests within two business days and normally completes them within ten business days.\n\nSection: Interpreter services\nProfessional interpreter services are available without charge. Staff must not ask minor children to interpret clinical or consent discussions.\n",
+        "IT Helpdesk Software Guide\n\nSection: Software installation\nStandard software is installed from Company Portal without administrator rights. Restricted software requires a manager-approved request and security review.\n\nSection: Laptop encryption\nAll company laptops must use full-disk encryption. A missing encryption status or recovery-key prompt must be reported as priority P2 and the laptop disconnected from sensitive systems.\n\nSection: Ticket evidence\nHelpdesk tickets should include the asset tag, operating system, exact error text, timestamp, network location, and troubleshooting already attempted. Passwords and recovery codes must never be attached.\n"
+      ],
+      "retrieved_documents": [
+        "source-1",
+        "source-2",
+        "source-3"
+      ],
+      "expected_documents": [
+        "employee_onboarding/secondary_guide.txt"
+      ],
+      "system_faithfulness": null,
+      "requires_clarification": false,
+      "latency_ms": 16958.34,
+      "source_count": 3,
+      "observability": {
+        "source_count": 3,
+        "has_sources": true,
+        "metadata_key_count": 3,
+        "metadata_keys": [
+          "evaluation_target",
+          "n8n_attempts",
+          "n8n_retry_count"
+        ],
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      },
+      "response_metadata": {
+        "evaluation_target": "direct_n8n",
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      }
+    },
+    {
+      "id": "EMPLOYEE_ONBOARDING-007",
+      "application": "employee_onboarding",
+      "question": "Can onboarding documents be sent to a personal email to finish training at home?",
+      "ground_truth": "No. Company information cannot be sent to personal email and must remain in approved storage.",
+      "reference_contexts": [
+        "Security awareness and data privacy training must be completed within five business days. Managers receive an alert when either course is overdue.",
+        "Confidential documents must remain in approved storage. Personal cloud drives and personal email accounts are prohibited for company information."
+      ],
+      "expected_sources": [
+        {
+          "document": "employee_onboarding/primary_guide.txt",
+          "section": "Mandatory training"
+        },
+        {
+          "document": "employee_onboarding/secondary_guide.txt",
+          "section": "Information handling"
+        }
+      ],
+      "category": "reasoning",
+      "answerable": true,
+      "tags": [
+        "employee_onboarding",
+        "reasoning"
+      ],
+      "answer": "No, onboarding documents cannot be sent to a personal email because personal email accounts are prohibited for handling company information.",
+      "contexts": [
+        "Workplace Policies\n\nSection: Probation check-ins\nProbation check-ins occur at 30, 60, and 90 days. The employee and manager record goals and blockers in the people portal.\n\nSection: Leave requests\nPlanned leave is requested in the people portal at least five business days in advance. Emergency leave may be reported to the manager on the same day.\n\nSection: Information handling\nConfidential documents must remain in approved storage. Personal cloud drives and personal email accounts are prohibited for company information.\n",
+        "Employee Onboarding Handbook\n\nSection: First day\nNew employees report at 9:30 AM, present government identification, collect a badge, and attend the security briefing before receiving system access.\n\nSection: Mandatory training\nSecurity awareness and data privacy training must be completed within five business days. Managers receive an alert when either course is overdue.\n\nSection: Equipment\nRemote employees receive a laptop and headset by courier. Damage must be reported within 24 hours of delivery with photographs of the packaging.\n",
+        "Synthetic Contract Procedures\n\nSection: Notices\nFormal notices must be sent by tracked courier or email to the notice addresses in Schedule A. Email notice is effective when receipt is acknowledged.\n\nSection: Termination\nEither party may terminate for material breach if the breach is not cured within 15 days after written notice. Insolvency permits immediate termination.\n\nSection: Navigation boundary\nThe contract assistant may locate and summarize clauses from supplied documents. It must not predict court outcomes or replace review by qualified counsel.\n"
+      ],
+      "retrieved_documents": [
+        "source-1",
+        "source-2",
+        "source-3"
+      ],
+      "expected_documents": [
+        "employee_onboarding/primary_guide.txt",
+        "employee_onboarding/secondary_guide.txt"
+      ],
+      "system_faithfulness": null,
+      "requires_clarification": false,
+      "latency_ms": 19290.76,
+      "source_count": 3,
+      "observability": {
+        "source_count": 3,
+        "has_sources": true,
+        "metadata_key_count": 3,
+        "metadata_keys": [
+          "evaluation_target",
+          "n8n_attempts",
+          "n8n_retry_count"
+        ],
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      },
+      "response_metadata": {
+        "evaluation_target": "direct_n8n",
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      }
+    },
+    {
+      "id": "EMPLOYEE_ONBOARDING-008",
+      "application": "employee_onboarding",
+      "question": "What is the employee cafeteria menu?",
+      "ground_truth": "The supplied onboarding documents do not contain cafeteria menus.",
+      "reference_contexts": [],
+      "expected_sources": [],
+      "category": "unanswerable",
+      "answerable": false,
+      "tags": [
+        "employee_onboarding",
+        "unanswerable"
+      ],
+      "answer": "The provided context does not include any information about an employee cafeteria menu.",
+      "contexts": [
+        "Employee Onboarding Handbook\n\nSection: First day\nNew employees report at 9:30 AM, present government identification, collect a badge, and attend the security briefing before receiving system access.\n\nSection: Mandatory training\nSecurity awareness and data privacy training must be completed within five business days. Managers receive an alert when either course is overdue.\n\nSection: Equipment\nRemote employees receive a laptop and headset by courier. Damage must be reported within 24 hours of delivery with photographs of the packaging.\n",
+        "Clinic Administration Manual\n\nSection: Appointments\nRoutine appointments may be rescheduled without charge up to 24 hours before the visit. Later changes are marked late cancellation unless waived by clinic management.\n\nSection: Records requests\nPatients submit record requests using form MR-12 with identity verification. The records team acknowledges requests within two business days and normally completes them within ten business days.\n\nSection: Interpreter services\nProfessional interpreter services are available without charge. Staff must not ask minor children to interpret clinical or consent discussions.\n",
+        "Workplace Policies\n\nSection: Probation check-ins\nProbation check-ins occur at 30, 60, and 90 days. The employee and manager record goals and blockers in the people portal.\n\nSection: Leave requests\nPlanned leave is requested in the people portal at least five business days in advance. Emergency leave may be reported to the manager on the same day.\n\nSection: Information handling\nConfidential documents must remain in approved storage. Personal cloud drives and personal email accounts are prohibited for company information.\n"
+      ],
+      "retrieved_documents": [
+        "source-1",
+        "source-2",
+        "source-3"
+      ],
+      "expected_documents": [],
+      "system_faithfulness": null,
+      "requires_clarification": false,
+      "latency_ms": 19789.11,
+      "source_count": 3,
+      "observability": {
+        "source_count": 3,
+        "has_sources": true,
+        "metadata_key_count": 3,
+        "metadata_keys": [
+          "evaluation_target",
+          "n8n_attempts",
+          "n8n_retry_count"
+        ],
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      },
+      "response_metadata": {
+        "evaluation_target": "direct_n8n",
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      }
+    },
+    {
+      "id": "DEVELOPER_DOCUMENTATION-001",
+      "application": "developer_documentation",
+      "question": "How are Payments API requests authenticated?",
+      "ground_truth": "Use an environment-specific Bearer service token.",
+      "reference_contexts": [
+        "API requests use a Bearer service token. Tokens are environment-specific and must not be embedded in mobile or browser code."
+      ],
+      "expected_sources": [
+        {
+          "document": "developer_documentation/primary_guide.txt",
+          "section": "Authentication"
+        }
+      ],
+      "category": "factoid",
+      "answerable": true,
+      "tags": [
+        "developer_documentation",
+        "factoid"
+      ],
+      "answer": "Payments API requests are authenticated using a Bearer service token that is environment-specific and must not be embedded in mobile or browser code.",
+      "contexts": [
+        "Payments API Guide\n\nSection: Authentication\nAPI requests use a Bearer service token. Tokens are environment-specific and must not be embedded in mobile or browser code.\n\nSection: Create payment\nPOST /v1/payments creates a payment. The idempotency-key header is required and may be reused for 24 hours to safely retry the same request.\n\nSection: Errors\nHTTP 400 indicates invalid input, 401 invalid credentials, 409 an idempotency conflict, and 429 rate limiting. Retry 429 responses using exponential backoff.\n",
+        "SDK and Webhook Guide\n\nSection: SDK support\nOfficial SDKs support Python 3.11+, Node.js 20+, and Java 17+. Older runtimes receive security fixes only until December 2026.\n\nSection: Webhook verification\nVerify the x-pay-signature header against the raw body using HMAC-SHA256. Reject events older than five minutes.\n\nSection: Pagination\nList endpoints use cursor pagination. Pass next_cursor as cursor on the following request; a null next_cursor indicates the final page.\n",
+        "API Known Issues and Troubleshooting\n\nSection: BUG-API-201 Rate limiting after token rotation\nBUG-API-201 affects API clients that rotate an access token while keeping HTTP/2 connections open. Requests may receive HTTP 429 for up to five minutes because the old and new token buckets are temporarily combined. Closing the connection pool after rotation is the recommended workaround. The server-side fix was deployed in API release 2026.06.2.\n\nSection: BUG-API-202 Duplicate webhook delivery\nBUG-API-202 can deliver the same webhook event twice when the first acknowledgement arrives after the ten-second timeout. Consumers must treat the event_id field as an idempotency key and return a 2xx response within ten seconds. Duplicate delivery does not indicate duplicate data was stored by the platform.\n\nSection: Webhook signature troubleshooting\nWebhook signatures use HMAC-SHA256 over the exact raw request body. Signature validation fails if middleware parses and reserializes JSON before verification, if the wrong tenant secret is used, or if the timestamp differs from server time by more than five minutes.\n\nSection: API evidence collection\nAPI bug reports should include the request method, redacted URL, response status, request_id response header, timestamp with timezone, SDK name and version, and a minimal reproducible request. Authorization headers and complete access tokens must be removed.\n"
+      ],
+      "retrieved_documents": [
+        "source-1",
+        "source-2",
+        "source-3"
+      ],
+      "expected_documents": [
+        "developer_documentation/primary_guide.txt"
+      ],
+      "system_faithfulness": null,
+      "requires_clarification": false,
+      "latency_ms": 16185.85,
+      "source_count": 3,
+      "observability": {
+        "source_count": 3,
+        "has_sources": true,
+        "metadata_key_count": 3,
+        "metadata_keys": [
+          "evaluation_target",
+          "n8n_attempts",
+          "n8n_retry_count"
+        ],
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      },
+      "response_metadata": {
+        "evaluation_target": "direct_n8n",
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      }
+    }
+  ]
+}

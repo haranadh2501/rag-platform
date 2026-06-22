@@ -1,0 +1,346 @@
+{
+  "generated_at": "2026-06-21T16:54:33.523017+00:00",
+  "summary": {
+    "case_count": 5,
+    "answerable_case_count": 5,
+    "unanswerable_case_count": 0,
+    "citation_coverage": 1.0,
+    "negative_abstention_rate": 0.0,
+    "latency_ms": {
+      "mean": 17661.64,
+      "p95": 19286.3,
+      "max": 19286.3
+    },
+    "observability": {
+      "source_return_rate": 1.0,
+      "average_sources_per_case": 3.0,
+      "metadata_coverage": 1.0,
+      "total_retry_count": 0,
+      "max_attempts": 1
+    },
+    "ragas": null,
+    "batch": {
+      "batch_index": 15,
+      "batch_size": 5,
+      "total_batches": 30,
+      "total_cases_before_batching": 148,
+      "start_position": 71,
+      "end_position": 75
+    },
+    "quality_gate": {
+      "passed": null,
+      "reason": "RAGAS scoring was skipped",
+      "checks": {}
+    },
+    "applications": {
+      "customer_support": {
+        "case_count": 5,
+        "answerable_case_count": 5,
+        "unanswerable_case_count": 0,
+        "citation_coverage": 1.0,
+        "negative_abstention_rate": 0.0,
+        "latency_ms": {
+          "mean": 17661.64,
+          "p95": 19286.3,
+          "max": 19286.3
+        },
+        "observability": {
+          "source_return_rate": 1.0,
+          "average_sources_per_case": 3.0,
+          "metadata_coverage": 1.0,
+          "total_retry_count": 0,
+          "max_attempts": 1
+        },
+        "ragas": null
+      }
+    }
+  },
+  "cases": [
+    {
+      "id": "CUSTOMER_SUPPORT-003",
+      "application": "customer_support",
+      "question": "How are opened defective products returned?",
+      "ground_truth": "They require a support case number and a prepaid return label.",
+      "reference_contexts": [
+        "Unopened products may be returned within 30 calendar days. Opened defective products require a support case number and prepaid return label."
+      ],
+      "expected_sources": [
+        {
+          "document": "customer_support/primary_guide.txt",
+          "section": "Returns"
+        }
+      ],
+      "category": "procedural",
+      "answerable": true,
+      "tags": [
+        "customer_support",
+        "procedural"
+      ],
+      "answer": "Opened defective products are returned by obtaining a support case number and a prepaid return label.",
+      "contexts": [
+        "Customer Support Policy\n\nSection: Warranty\nThe NovaHub device has a two-year limited hardware warranty from the purchase date. Accidental damage and unauthorized repairs are excluded.\n\nSection: Returns\nUnopened products may be returned within 30 calendar days. Opened defective products require a support case number and prepaid return label.\n\nSection: Replacement SLA\nApproved in-warranty replacements ship within two business days. Expedited shipping is available only for premium support customers.\n",
+        "Employee Onboarding Handbook\n\nSection: First day\nNew employees report at 9:30 AM, present government identification, collect a badge, and attend the security briefing before receiving system access.\n\nSection: Mandatory training\nSecurity awareness and data privacy training must be completed within five business days. Managers receive an alert when either course is overdue.\n\nSection: Equipment\nRemote employees receive a laptop and headset by courier. Damage must be reported within 24 hours of delivery with photographs of the packaging.\n",
+        "Bug Triage Playbook\n\nSection: Required report fields\nEvery bug report must include a concise title, affected product and version, environment, reproduction steps, expected behavior, actual behavior, frequency, business impact, and relevant logs or screenshots. Reports containing customer data must be redacted before submission.\n\nSection: Severity S1\nSeverity S1 is reserved for a production outage, active security compromise, irreversible data loss, or a complete blocker affecting most customers with no workaround. The on-call engineer must acknowledge an S1 report within 15 minutes and open an incident channel immediately.\n\nSection: Severity S2\nSeverity S2 covers major functionality that is unavailable for multiple customers, severe performance degradation, or a high-impact defect with only a difficult workaround. The owning team must acknowledge an S2 report within 2 business hours.\n\nSection: Severity S3 and S4\nSeverity S3 covers limited-impact defects with a practical workaround and should be acknowledged within 1 business day. Severity S4 covers cosmetic problems, documentation mistakes, and low-impact enhancement requests and should be acknowledged within 3 business days.\n\nSection: Duplicate handling\nWhen a new report matches an existing issue, mark it as a duplicate, link the canonical issue, copy any new evidence to the canonical issue, and notify the reporter. Do not close the canonical issue merely because a duplicate was filed.\n\nSection: Security and privacy\nSuspected vulnerabilities must be tagged security-sensitive and moved to the restricted security queue. Secrets, access tokens, personal data, and customer payloads must never be pasted into a public issue. Replace them with redacted samples.\n\nSection: Escalation\nEscalate to the incident process when an issue meets S1 criteria, when an S2 issue affects more than 25 percent of active tenants, or when support receives five or more matching reports within 30 minutes.\n"
+      ],
+      "retrieved_documents": [
+        "source-1",
+        "source-2",
+        "source-3"
+      ],
+      "expected_documents": [
+        "customer_support/primary_guide.txt"
+      ],
+      "system_faithfulness": null,
+      "requires_clarification": false,
+      "latency_ms": 16845.94,
+      "source_count": 3,
+      "observability": {
+        "source_count": 3,
+        "has_sources": true,
+        "metadata_key_count": 3,
+        "metadata_keys": [
+          "evaluation_target",
+          "n8n_attempts",
+          "n8n_retry_count"
+        ],
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      },
+      "response_metadata": {
+        "evaluation_target": "direct_n8n",
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      }
+    },
+    {
+      "id": "CUSTOMER_SUPPORT-004",
+      "application": "customer_support",
+      "question": "How quickly does an approved replacement ship?",
+      "ground_truth": "It ships within two business days.",
+      "reference_contexts": [
+        "Approved in-warranty replacements ship within two business days. Expedited shipping is available only for premium support customers."
+      ],
+      "expected_sources": [
+        {
+          "document": "customer_support/primary_guide.txt",
+          "section": "Replacement SLA"
+        }
+      ],
+      "category": "factoid",
+      "answerable": true,
+      "tags": [
+        "customer_support",
+        "factoid"
+      ],
+      "answer": "An approved in-warranty replacement ships within two business days.",
+      "contexts": [
+        "Customer Support Policy\n\nSection: Warranty\nThe NovaHub device has a two-year limited hardware warranty from the purchase date. Accidental damage and unauthorized repairs are excluded.\n\nSection: Returns\nUnopened products may be returned within 30 calendar days. Opened defective products require a support case number and prepaid return label.\n\nSection: Replacement SLA\nApproved in-warranty replacements ship within two business days. Expedited shipping is available only for premium support customers.\n",
+        "IT Helpdesk Access Guide\n\nSection: Password reset\nEmployees reset a forgotten password at access.example.test/reset. The reset link expires after 20 minutes. After five failed attempts, the account is locked for 30 minutes.\n\nSection: VPN troubleshooting\nFor VPN error 720, restart the SecureLink service, remove any saved VPN profile, and import the current profile from the IT portal. Escalate if the error remains after one retry.\n\nSection: MFA device replacement\nA user replacing a phone must keep the old authenticator until the new device is enrolled. If the old phone is unavailable, the service desk verifies identity with the manager and issues a 15-minute recovery code.\n",
+        "Bug Triage Playbook\n\nSection: Required report fields\nEvery bug report must include a concise title, affected product and version, environment, reproduction steps, expected behavior, actual behavior, frequency, business impact, and relevant logs or screenshots. Reports containing customer data must be redacted before submission.\n\nSection: Severity S1\nSeverity S1 is reserved for a production outage, active security compromise, irreversible data loss, or a complete blocker affecting most customers with no workaround. The on-call engineer must acknowledge an S1 report within 15 minutes and open an incident channel immediately.\n\nSection: Severity S2\nSeverity S2 covers major functionality that is unavailable for multiple customers, severe performance degradation, or a high-impact defect with only a difficult workaround. The owning team must acknowledge an S2 report within 2 business hours.\n\nSection: Severity S3 and S4\nSeverity S3 covers limited-impact defects with a practical workaround and should be acknowledged within 1 business day. Severity S4 covers cosmetic problems, documentation mistakes, and low-impact enhancement requests and should be acknowledged within 3 business days.\n\nSection: Duplicate handling\nWhen a new report matches an existing issue, mark it as a duplicate, link the canonical issue, copy any new evidence to the canonical issue, and notify the reporter. Do not close the canonical issue merely because a duplicate was filed.\n\nSection: Security and privacy\nSuspected vulnerabilities must be tagged security-sensitive and moved to the restricted security queue. Secrets, access tokens, personal data, and customer payloads must never be pasted into a public issue. Replace them with redacted samples.\n\nSection: Escalation\nEscalate to the incident process when an issue meets S1 criteria, when an S2 issue affects more than 25 percent of active tenants, or when support receives five or more matching reports within 30 minutes.\n"
+      ],
+      "retrieved_documents": [
+        "source-1",
+        "source-2",
+        "source-3"
+      ],
+      "expected_documents": [
+        "customer_support/primary_guide.txt"
+      ],
+      "system_faithfulness": null,
+      "requires_clarification": false,
+      "latency_ms": 17136.56,
+      "source_count": 3,
+      "observability": {
+        "source_count": 3,
+        "has_sources": true,
+        "metadata_key_count": 3,
+        "metadata_keys": [
+          "evaluation_target",
+          "n8n_attempts",
+          "n8n_retry_count"
+        ],
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      },
+      "response_metadata": {
+        "evaluation_target": "direct_n8n",
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      }
+    },
+    {
+      "id": "CUSTOMER_SUPPORT-005",
+      "application": "customer_support",
+      "question": "How do I factory-reset NovaHub?",
+      "ground_truth": "Hold the rear reset button for 10 seconds until the light flashes amber.",
+      "reference_contexts": [
+        "To reset NovaHub, hold the rear reset button for 10 seconds until the status light flashes amber. The reset removes local settings but does not cancel the subscription."
+      ],
+      "expected_sources": [
+        {
+          "document": "customer_support/secondary_guide.txt",
+          "section": "Factory reset"
+        }
+      ],
+      "category": "procedural",
+      "answerable": true,
+      "tags": [
+        "customer_support",
+        "procedural"
+      ],
+      "answer": "To factory reset NovaHub, hold the rear reset button for 10 seconds until the status light flashes amber.",
+      "contexts": [
+        "NovaHub Troubleshooting\n\nSection: Factory reset\nTo reset NovaHub, hold the rear reset button for 10 seconds until the status light flashes amber. The reset removes local settings but does not cancel the subscription.\n\nSection: Offline status\nIf NovaHub shows offline, verify power, restart the router, and move the device within eight metres of the access point. If still offline, collect the diagnostic code.\n\nSection: Escalation\nEscalate when three resets fail, the device overheats, or a diagnostic code begins with HW-. Overheating devices must be unplugged immediately.\n",
+        "Customer Support Policy\n\nSection: Warranty\nThe NovaHub device has a two-year limited hardware warranty from the purchase date. Accidental damage and unauthorized repairs are excluded.\n\nSection: Returns\nUnopened products may be returned within 30 calendar days. Opened defective products require a support case number and prepaid return label.\n\nSection: Replacement SLA\nApproved in-warranty replacements ship within two business days. Expedited shipping is available only for premium support customers.\n",
+        "IT Helpdesk Access Guide\n\nSection: Password reset\nEmployees reset a forgotten password at access.example.test/reset. The reset link expires after 20 minutes. After five failed attempts, the account is locked for 30 minutes.\n\nSection: VPN troubleshooting\nFor VPN error 720, restart the SecureLink service, remove any saved VPN profile, and import the current profile from the IT portal. Escalate if the error remains after one retry.\n\nSection: MFA device replacement\nA user replacing a phone must keep the old authenticator until the new device is enrolled. If the old phone is unavailable, the service desk verifies identity with the manager and issues a 15-minute recovery code.\n"
+      ],
+      "retrieved_documents": [
+        "source-1",
+        "source-2",
+        "source-3"
+      ],
+      "expected_documents": [
+        "customer_support/secondary_guide.txt"
+      ],
+      "system_faithfulness": null,
+      "requires_clarification": false,
+      "latency_ms": 17262.08,
+      "source_count": 3,
+      "observability": {
+        "source_count": 3,
+        "has_sources": true,
+        "metadata_key_count": 3,
+        "metadata_keys": [
+          "evaluation_target",
+          "n8n_attempts",
+          "n8n_retry_count"
+        ],
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      },
+      "response_metadata": {
+        "evaluation_target": "direct_n8n",
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      }
+    },
+    {
+      "id": "CUSTOMER_SUPPORT-006",
+      "application": "customer_support",
+      "question": "What should be tried when NovaHub is offline?",
+      "ground_truth": "Verify power, restart the router, move the device within eight metres of the access point, and collect the diagnostic code if it remains offline.",
+      "reference_contexts": [
+        "If NovaHub shows offline, verify power, restart the router, and move the device within eight metres of the access point. If still offline, collect the diagnostic code."
+      ],
+      "expected_sources": [
+        {
+          "document": "customer_support/secondary_guide.txt",
+          "section": "Offline status"
+        }
+      ],
+      "category": "procedural",
+      "answerable": true,
+      "tags": [
+        "customer_support",
+        "procedural"
+      ],
+      "answer": "When NovaHub is offline, you should verify the power supply, restart the router, and ensure that the device is within eight metres of the access point. If it remains offline, collect the diagnostic code for further troubleshooting.",
+      "contexts": [
+        "NovaHub Troubleshooting\n\nSection: Factory reset\nTo reset NovaHub, hold the rear reset button for 10 seconds until the status light flashes amber. The reset removes local settings but does not cancel the subscription.\n\nSection: Offline status\nIf NovaHub shows offline, verify power, restart the router, and move the device within eight metres of the access point. If still offline, collect the diagnostic code.\n\nSection: Escalation\nEscalate when three resets fail, the device overheats, or a diagnostic code begins with HW-. Overheating devices must be unplugged immediately.\n",
+        "Kubernetes Workload, Network, and Storage Guide\n\nSection: Service has no endpoints\nIf a Service has no endpoints, compare the Service selector with pod labels and confirm matching pods are Ready. A typo in app labels, readiness probe failures, or selecting pods in the wrong namespace can leave the Service without usable backends.\n\nSection: DNS resolution failure\nFor DNS failures, verify CoreDNS pods are Running and Ready, inspect CoreDNS logs, test resolution from a temporary debug pod, confirm the Service name and namespace, and check NetworkPolicies that could block traffic to kube-dns.\n\nSection: NetworkPolicy isolation\nNetworkPolicy is namespace scoped and becomes restrictive for selected pods once ingress or egress policies apply. Debug by checking pod labels, namespace labels, policy podSelector, policyTypes, ports, and whether the CNI plugin enforces NetworkPolicy.\n\nSection: Ingress routing\nIngress failures should be split between DNS, load balancer, ingress controller, TLS secret, class annotation or ingressClassName, backend Service mapping, and pod readiness. Controller logs usually reveal whether the route was accepted or rejected.\n\nSection: PersistentVolumeClaim Pending\nA PersistentVolumeClaim remains Pending when no matching PersistentVolume exists or dynamic provisioning cannot satisfy the request. Check storageClassName, access modes, requested size, provisioner events, quota, and cloud-provider volume limits.\n\nSection: Volume attach or detach failure\nVolume attach and detach failures often involve stale node attachments, zone mismatch, cloud API throttling, CSI driver errors, or a previous pod still terminating. Confirm the pod node, volume zone, VolumeAttachment objects, CSI controller logs, and cloud-provider events.\n\nSection: Autoscaling mismatch\nHorizontalPodAutoscaler decisions depend on metrics availability, target utilization, resource requests, and stabilization windows. If replicas do not change, check metrics-server health, HPA conditions, pod resource requests, and whether maxReplicas has already been reached.\n\nSection: Safe production debugging\nUse kubectl debug or ephemeral containers for live inspection when possible. Avoid editing live Deployments without recording the change, avoid deleting PersistentVolumeClaims during diagnosis, and avoid collecting full environment dumps that may contain secrets.\n",
+        "Bug Triage Playbook\n\nSection: Required report fields\nEvery bug report must include a concise title, affected product and version, environment, reproduction steps, expected behavior, actual behavior, frequency, business impact, and relevant logs or screenshots. Reports containing customer data must be redacted before submission.\n\nSection: Severity S1\nSeverity S1 is reserved for a production outage, active security compromise, irreversible data loss, or a complete blocker affecting most customers with no workaround. The on-call engineer must acknowledge an S1 report within 15 minutes and open an incident channel immediately.\n\nSection: Severity S2\nSeverity S2 covers major functionality that is unavailable for multiple customers, severe performance degradation, or a high-impact defect with only a difficult workaround. The owning team must acknowledge an S2 report within 2 business hours.\n\nSection: Severity S3 and S4\nSeverity S3 covers limited-impact defects with a practical workaround and should be acknowledged within 1 business day. Severity S4 covers cosmetic problems, documentation mistakes, and low-impact enhancement requests and should be acknowledged within 3 business days.\n\nSection: Duplicate handling\nWhen a new report matches an existing issue, mark it as a duplicate, link the canonical issue, copy any new evidence to the canonical issue, and notify the reporter. Do not close the canonical issue merely because a duplicate was filed.\n\nSection: Security and privacy\nSuspected vulnerabilities must be tagged security-sensitive and moved to the restricted security queue. Secrets, access tokens, personal data, and customer payloads must never be pasted into a public issue. Replace them with redacted samples.\n\nSection: Escalation\nEscalate to the incident process when an issue meets S1 criteria, when an S2 issue affects more than 25 percent of active tenants, or when support receives five or more matching reports within 30 minutes.\n"
+      ],
+      "retrieved_documents": [
+        "source-1",
+        "source-2",
+        "source-3"
+      ],
+      "expected_documents": [
+        "customer_support/secondary_guide.txt"
+      ],
+      "system_faithfulness": null,
+      "requires_clarification": false,
+      "latency_ms": 17777.32,
+      "source_count": 3,
+      "observability": {
+        "source_count": 3,
+        "has_sources": true,
+        "metadata_key_count": 3,
+        "metadata_keys": [
+          "evaluation_target",
+          "n8n_attempts",
+          "n8n_retry_count"
+        ],
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      },
+      "response_metadata": {
+        "evaluation_target": "direct_n8n",
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      }
+    },
+    {
+      "id": "CUSTOMER_SUPPORT-007",
+      "application": "customer_support",
+      "question": "The unit overheats after repeated resets. What should support do?",
+      "ground_truth": "Unplug it immediately and escalate; overheating is an escalation condition.",
+      "reference_contexts": [
+        "Escalate when three resets fail, the device overheats, or a diagnostic code begins with HW-. Overheating devices must be unplugged immediately.",
+        "To reset NovaHub, hold the rear reset button for 10 seconds until the status light flashes amber. The reset removes local settings but does not cancel the subscription."
+      ],
+      "expected_sources": [
+        {
+          "document": "customer_support/secondary_guide.txt",
+          "section": "Escalation"
+        },
+        {
+          "document": "customer_support/secondary_guide.txt",
+          "section": "Factory reset"
+        }
+      ],
+      "category": "multi_hop",
+      "answerable": true,
+      "tags": [
+        "customer_support",
+        "multi_hop"
+      ],
+      "answer": "If the NovaHub unit overheats after repeated resets, support should immediately unplug the device, as per the escalation guidelines in the troubleshooting section.",
+      "contexts": [
+        "NovaHub Troubleshooting\n\nSection: Factory reset\nTo reset NovaHub, hold the rear reset button for 10 seconds until the status light flashes amber. The reset removes local settings but does not cancel the subscription.\n\nSection: Offline status\nIf NovaHub shows offline, verify power, restart the router, and move the device within eight metres of the access point. If still offline, collect the diagnostic code.\n\nSection: Escalation\nEscalate when three resets fail, the device overheats, or a diagnostic code begins with HW-. Overheating devices must be unplugged immediately.\n",
+        "Hydraulic Press Safety Guide\n\nSection: Lockout\nMaintenance inside the guarded area requires electrical and hydraulic lockout, stored-pressure release, and zero-energy verification by the technician.\n\nSection: Overheating\nStop the press when hydraulic fluid exceeds 75 degrees Celsius. Check the cooler fan and oil level, and resume only below 60 degrees Celsius.\n\nSection: Service records\nRecord operating hours, inspection findings, parts replaced, technician name, and return-to-service checks after maintenance.\n",
+        "Bug Triage Playbook\n\nSection: Required report fields\nEvery bug report must include a concise title, affected product and version, environment, reproduction steps, expected behavior, actual behavior, frequency, business impact, and relevant logs or screenshots. Reports containing customer data must be redacted before submission.\n\nSection: Severity S1\nSeverity S1 is reserved for a production outage, active security compromise, irreversible data loss, or a complete blocker affecting most customers with no workaround. The on-call engineer must acknowledge an S1 report within 15 minutes and open an incident channel immediately.\n\nSection: Severity S2\nSeverity S2 covers major functionality that is unavailable for multiple customers, severe performance degradation, or a high-impact defect with only a difficult workaround. The owning team must acknowledge an S2 report within 2 business hours.\n\nSection: Severity S3 and S4\nSeverity S3 covers limited-impact defects with a practical workaround and should be acknowledged within 1 business day. Severity S4 covers cosmetic problems, documentation mistakes, and low-impact enhancement requests and should be acknowledged within 3 business days.\n\nSection: Duplicate handling\nWhen a new report matches an existing issue, mark it as a duplicate, link the canonical issue, copy any new evidence to the canonical issue, and notify the reporter. Do not close the canonical issue merely because a duplicate was filed.\n\nSection: Security and privacy\nSuspected vulnerabilities must be tagged security-sensitive and moved to the restricted security queue. Secrets, access tokens, personal data, and customer payloads must never be pasted into a public issue. Replace them with redacted samples.\n\nSection: Escalation\nEscalate to the incident process when an issue meets S1 criteria, when an S2 issue affects more than 25 percent of active tenants, or when support receives five or more matching reports within 30 minutes.\n"
+      ],
+      "retrieved_documents": [
+        "source-1",
+        "source-2",
+        "source-3"
+      ],
+      "expected_documents": [
+        "customer_support/secondary_guide.txt",
+        "customer_support/secondary_guide.txt"
+      ],
+      "system_faithfulness": null,
+      "requires_clarification": false,
+      "latency_ms": 19286.3,
+      "source_count": 3,
+      "observability": {
+        "source_count": 3,
+        "has_sources": true,
+        "metadata_key_count": 3,
+        "metadata_keys": [
+          "evaluation_target",
+          "n8n_attempts",
+          "n8n_retry_count"
+        ],
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      },
+      "response_metadata": {
+        "evaluation_target": "direct_n8n",
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      }
+    }
+  ]
+}

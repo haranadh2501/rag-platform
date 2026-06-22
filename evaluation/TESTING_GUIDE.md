@@ -194,6 +194,36 @@ python -m evaluation.run_eval --suite-dataset --skip-ragas --allow-mock --max-ca
 
 Mock results must never be used as quality evidence.
 
+### Direct Railway n8n Evaluation
+
+Use direct n8n mode when the retrieval workflow is deployed in Railway n8n but
+the FastAPI backend is not wired to that workflow yet:
+
+```powershell
+$env:EVAL_N8N_URL = "https://<n8n-service>/webhook/<retrieval-path>"
+$env:EVAL_TENANT_ID = "<tenant-id-visible-to-ingested-docs>"
+
+python -m evaluation.run_eval --suite-dataset `
+  --n8n-url $env:EVAL_N8N_URL `
+  --skip-ragas `
+  --max-cases 3
+```
+
+The runner sends a compatibility payload with `Query`, `query`, `question`,
+`tenant_id`, case metadata, and `max_chunks`. The n8n workflow must return JSON
+that includes an answer and source/context text, either directly:
+
+```json
+{
+  "answer": "Grounded answer",
+  "sources": [{"title": "runbook.txt", "chunk_text": "Evidence excerpt"}]
+}
+```
+
+or through common n8n/LLM shapes that can be normalized. Direct n8n mode does
+not test backend auth, conversation history, tenant guards, or API response
+contracts. Run backend mode before claiming end-to-end product readiness.
+
 ## 10. Quality Gates
 
 Enable pass/fail thresholds:

@@ -1,0 +1,357 @@
+{
+  "generated_at": "2026-06-21T16:53:04.333980+00:00",
+  "summary": {
+    "case_count": 5,
+    "answerable_case_count": 4,
+    "unanswerable_case_count": 1,
+    "citation_coverage": 1.0,
+    "negative_abstention_rate": 0.0,
+    "latency_ms": {
+      "mean": 17529.798,
+      "p95": 18809.21,
+      "max": 18809.21
+    },
+    "observability": {
+      "source_return_rate": 1.0,
+      "average_sources_per_case": 3.0,
+      "metadata_coverage": 1.0,
+      "total_retry_count": 0,
+      "max_attempts": 1
+    },
+    "ragas": null,
+    "batch": {
+      "batch_index": 14,
+      "batch_size": 5,
+      "total_batches": 30,
+      "total_cases_before_batching": 148,
+      "start_position": 66,
+      "end_position": 70
+    },
+    "quality_gate": {
+      "passed": null,
+      "reason": "RAGAS scoring was skipped",
+      "checks": {}
+    },
+    "applications": {
+      "customer_support": {
+        "case_count": 2,
+        "answerable_case_count": 2,
+        "unanswerable_case_count": 0,
+        "citation_coverage": 1.0,
+        "negative_abstention_rate": 0.0,
+        "latency_ms": {
+          "mean": 16796.77,
+          "p95": 16852.24,
+          "max": 16852.24
+        },
+        "observability": {
+          "source_return_rate": 1.0,
+          "average_sources_per_case": 3.0,
+          "metadata_coverage": 1.0,
+          "total_retry_count": 0,
+          "max_attempts": 1
+        },
+        "ragas": null
+      },
+      "it_helpdesk": {
+        "case_count": 3,
+        "answerable_case_count": 2,
+        "unanswerable_case_count": 1,
+        "citation_coverage": 1.0,
+        "negative_abstention_rate": 0.0,
+        "latency_ms": {
+          "mean": 18018.483333333334,
+          "p95": 18809.21,
+          "max": 18809.21
+        },
+        "observability": {
+          "source_return_rate": 1.0,
+          "average_sources_per_case": 3.0,
+          "metadata_coverage": 1.0,
+          "total_retry_count": 0,
+          "max_attempts": 1
+        },
+        "ragas": null
+      }
+    }
+  },
+  "cases": [
+    {
+      "id": "IT_HELPDESK-006",
+      "application": "it_helpdesk",
+      "question": "What evidence belongs in a helpdesk ticket?",
+      "ground_truth": "Include the asset tag, OS, exact error, timestamp, network location, and attempted troubleshooting, but never passwords or recovery codes.",
+      "reference_contexts": [
+        "Helpdesk tickets should include the asset tag, operating system, exact error text, timestamp, network location, and troubleshooting already attempted. Passwords and recovery codes must never be attached."
+      ],
+      "expected_sources": [
+        {
+          "document": "it_helpdesk/secondary_guide.txt",
+          "section": "Ticket evidence"
+        }
+      ],
+      "category": "procedural",
+      "answerable": true,
+      "tags": [
+        "it_helpdesk",
+        "procedural"
+      ],
+      "answer": "A helpdesk ticket should include the asset tag, operating system, exact error text, timestamp, network location, and troubleshooting already attempted. Passwords and recovery codes must never be attached.",
+      "contexts": [
+        "IT Helpdesk Software Guide\n\nSection: Software installation\nStandard software is installed from Company Portal without administrator rights. Restricted software requires a manager-approved request and security review.\n\nSection: Laptop encryption\nAll company laptops must use full-disk encryption. A missing encryption status or recovery-key prompt must be reported as priority P2 and the laptop disconnected from sensitive systems.\n\nSection: Ticket evidence\nHelpdesk tickets should include the asset tag, operating system, exact error text, timestamp, network location, and troubleshooting already attempted. Passwords and recovery codes must never be attached.\n",
+        "Kubernetes Cluster Debugging Runbook\n\nSection: Knowledge base source strategy\nThe Kubernetes troubleshooting knowledge base should prioritize the official Kubernetes debugging tasks, API reference, and kubectl command reference before community blogs, practical problem repositories, Kubernetes failure stories, and post-mortems. Managed service notes for EKS, GKE, and AKS should be layered after the core Kubernetes material.\n\nSection: Initial triage packet\nEvery Kubernetes incident ticket should include the namespace, workload name and kind, affected node, image tag, recent deployment time, exact user-visible symptom, kubectl get output, kubectl describe output, relevant events, pod logs, and any recent configuration or secret changes. Secrets, tokens, and customer payloads must be redacted.\n\nSection: Pending pods\nWhen a pod remains Pending, inspect kubectl describe pod events first. Common causes are insufficient CPU or memory, unsatisfied node selectors or affinity, taints without tolerations, missing persistent volumes, and image pull secrets that are referenced but not present.\n\nSection: CrashLoopBackOff\nFor CrashLoopBackOff, compare the current container logs with kubectl logs --previous. Check the exit code, command arguments, environment variables, mounted configuration, liveness probe behavior, and whether the process exits before the readiness gate can succeed.\n\nSection: ImagePullBackOff\nImagePullBackOff usually means the kubelet cannot fetch the image. Validate the image name and tag, registry reachability, imagePullSecrets, service account permissions, and whether the registry is throttling or returning authentication failures.\n\nSection: CreateContainerConfigError\nCreateContainerConfigError commonly indicates that the pod spec references a missing ConfigMap, missing Secret, invalid key, or malformed environment variable source. Describe the pod and compare referenced names and keys with the objects in the same namespace.\n\nSection: Node pressure and evictions\nNode pressure evictions are driven by kubelet thresholds for memory, disk, PID, or ephemeral storage pressure. Inspect node conditions, eviction events, container ephemeral-storage usage, log growth, and whether requests and limits reflect actual workload behavior.\n\nSection: Control plane health\nControl-plane troubleshooting starts with kube-apiserver reachability, etcd health, scheduler and controller-manager status, certificate validity, and admission webhook latency. Avoid restarting multiple control-plane components at once unless an approved recovery runbook requires it.\n",
+        "Bug Triage Playbook\n\nSection: Required report fields\nEvery bug report must include a concise title, affected product and version, environment, reproduction steps, expected behavior, actual behavior, frequency, business impact, and relevant logs or screenshots. Reports containing customer data must be redacted before submission.\n\nSection: Severity S1\nSeverity S1 is reserved for a production outage, active security compromise, irreversible data loss, or a complete blocker affecting most customers with no workaround. The on-call engineer must acknowledge an S1 report within 15 minutes and open an incident channel immediately.\n\nSection: Severity S2\nSeverity S2 covers major functionality that is unavailable for multiple customers, severe performance degradation, or a high-impact defect with only a difficult workaround. The owning team must acknowledge an S2 report within 2 business hours.\n\nSection: Severity S3 and S4\nSeverity S3 covers limited-impact defects with a practical workaround and should be acknowledged within 1 business day. Severity S4 covers cosmetic problems, documentation mistakes, and low-impact enhancement requests and should be acknowledged within 3 business days.\n\nSection: Duplicate handling\nWhen a new report matches an existing issue, mark it as a duplicate, link the canonical issue, copy any new evidence to the canonical issue, and notify the reporter. Do not close the canonical issue merely because a duplicate was filed.\n\nSection: Security and privacy\nSuspected vulnerabilities must be tagged security-sensitive and moved to the restricted security queue. Secrets, access tokens, personal data, and customer payloads must never be pasted into a public issue. Replace them with redacted samples.\n\nSection: Escalation\nEscalate to the incident process when an issue meets S1 criteria, when an S2 issue affects more than 25 percent of active tenants, or when support receives five or more matching reports within 30 minutes.\n"
+      ],
+      "retrieved_documents": [
+        "source-1",
+        "source-2",
+        "source-3"
+      ],
+      "expected_documents": [
+        "it_helpdesk/secondary_guide.txt"
+      ],
+      "system_faithfulness": null,
+      "requires_clarification": false,
+      "latency_ms": 18809.21,
+      "source_count": 3,
+      "observability": {
+        "source_count": 3,
+        "has_sources": true,
+        "metadata_key_count": 3,
+        "metadata_keys": [
+          "evaluation_target",
+          "n8n_attempts",
+          "n8n_retry_count"
+        ],
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      },
+      "response_metadata": {
+        "evaluation_target": "direct_n8n",
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      }
+    },
+    {
+      "id": "IT_HELPDESK-007",
+      "application": "it_helpdesk",
+      "question": "A locked user also lost the old MFA phone. What timing constraints apply?",
+      "ground_truth": "The account lock lasts 30 minutes, while an identity-verified MFA recovery code is valid for 15 minutes.",
+      "reference_contexts": [
+        "Employees reset a forgotten password at access.example.test/reset. The reset link expires after 20 minutes. After five failed attempts, the account is locked for 30 minutes.",
+        "A user replacing a phone must keep the old authenticator until the new device is enrolled. If the old phone is unavailable, the service desk verifies identity with the manager and issues a 15-minute recovery code."
+      ],
+      "expected_sources": [
+        {
+          "document": "it_helpdesk/primary_guide.txt",
+          "section": "Password reset"
+        },
+        {
+          "document": "it_helpdesk/primary_guide.txt",
+          "section": "MFA device replacement"
+        }
+      ],
+      "category": "multi_hop",
+      "answerable": true,
+      "tags": [
+        "it_helpdesk",
+        "multi_hop"
+      ],
+      "answer": "If a user has a locked account due to a forgotten password and has also lost the old MFA phone, there are two timing constraints that apply: the reset link expires after 20 minutes, and the account will be locked for 30 minutes after five failed attempts. Additionally, because the old MFA phone is unavailable, the service desk issues a 15-minute recovery code after verifying identity with the manager.",
+      "contexts": [
+        "IT Helpdesk Access Guide\n\nSection: Password reset\nEmployees reset a forgotten password at access.example.test/reset. The reset link expires after 20 minutes. After five failed attempts, the account is locked for 30 minutes.\n\nSection: VPN troubleshooting\nFor VPN error 720, restart the SecureLink service, remove any saved VPN profile, and import the current profile from the IT portal. Escalate if the error remains after one retry.\n\nSection: MFA device replacement\nA user replacing a phone must keep the old authenticator until the new device is enrolled. If the old phone is unavailable, the service desk verifies identity with the manager and issues a 15-minute recovery code.\n",
+        "Customer Support Policy\n\nSection: Warranty\nThe NovaHub device has a two-year limited hardware warranty from the purchase date. Accidental damage and unauthorized repairs are excluded.\n\nSection: Returns\nUnopened products may be returned within 30 calendar days. Opened defective products require a support case number and prepaid return label.\n\nSection: Replacement SLA\nApproved in-warranty replacements ship within two business days. Expedited shipping is available only for premium support customers.\n",
+        "Data Governance Policy\n\nSection: Classification\nData is classified Public, Internal, Confidential, or Restricted. Customer identifiers, authentication data, and payment records are Restricted.\n\nSection: Retention\nSupport tickets are retained for three years. Security audit logs are retained for seven years. Expired records are deleted through the approved disposal workflow.\n\nSection: Access review\nOwners review access to Restricted data quarterly. Removed users must lose access within four hours of the approved removal request.\n"
+      ],
+      "retrieved_documents": [
+        "source-1",
+        "source-2",
+        "source-3"
+      ],
+      "expected_documents": [
+        "it_helpdesk/primary_guide.txt",
+        "it_helpdesk/primary_guide.txt"
+      ],
+      "system_faithfulness": null,
+      "requires_clarification": false,
+      "latency_ms": 17998.89,
+      "source_count": 3,
+      "observability": {
+        "source_count": 3,
+        "has_sources": true,
+        "metadata_key_count": 3,
+        "metadata_keys": [
+          "evaluation_target",
+          "n8n_attempts",
+          "n8n_retry_count"
+        ],
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      },
+      "response_metadata": {
+        "evaluation_target": "direct_n8n",
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      }
+    },
+    {
+      "id": "IT_HELPDESK-008",
+      "application": "it_helpdesk",
+      "question": "What is the company Wi-Fi password?",
+      "ground_truth": "The supplied IT helpdesk documents do not contain a Wi-Fi password.",
+      "reference_contexts": [],
+      "expected_sources": [],
+      "category": "unanswerable",
+      "answerable": false,
+      "tags": [
+        "it_helpdesk",
+        "unanswerable"
+      ],
+      "answer": "The provided context does not include information about the company Wi-Fi password.",
+      "contexts": [
+        "IT Helpdesk Access Guide\n\nSection: Password reset\nEmployees reset a forgotten password at access.example.test/reset. The reset link expires after 20 minutes. After five failed attempts, the account is locked for 30 minutes.\n\nSection: VPN troubleshooting\nFor VPN error 720, restart the SecureLink service, remove any saved VPN profile, and import the current profile from the IT portal. Escalate if the error remains after one retry.\n\nSection: MFA device replacement\nA user replacing a phone must keep the old authenticator until the new device is enrolled. If the old phone is unavailable, the service desk verifies identity with the manager and issues a 15-minute recovery code.\n",
+        "IT Helpdesk Software Guide\n\nSection: Software installation\nStandard software is installed from Company Portal without administrator rights. Restricted software requires a manager-approved request and security review.\n\nSection: Laptop encryption\nAll company laptops must use full-disk encryption. A missing encryption status or recovery-key prompt must be reported as priority P2 and the laptop disconnected from sensitive systems.\n\nSection: Ticket evidence\nHelpdesk tickets should include the asset tag, operating system, exact error text, timestamp, network location, and troubleshooting already attempted. Passwords and recovery codes must never be attached.\n",
+        "Employee Onboarding Handbook\n\nSection: First day\nNew employees report at 9:30 AM, present government identification, collect a badge, and attend the security briefing before receiving system access.\n\nSection: Mandatory training\nSecurity awareness and data privacy training must be completed within five business days. Managers receive an alert when either course is overdue.\n\nSection: Equipment\nRemote employees receive a laptop and headset by courier. Damage must be reported within 24 hours of delivery with photographs of the packaging.\n"
+      ],
+      "retrieved_documents": [
+        "source-1",
+        "source-2",
+        "source-3"
+      ],
+      "expected_documents": [],
+      "system_faithfulness": null,
+      "requires_clarification": false,
+      "latency_ms": 17247.35,
+      "source_count": 3,
+      "observability": {
+        "source_count": 3,
+        "has_sources": true,
+        "metadata_key_count": 3,
+        "metadata_keys": [
+          "evaluation_target",
+          "n8n_attempts",
+          "n8n_retry_count"
+        ],
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      },
+      "response_metadata": {
+        "evaluation_target": "direct_n8n",
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      }
+    },
+    {
+      "id": "CUSTOMER_SUPPORT-001",
+      "application": "customer_support",
+      "question": "How long is the NovaHub hardware warranty?",
+      "ground_truth": "The limited hardware warranty lasts two years from purchase.",
+      "reference_contexts": [
+        "The NovaHub device has a two-year limited hardware warranty from the purchase date. Accidental damage and unauthorized repairs are excluded."
+      ],
+      "expected_sources": [
+        {
+          "document": "customer_support/primary_guide.txt",
+          "section": "Warranty"
+        }
+      ],
+      "category": "factoid",
+      "answerable": true,
+      "tags": [
+        "customer_support",
+        "factoid"
+      ],
+      "answer": "The NovaHub hardware warranty lasts for two years from the purchase date.",
+      "contexts": [
+        "Customer Support Policy\n\nSection: Warranty\nThe NovaHub device has a two-year limited hardware warranty from the purchase date. Accidental damage and unauthorized repairs are excluded.\n\nSection: Returns\nUnopened products may be returned within 30 calendar days. Opened defective products require a support case number and prepaid return label.\n\nSection: Replacement SLA\nApproved in-warranty replacements ship within two business days. Expedited shipping is available only for premium support customers.\n",
+        "NovaHub Troubleshooting\n\nSection: Factory reset\nTo reset NovaHub, hold the rear reset button for 10 seconds until the status light flashes amber. The reset removes local settings but does not cancel the subscription.\n\nSection: Offline status\nIf NovaHub shows offline, verify power, restart the router, and move the device within eight metres of the access point. If still offline, collect the diagnostic code.\n\nSection: Escalation\nEscalate when three resets fail, the device overheats, or a diagnostic code begins with HW-. Overheating devices must be unplugged immediately.\n",
+        "Synthetic Services Agreement\n\nSection: Term\nThe agreement begins on 1 July 2026 and continues for 12 months. It renews for additional 12-month terms unless either party gives 30 days written notice.\n\nSection: Payment\nInvoices are due within 30 days. Undisputed late amounts accrue interest at one percent per month.\n\nSection: Confidentiality\nConfidential information may be used only to perform the agreement and must be protected with reasonable safeguards. The obligation survives termination for three years.\n"
+      ],
+      "retrieved_documents": [
+        "source-1",
+        "source-2",
+        "source-3"
+      ],
+      "expected_documents": [
+        "customer_support/primary_guide.txt"
+      ],
+      "system_faithfulness": null,
+      "requires_clarification": false,
+      "latency_ms": 16852.24,
+      "source_count": 3,
+      "observability": {
+        "source_count": 3,
+        "has_sources": true,
+        "metadata_key_count": 3,
+        "metadata_keys": [
+          "evaluation_target",
+          "n8n_attempts",
+          "n8n_retry_count"
+        ],
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      },
+      "response_metadata": {
+        "evaluation_target": "direct_n8n",
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      }
+    },
+    {
+      "id": "CUSTOMER_SUPPORT-002",
+      "application": "customer_support",
+      "question": "Can accidental damage be claimed under warranty?",
+      "ground_truth": "No. Accidental damage is excluded from the limited warranty.",
+      "reference_contexts": [
+        "The NovaHub device has a two-year limited hardware warranty from the purchase date. Accidental damage and unauthorized repairs are excluded."
+      ],
+      "expected_sources": [
+        {
+          "document": "customer_support/primary_guide.txt",
+          "section": "Warranty"
+        }
+      ],
+      "category": "factoid",
+      "answerable": true,
+      "tags": [
+        "customer_support",
+        "factoid"
+      ],
+      "answer": "No, accidental damage is excluded from the NovaHub device's two-year limited hardware warranty.",
+      "contexts": [
+        "Customer Support Policy\n\nSection: Warranty\nThe NovaHub device has a two-year limited hardware warranty from the purchase date. Accidental damage and unauthorized repairs are excluded.\n\nSection: Returns\nUnopened products may be returned within 30 calendar days. Opened defective products require a support case number and prepaid return label.\n\nSection: Replacement SLA\nApproved in-warranty replacements ship within two business days. Expedited shipping is available only for premium support customers.\n",
+        "Employee Onboarding Handbook\n\nSection: First day\nNew employees report at 9:30 AM, present government identification, collect a badge, and attend the security briefing before receiving system access.\n\nSection: Mandatory training\nSecurity awareness and data privacy training must be completed within five business days. Managers receive an alert when either course is overdue.\n\nSection: Equipment\nRemote employees receive a laptop and headset by courier. Damage must be reported within 24 hours of delivery with photographs of the packaging.\n",
+        "Recovery and Review\n\nSection: Rollback\nPrefer rollback when a recent deployment correlates with impact and rollback is tested. Record the deployment identifier and validation checks before execution.\n\nSection: Evidence preservation\nPreserve logs, traces, alerts, command history, and configuration snapshots. Do not edit original evidence; store analysis in a separate document.\n\nSection: Post-incident review\nA review is due within five business days for SEV-1 and SEV-2 incidents. It must include contributing factors, timeline, corrective actions, owners, and due dates.\n"
+      ],
+      "retrieved_documents": [
+        "source-1",
+        "source-2",
+        "source-3"
+      ],
+      "expected_documents": [
+        "customer_support/primary_guide.txt"
+      ],
+      "system_faithfulness": null,
+      "requires_clarification": false,
+      "latency_ms": 16741.3,
+      "source_count": 3,
+      "observability": {
+        "source_count": 3,
+        "has_sources": true,
+        "metadata_key_count": 3,
+        "metadata_keys": [
+          "evaluation_target",
+          "n8n_attempts",
+          "n8n_retry_count"
+        ],
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      },
+      "response_metadata": {
+        "evaluation_target": "direct_n8n",
+        "n8n_attempts": 1,
+        "n8n_retry_count": 0
+      }
+    }
+  ]
+}

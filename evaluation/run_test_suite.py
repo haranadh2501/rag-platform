@@ -6,7 +6,7 @@ import json
 import subprocess
 import sys
 from collections import Counter
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 
 from evaluation.generate_application_suite import (
@@ -73,7 +73,7 @@ def main() -> None:
         part for part in (test_process.stdout, test_process.stderr) if part
     )
     report = {
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now().astimezone().isoformat(),
         "passed": validation.is_valid and test_process.returncode == 0,
         "dataset": build_dataset_summary(
             validation.cases,
