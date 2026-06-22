@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import ChatAuthGuard from '../../../components/chat/ChatAuthGuard';
 import ChatLayout from '../../../components/chat/ChatLayout';
@@ -103,7 +103,7 @@ function NewChatDraft() {
   );
 }
 
-export default function NewChatPage() {
+function NewChatPageContent() {
   const searchParams = useSearchParams();
   // Clicking "New Chat" while already on /chat/new is otherwise a no-op
   // navigation (same URL), which left a finished draft's messages on
@@ -111,4 +111,12 @@ export default function NewChatPage() {
   // forces this component to remount with empty state instead of reusing
   // whatever draft/conversation was already in progress.
   return <NewChatDraft key={searchParams.get('reset') ?? 'initial'} />;
+}
+
+export default function NewChatPage() {
+  return (
+    <Suspense fallback={null}>
+      <NewChatPageContent />
+    </Suspense>
+  );
 }
