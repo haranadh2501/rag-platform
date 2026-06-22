@@ -1,0 +1,209 @@
+{
+  "name": "Ephemeral Purge (session-end signal)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "purge-ephemeral",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "wh-purge-eph",
+      "name": "Webhook /purge-ephemeral",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [
+        240,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "// n8n Function node: \"Validate\" (purge)\nconst src = ($json && $json.body) ? $json.body : $json;\nconst conversation_id = src.conversation_id;\nconst tenant_id       = src.tenant_id;\nconst token           = src.token;\n\nfor (const [k, v] of Object.entries({ conversation_id, tenant_id })) {\n  if (v === undefined || v === null || String(v).trim() === '') {\n    throw new Error(`Missing required field: ${k}`);   // -> 422\n  }\n}\n\n// Shared-secret auth for this destructive op. Operator replaces __PURGE_TOKEN__\n// at import time; until then auth is disabled (localhost-only use).\nconst EXPECTED = '__PURGE_TOKEN__';\nif (EXPECTED !== '__PURGE_TOKEN__') {\n  if (!token || String(token) !== EXPECTED) {\n    throw new Error('Invalid purge token');   // -> 401\n  }\n}\n\nreturn [{ json: { conversation_id: String(conversation_id), tenant_id: String(tenant_id) } }];"
+      },
+      "id": "validate",
+      "name": "Validate",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        440,
+        360
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "DELETE FROM ephemeral_chunks WHERE tenant_id = $1 AND conversation_id = $2 RETURNING id;",
+        "options": {
+          "queryReplacement": "={{ [$json.tenant_id, $json.conversation_id] }}"
+        }
+      },
+      "id": "delete-eph",
+      "name": "Delete ephemeral",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        640,
+        360
+      ],
+      "onError": "continueErrorOutput",
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_ME",
+          "name": "EphemeralDB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "// n8n Function node: \"Format response\" (purge)\n// DELETE ... RETURNING id runs with alwaysOutputData:true, so 0 deletions emits\n// a single empty item. Count only real rows (have id). 0 is a valid idempotent success.\nconst rows = items.filter(i => i.json && i.json.id);\nconst v = $('Validate').first().json;\nreturn [{ json: { status: 'purged', conversation_id: v.conversation_id, deleted_count: rows.length } }];"
+      },
+      "id": "format-resp",
+      "name": "Format response",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        840,
+        360
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "respond-ok",
+      "name": "Respond (success)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1040,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "// n8n Function node: \"Format Error\" (purge)\nconst j = items[0].json || {};\nconst rawErr = (j && j.error && typeof j.error === 'object') ? j.error : j;\nconst msg =\n  (rawErr && (rawErr.message || rawErr.description)) ||\n  (typeof j.error === 'string' ? j.error : null) ||\n  j.message ||\n  'Unexpected error during purge';\nconst msgStr = String(msg);\n\nconst RULES = [\n  { re: /Missing required field/i, phase: 'validation', node: 'Validate',         code: 422 },\n  { re: /Invalid purge token/i,    phase: 'auth',       node: 'Validate',         code: 401 },\n  { re: /DELETE|relation|column|ephemeral_chunks|syntax error/i, phase: 'purge', node: 'Delete ephemeral', code: 500 },\n];\nconst m = RULES.find(r => r.re.test(msgStr));\nconst phase = m ? m.phase : 'unknown';\nconst statusCode = m ? m.code : 500;\nconst errorType = statusCode >= 500 ? 'runtime' : (statusCode === 401 ? 'auth' : 'validation');\n\nlet conversation_id = null, tenant_id = null;\ntry {\n  const w = $('Webhook /purge-ephemeral').first().json;\n  const b = (w && w.body) ? w.body : w;\n  conversation_id = b.conversation_id || null; tenant_id = b.tenant_id || null;\n} catch (e) {}\n\nreturn [{ json: {\n  status: 'failed', phase, node: m ? m.node : 'unknown', errorType, statusCode, error: msgStr,\n  conversation_id, tenant_id, timestamp: new Date().toISOString(),\n}}];"
+      },
+      "id": "format-err",
+      "name": "Format Error",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        640,
+        600
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": "={{ $json.statusCode }}"
+        }
+      },
+      "id": "respond-err",
+      "name": "Respond (failure)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        840,
+        600
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook /purge-ephemeral": {
+      "main": [
+        [
+          {
+            "node": "Validate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate": {
+      "main": [
+        [
+          {
+            "node": "Delete ephemeral",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete ephemeral": {
+      "main": [
+        [
+          {
+            "node": "Format response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format response": {
+      "main": [
+        [
+          {
+            "node": "Respond (success)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Error": {
+      "main": [
+        [
+          {
+            "node": "Respond (failure)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    "rag-platform",
+    "ephemeral",
+    "purge"
+  ]
+}

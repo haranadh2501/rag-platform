@@ -1,0 +1,22 @@
+Bug Triage Playbook
+
+Section: Required report fields
+Every bug report must include a concise title, affected product and version, environment, reproduction steps, expected behavior, actual behavior, frequency, business impact, and relevant logs or screenshots. Reports containing customer data must be redacted before submission.
+
+Section: Severity S1
+Severity S1 is reserved for a production outage, active security compromise, irreversible data loss, or a complete blocker affecting most customers with no workaround. The on-call engineer must acknowledge an S1 report within 15 minutes and open an incident channel immediately.
+
+Section: Severity S2
+Severity S2 covers major functionality that is unavailable for multiple customers, severe performance degradation, or a high-impact defect with only a difficult workaround. The owning team must acknowledge an S2 report within 2 business hours.
+
+Section: Severity S3 and S4
+Severity S3 covers limited-impact defects with a practical workaround and should be acknowledged within 1 business day. Severity S4 covers cosmetic problems, documentation mistakes, and low-impact enhancement requests and should be acknowledged within 3 business days.
+
+Section: Duplicate handling
+When a new report matches an existing issue, mark it as a duplicate, link the canonical issue, copy any new evidence to the canonical issue, and notify the reporter. Do not close the canonical issue merely because a duplicate was filed.
+
+Section: Security and privacy
+Suspected vulnerabilities must be tagged security-sensitive and moved to the restricted security queue. Secrets, access tokens, personal data, and customer payloads must never be pasted into a public issue. Replace them with redacted samples.
+
+Section: Escalation
+Escalate to the incident process when an issue meets S1 criteria, when an S2 issue affects more than 25 percent of active tenants, or when support receives five or more matching reports within 30 minutes.

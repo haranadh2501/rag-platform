@@ -1,53 +1,267 @@
 """
 Admin API routes — documents, users, tenants.
-Owner: M3 (documents) + M2 (users/tenants).
+Owner: M3 (documents + tenant detail/update) · M2 (users, tenant list/create).
 """
-from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
+import logging
+import uuid
+from datetime import datetime, timedelta
 
+from pathlib import Path
+
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Response, UploadFile
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.config import settings
+from app.core.database import get_db
+from app.core.dependencies import require_role
+from app.models.models import Document, Tenant, UploadAudit, User
+from app.schemas.auth import UserList, UserOut
+from app.schemas.documents import DocumentList, DocumentOut, UrlIngestRequest
+from app.schemas.tenants import TenantOut, TenantUpdate
+from app.services import file_validator, n8n_client, storage
+
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.get("/documents", summary="List documents for current tenant")
-async def list_documents():
-    """M3: Return paginated list of documents filtered by tenant_id."""
-    raise HTTPException(status_code=501, detail="M3: implement document list")
+async def _trigger_ingest(document_id: str, tenant_id: str, source_url: str, source_type: str, title: str) -> None:
+    """Background task: call n8n ingest webhook. n8n responds via /webhooks/n8n/ingestion-status."""
+    try:
+        await n8n_client.ingest(
+            document_id=document_id,
+            tenant_id=tenant_id,
+            source_url=source_url,
+            source_type=source_type,
+            title=title,
+        )
+    except Exception:
+        logger.exception("n8n ingestion trigger failed for document %s", document_id)
+
+# MIME type → document source_type (matches openapi.yaml enum)
+_MIME_TO_SOURCE_TYPE: dict[str, str] = {
+    "application/pdf": "pdf",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+    "text/plain": "txt",
+    "image/png": "image",
+    "image/jpeg": "image",
+}
 
 
-@router.post("/documents/upload", status_code=202, summary="Upload document file")
-async def upload_document(file: UploadFile = File(...)):
-    """
-    M3: Implement:
-    1. Validate file type + size
-    2. Save to UPLOAD_DIR
-    3. INSERT into documents table (status=pending)
-    4. Call n8n_client.ingest(...)
-    5. Return DocumentOut
-    """
-    raise HTTPException(status_code=501, detail="M3: implement document upload")
+# ══════════════════════════════════════════
+# DOCUMENTS  (M3)
+# ══════════════════════════════════════════
+
+@router.get("/documents", response_model=DocumentList, summary="List documents for current tenant")
+async def list_documents(
+    status: str | None = None,
+    page: int = 1,
+    per_page: int = 20,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role("admin")),
+):
+    filters = [Document.tenant_id == current_user.tenant_id]
+    if status:
+        filters.append(Document.status == status)
+
+    total = (await db.execute(
+        select(func.count()).select_from(Document).where(*filters)
+    )).scalar() or 0
+
+    rows = (await db.execute(
+        select(Document)
+        .where(*filters)
+        .order_by(Document.created_at.desc())
+        .limit(per_page)
+        .offset((page - 1) * per_page)
+    )).scalars().all()
+
+    return DocumentList(
+        documents=[DocumentOut.model_validate(d) for d in rows],
+        total=total,
+    )
 
 
-@router.post("/documents/url", status_code=202, summary="Ingest from URL")
-async def ingest_url(request: dict):
-    """M3: Save document record + trigger n8n ingestion for URL."""
-    raise HTTPException(status_code=501, detail="M3: implement URL ingestion")
+@router.post("/documents/upload", status_code=202, response_model=DocumentOut, summary="Upload document file")
+async def upload_document(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    title: str | None = Form(None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role("admin")),
+):
+    content = await file.read()
+
+    # Validate MIME, magic bytes, and size
+    validated = file_validator.validate_upload(
+        filename=file.filename or "upload",
+        content=content,
+        declared_mime=file.content_type,
+    )
+
+    # Rate limit: max uploads per hour per tenant
+    cutoff = datetime.utcnow() - timedelta(hours=1)
+    upload_count = (await db.execute(
+        select(func.count()).select_from(UploadAudit).where(
+            UploadAudit.tenant_id == current_user.tenant_id,
+            UploadAudit.uploaded_at > cutoff,
+        )
+    )).scalar() or 0
+
+    if upload_count >= settings.MAX_UPLOADS_PER_HOUR:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Upload rate limit exceeded — max {settings.MAX_UPLOADS_PER_HOUR} uploads/hour per tenant",
+        )
+
+    # Storage quota: 1 GB per tenant
+    used_bytes = (await db.execute(
+        select(func.sum(UploadAudit.bytes)).where(
+            UploadAudit.tenant_id == current_user.tenant_id
+        )
+    )).scalar() or 0
+
+    if used_bytes + validated.size_bytes > settings.MAX_BYTES_PER_TENANT:
+        raise HTTPException(status_code=413, detail="Tenant storage quota exceeded (1 GB limit)")
+
+    # Persist file via storage backend (local path today, cloud URL later)
+    location = await storage.store_upload(validated.filename, content)
+
+    # For R2, location IS a public URL — expose it as source_url so clients can see it
+    r2_url = location if settings.STORAGE_BACKEND == "r2" else None
+
+    # Insert document record and audit entry in one transaction
+    doc = Document(
+        id=uuid.uuid4(),
+        tenant_id=current_user.tenant_id,
+        uploaded_by=current_user.id,
+        title=title or validated.filename,
+        source_type=settings.DEFAULT_SOURCE_TYPE,
+        file_path=location,
+        source_url=r2_url,
+        status="pending",
+    )
+    db.add(doc)
+    db.add(UploadAudit(tenant_id=current_user.tenant_id, bytes=validated.size_bytes))
+    await db.commit()
+    await db.refresh(doc)
+
+    # Fire n8n ingestion in the background — returns 202 immediately;
+    # n8n calls back to /webhooks/n8n/ingestion-status when processing is done.
+    # R2: store_upload already returned a public CDN URL; local: serve via download endpoint.
+    if settings.STORAGE_BACKEND == "r2":
+        source_url = location
+    else:
+        source_url = f"{settings.APP_BASE_URL}/admin/documents/{doc.id}/download"
+    background_tasks.add_task(
+        _trigger_ingest, str(doc.id), str(doc.tenant_id), source_url, doc.source_type, doc.title,
+    )
+    return DocumentOut.model_validate(doc)
 
 
-@router.get("/documents/{document_id}", summary="Get document detail")
-async def get_document(document_id: str):
-    """M3: Return single document by ID (must belong to current tenant)."""
-    raise HTTPException(status_code=501, detail="M3: implement get document")
+@router.post("/documents/url", status_code=202, response_model=DocumentOut, summary="Ingest from URL")
+async def ingest_url(
+    body: UrlIngestRequest,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role("admin")),
+):
+    doc = Document(
+        id=uuid.uuid4(),
+        tenant_id=current_user.tenant_id,
+        uploaded_by=current_user.id,
+        title=body.title or body.url,
+        source_type="url",
+        source_url=body.url,
+        status="pending",
+    )
+    db.add(doc)
+    await db.commit()
+    await db.refresh(doc)
+
+    background_tasks.add_task(
+        _trigger_ingest, str(doc.id), str(doc.tenant_id), body.url, "url", doc.title,
+    )
+    return DocumentOut.model_validate(doc)
+
+
+_SOURCE_TYPE_MIME: dict[str, str] = {
+    "pdf":   "application/pdf",
+    "docx":  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "txt":   "text/plain",
+    "image": "image/png",
+}
+
+
+@router.get("/documents/{document_id}/download", summary="Download stored document file (used by n8n)")
+async def download_document(
+    document_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    doc = await db.get(Document, document_id)
+    if doc is None or not doc.file_path:
+        raise HTTPException(status_code=404, detail="File not found")
+
+    file_path = Path(doc.file_path)
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found on disk")
+
+    media_type = _SOURCE_TYPE_MIME.get(doc.source_type, "application/octet-stream")
+    return Response(content=file_path.read_bytes(), media_type=media_type)
+
+
+@router.get("/documents/{document_id}", response_model=DocumentOut, summary="Get document detail")
+async def get_document(
+    document_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role("admin")),
+):
+    doc = await db.get(Document, document_id)
+    if doc is None:
+        raise HTTPException(status_code=404, detail="Document not found")
+    if doc.tenant_id != current_user.tenant_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+    return DocumentOut.model_validate(doc)
 
 
 @router.delete("/documents/{document_id}", status_code=204, summary="Delete document")
-async def delete_document(document_id: str):
-    """M3: Delete document + chunks from DB (cascade)."""
-    raise HTTPException(status_code=501, detail="M3: implement delete document")
+async def delete_document(
+    document_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role("admin")),
+):
+    doc = await db.get(Document, document_id)
+    if doc is None:
+        raise HTTPException(status_code=404, detail="Document not found")
+    if doc.tenant_id != current_user.tenant_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    if doc.file_path:
+        await storage.delete_upload(doc.file_path)
+
+    await db.delete(doc)
+    await db.commit()
 
 
-@router.get("/users", summary="List users in current tenant")
-async def list_users():
-    """M2: Return users filtered by tenant_id."""
-    raise HTTPException(status_code=501, detail="M2: implement user list")
+# ══════════════════════════════════════════
+# USERS  (M2)
+# ══════════════════════════════════════════
+
+@router.get("/users", response_model=UserList, summary="List users in current tenant")
+async def list_users(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role("admin")),
+):
+    """List users in the caller's tenant. Admin/super_admin only; always scoped
+    to the caller's tenant_id (super_admin sees its own tenant here — cross-tenant
+    listing lives under /admin/tenants)."""
+    result = await db.execute(
+        select(User)
+        .where(User.tenant_id == current_user.tenant_id)
+        .order_by(User.created_at)
+    )
+    users = result.scalars().all()
+    return UserList(users=[UserOut.model_validate(u) for u in users], total=len(users))
 
 
 @router.post("/users/invite", status_code=201, summary="Invite user")
@@ -55,6 +269,10 @@ async def invite_user(request: dict):
     """M2: Create user with specified role in current tenant."""
     raise HTTPException(status_code=501, detail="M2: implement user invite")
 
+
+# ══════════════════════════════════════════
+# TENANTS  (M2 — list/create · M3 — detail/update)
+# ══════════════════════════════════════════
 
 @router.get("/tenants", summary="List all tenants (super_admin only)")
 async def list_tenants():
@@ -66,3 +284,32 @@ async def list_tenants():
 async def create_tenant(request: dict):
     """M2: Create new tenant."""
     raise HTTPException(status_code=501, detail="M2: implement create tenant")
+
+
+@router.get("/tenants/{tenant_id}", response_model=TenantOut, summary="Get tenant by ID (super_admin only)")
+async def get_tenant(
+    tenant_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role("super_admin")),
+):
+    tenant = await db.get(Tenant, tenant_id)
+    if tenant is None:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+    return TenantOut.model_validate(tenant)
+
+
+@router.patch("/tenants/{tenant_id}", response_model=TenantOut, summary="Update tenant (super_admin only)")
+async def update_tenant(
+    tenant_id: uuid.UUID,
+    body: TenantUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role("super_admin")),
+):
+    tenant = await db.get(Tenant, tenant_id)
+    if tenant is None:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+    for key, value in body.model_dump(exclude_unset=True).items():
+        setattr(tenant, key, value)
+    await db.commit()
+    await db.refresh(tenant)
+    return TenantOut.model_validate(tenant)

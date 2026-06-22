@@ -1,0 +1,10 @@
+SDK and Webhook Guide
+
+Section: SDK support
+Official SDKs support Python 3.11+, Node.js 20+, and Java 17+. Older runtimes receive security fixes only until December 2026.
+
+Section: Webhook verification
+Verify the x-pay-signature header against the raw body using HMAC-SHA256. Reject events older than five minutes.
+
+Section: Pagination
+List endpoints use cursor pagination. Pass next_cursor as cursor on the following request; a null next_cursor indicates the final page.

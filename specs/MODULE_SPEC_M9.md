@@ -8,21 +8,25 @@ Next.js ChatGPT-style interface for querying the knowledge base with grounded an
 ## Day-by-Day Deliverables
 | Day | Deliverable | Done? |
 |---|---|---|
-| 1 | Wireframe chat layout. Study M3's mock response shape. | ☐ |
-| 2 | Chat layout: sidebar (conversation list) + main chat area | ☐ |
-| 2 | Message input component: textarea, send button, keyboard shortcuts | ☐ |
-| 2 | Message display: user/assistant bubbles + Markdown rendering | ☐ |
-| 3 | Source citations: collapsible panel with chunk text + page numbers + scores | ☐ |
-| 3 | Follow-up question chips (clickable → auto-fills input) | ☐ |
-| 3 | Conversation management: new chat, auto-title, load history | ☐ |
-| 4 | Wire to real `POST /chat/query` endpoint | ☐ |
-| 5 | Typing indicator (skeleton while waiting for n8n) | ☐ |
-| 5 | Dark mode + mobile responsive | ☐ |
-| 6 | Polish, search across conversations | ☐ |
+| 1 | Wireframe chat layout. Study M3's mock response shape. | ☑ |
+| 2 | Chat layout: sidebar (conversation list) + main chat area | ☑ |
+| 2 | Message input component: textarea, send button, keyboard shortcuts | ☑ |
+| 2 | Message display: user/assistant bubbles + Markdown rendering | ☑ |
+| 3 | Source citations: collapsible panel with chunk text + page numbers + scores | ☑ |
+| 3 | Follow-up question chips (clickable → auto-fills input) | ☑ |
+| 3 | Conversation management: new chat (frontend-only draft row, no `POST /chat/conversations`), load history. Auto-title is backend-owned — frontend only displays whatever `title` comes back | ☑ |
+| 4 | Wire to real `POST /chat/query` endpoint | ☑ |
+| 5 | Typing indicator (skeleton while waiting for n8n) | ☑ |
+| 5 | Dark mode (chat-scoped, see Acceptance Criteria) + mobile responsive | ☑ |
+| 6 | Polish, search across conversations | ☐ — search not implemented |
 
 ## Files Owned
 - `frontend/src/app/chat/`
 - `frontend/src/components/chat/`
+
+## Support Files (read/extend, not exclusively owned)
+- `frontend/src/lib/chat/` — Chat Portal API client (`chatApi.ts`)
+- `frontend/chat/types/` — canonical Chat Portal type contract (`chat.ts`); source of truth derived from `specs/openapi.yaml`
 
 ## Key Pages
 ```
@@ -57,6 +61,8 @@ interface ChatQueryResponse {
   }>
   follow_up_questions: string[]
   conversation_id: string
+  faithfulness: number
+  requires_clarification: boolean
   metadata: { model: string; retrieval_time_ms: number; chunks_retrieved: number }
 }
 ```
@@ -72,14 +78,18 @@ interface ChatQueryResponse {
 ```
 
 ## Acceptance Criteria
-- [ ] Message sent → answer displayed with Markdown formatting
-- [ ] Citations panel shows document title + page + excerpt (collapsible)
-- [ ] Follow-up chips appear below each answer; clicking one sends the query
-- [ ] New conversation created on first message if no conversation_id
-- [ ] Conversation history loads on sidebar
-- [ ] Typing indicator shown while waiting for response
-- [ ] Works on mobile (responsive at 375px width)
-- [ ] Dark mode toggle working
+- [x] Message sent → answer displayed with Markdown formatting
+- [x] Citations panel shows document title + page + excerpt (collapsible), rendered per assistant message
+- [x] Follow-up chips appear below the latest answer (driven by `ChatQueryResponse.follow_up_questions`, which has no per-message equivalent); clicking one sends the query
+- [x] New conversation created on first message if no conversation_id
+- [x] Conversation history loads on sidebar
+- [x] Typing indicator shown while waiting for response
+- [x] Works on mobile (responsive at 375px width)
+- [x] Dark mode toggle working for the Chat UI — `ChatThemeProvider` + `ChatThemeToggle` (`frontend/src/components/chat/`) apply a `dark` class to a wrapper `div` (not `<html>`), persisted in `localStorage`. Scoped to chat only — Admin UI still has no theme toggle, but that's not an M9 gap.
+- [x] `/chat/new` shows a temporary, non-persisted "New conversation / Draft" sidebar row before the first message is sent; no backend call happens until then.
+- [x] `useSearchParams()` usage in `/chat/new` and `/chat/[conversationId]` is wrapped in `<Suspense fallback={null}>` per Next.js's production-build requirement.
+
+> Note: items above are confirmed by code review and `tsc --noEmit`. `next build`/`dev`/`lint` could not be run in the environment this was last verified in (Node 18.16 vs. Next 14.2's required ≥18.17) — no live browser check has been performed.
 
 
 ---
@@ -99,7 +109,7 @@ interface ChatQueryResponse {
 5. `components/chat/FaithfulnessBadge.tsx`: green (≥0.85) / amber (0.7-0.85) / red (<0.7); tooltip explains "self-check score".
 
 ### Day 3 — Chat Page
-6. `app/chat/[conversationId]/page.tsx`: load history GET /chat/conversations/{id}/messages, render message list, autoscroll bottom.
+6. `app/chat/[conversationId]/page.tsx`: load history via GET /chat/conversations/{id} (response embeds `messages[]` directly — there is no separate `/messages` sub-route), render message list, autoscroll bottom.
 7. Input box at bottom: textarea + Send button (Cmd+Enter). On submit → POST /chat/query with conversation_id → append both messages.
 8. Show typing indicator (3 bouncing dots) while waiting.
 
@@ -108,7 +118,7 @@ interface ChatQueryResponse {
 10. If `requires_clarification=true`, render a warning banner above the answer and highlight the badge red.
 
 ### Day 5 — Sidebar + Polish
-11. `components/chat/Sidebar.tsx`: list conversations (GET /chat/conversations), highlight active, "New chat" → POST /chat/conversations → redirect.
+11. `components/chat/Sidebar.tsx`: list conversations (GET /chat/conversations), highlight active, "New chat" → navigate to `/chat/new`, where the first message creates the conversation via POST /chat/query with conversation_id: null (there is no POST /chat/conversations endpoint).
 12. Conversation title auto-generated from first user message (truncate 40 chars).
 13. Dark mode default; light theme toggle.
 

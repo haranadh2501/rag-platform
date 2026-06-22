@@ -100,6 +100,10 @@ python -m app.scripts.seed_admin
 14. Build `scripts/seed_admin.py`: creates 1 tenant + 1 super_admin user from env vars; idempotent.
 15. Run end-to-end: `python -m scripts.seed_admin` → `curl -X POST /auth/login` → save JWT → `curl -H "Authorization: Bearer " /auth/me`.
 
+### Fetch List of user  
+16. Implement `app/api/admin.py` endpoints: `GET /users` if tenant is present then teneant as serach paramter if not present then show pagination based list of users 
+
+
 ### Day 4-5 — Tests + Hardening
 16. `tests/test_auth.py`: login success, login wrong password (401), expired token (401), valid /me, role guard.
 17. Add slowapi rate-limit to `/auth/login` (5/min per IP).

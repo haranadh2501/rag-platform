@@ -54,8 +54,8 @@ rag-platform/
 | `backend/app/main.py`, `backend/alembic/`, `backend/scripts/` | M2 |
 | `backend/app/api/admin.py`, `backend/app/api/chat.py` | M3 |
 | `backend/app/api/webhooks.py`, `backend/app/bots/slack.py` | M4 |
-| `n8n-workflows/ingestion-pipeline.json` | M5 |
-| `n8n-workflows/retrieval-pipeline.json` | M6 |
+| `n8n-workflows/ingestion-pipeline.json`, `n8n-workflows/ingest-ephemeral.json` | M5 |
+| `n8n-workflows/retrieval-pipeline.json`, `n8n-workflows/retrieval-ephemeral.json`, `n8n-workflows/purge-ephemeral.json` | M6 |
 | `database/`, `backend/Dockerfile`, `frontend/Dockerfile` | M7 |
 | `frontend/src/app/admin/`, `frontend/src/components/admin/` | M8 |
 | `frontend/src/app/chat/`, `frontend/src/components/chat/` | M9 |
@@ -63,6 +63,7 @@ rag-platform/
 | `docs/`, `evaluation/sample-data/` | M11 |
 | `backend/app/bots/whatsapp.py`, `backend/app/bots/tenant_map.py` | M12 |
 | `backend/app/api/onboarding.py`, `frontend/src/app/onboarding/` | M13 |
+| `backend/app/bots/teams.py`, `backend/app/bots/teams_map.py`, `teams-app/` | M14 |
 
 ## Running Locally
 ```bash
@@ -90,6 +91,9 @@ npm run dev                   # http://localhost:3000
 # Open http://localhost:5678 → Workflows → Import from file
 # Import: n8n-workflows/ingestion-pipeline.json
 # Import: n8n-workflows/retrieval-pipeline.json
+# Import: n8n-workflows/ingest-ephemeral.json      (M5 — WhatsApp/chat upload, 1-hour TTL)
+# Import: n8n-workflows/retrieval-ephemeral.json   (M6 — session-scoped Q&A over ephemeral_chunks)
+# Import: n8n-workflows/purge-ephemeral.json       (M6 — session-end purge by conversation_id)
 ```
 
 ## Environment Variables (see .env.example)

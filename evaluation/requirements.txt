@@ -1,0 +1,4 @@
+# Evaluation dependencies. Install after backend/requirements.txt.
+datasets==2.19.1
+pandas==2.2.2
+ragas==0.1.10

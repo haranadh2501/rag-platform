@@ -39,7 +39,10 @@ class UserOut(BaseModel):
     )
 
     id: uuid.UUID
-    email: EmailStr
+    # Plain str (not EmailStr): synthetic identities like "wa-…@whatsapp.local"
+    # are stored for bot users, and the reserved .local TLD fails RFC email
+    # validation. Output schemas serialize stored values; they don't re-validate.
+    email: str
     role: str
     tenant_id: uuid.UUID
     is_active: bool
@@ -50,3 +53,9 @@ class LoginResponse(BaseModel):
     access_token: str = Field(examples=["eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."])
     token_type: str = "bearer"
     user: UserOut
+
+
+class UserList(BaseModel):
+    """Response for GET /admin/users — users in the current tenant + count."""
+    users: list[UserOut]
+    total: int

@@ -31,10 +31,16 @@ function LoginForm() {
     setLoading(true);
     try {
       const res = await loginApi(email.trim(), password);
-      login(res.access_token);
+      login(res.access_token, res.user);
 
       const next = searchParams.get('next');
-      router.replace(next && isSafeRedirect(next) ? next : '/admin/documents');
+      if (next && isSafeRedirect(next)) {
+        router.replace(next);
+      } else if (res.user.role === 'user') {
+        router.replace('/chat/new');
+      } else {
+        router.replace('/admin/documents');
+      }
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
         setError('Invalid email or password.');

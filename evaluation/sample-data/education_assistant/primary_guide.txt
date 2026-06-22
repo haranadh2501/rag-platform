@@ -1,0 +1,10 @@
+Machine Learning Course Guide
+
+Section: Assessment
+The final grade is 30 percent assignments, 20 percent quizzes, 20 percent midterm, and 30 percent project. A total score of 50 percent is required to pass.
+
+Section: Late work
+Assignments lose 10 percent per calendar day for up to three days. After three days, submissions are accepted only with an approved extension.
+
+Section: Project
+Projects are completed in teams of three or four. The proposal is due in week 5, checkpoint in week 9, and presentation in week 13.

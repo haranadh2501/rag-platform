@@ -33,6 +33,8 @@ class User(Base):
     hashed_password = Column(String(255), nullable=False)
     role = Column(String(50), default="user")  # super_admin | admin | user
     is_active = Column(Boolean, default=True)
+    slack_user_id = Column(String(255), unique=True, nullable=True)
+    teams_user_id = Column(String(255), unique=True, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     tenant = relationship("Tenant", back_populates="users")
@@ -61,7 +63,7 @@ class Conversation(Base):
     tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     title = Column(String(500), nullable=True)
-    channel = Column(String(50), default="web")  # web | whatsapp | slack
+    channel = Column(String(50), default="web")  # web | whatsapp | slack | teams
     created_at = Column(DateTime, default=datetime.utcnow)
 
     messages = relationship("ChatMessage", back_populates="conversation", cascade="all, delete-orphan")
@@ -112,5 +114,17 @@ class UploadAudit(Base):
 class WhatsAppTenantMap(Base):
     __tablename__ = "whatsapp_tenant_map"
     phone_number = Column(String(20), primary_key=True)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class TeamsTenantMap(Base):
+    """Azure AD tenant id (channelData.tenant.id) → platform tenant_id.
+
+    Mirrors WhatsAppTenantMap: an admin registers their Microsoft 365 tenant so
+    that messages from any user in that org resolve to the right platform tenant.
+    """
+    __tablename__ = "teams_tenant_map"
+    teams_tenant_id = Column(String(64), primary_key=True)
     tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)

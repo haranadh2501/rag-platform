@@ -1,0 +1,10 @@
+Hydraulic Press Maintenance Manual
+
+Section: Daily inspection
+Before each shift, inspect guards, hoses, fluid level, emergency stop, and visible leaks. Do not operate if a guard is missing or a hose shows exposed reinforcement.
+
+Section: Lubrication
+Lubricate guide rails every 250 operating hours with grease type GX-4. Over-lubrication can contaminate the position sensor.
+
+Section: Pressure drift
+If pressure drifts more than five percent, check fluid temperature, filter restriction, and relief-valve setting before replacing the pump.
