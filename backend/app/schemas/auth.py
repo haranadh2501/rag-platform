@@ -39,7 +39,10 @@ class UserOut(BaseModel):
     )
 
     id: uuid.UUID
-    email: EmailStr
+    # Plain str (not EmailStr): synthetic identities like "wa-…@whatsapp.local"
+    # are stored for bot users, and the reserved .local TLD fails RFC email
+    # validation. Output schemas serialize stored values; they don't re-validate.
+    email: str
     role: str
     tenant_id: uuid.UUID
     is_active: bool
