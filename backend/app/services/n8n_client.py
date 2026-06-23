@@ -139,8 +139,12 @@ async def retrieve_ephemeral(
         "max_chunks": max_chunks,
         "conversation_history": conversation_history or [],
     }
+    logger.info("[ephemeral retrieve] → URL: %s", settings.N8N_EPHEMERAL_RETRIEVE_URL)
+    logger.info("[ephemeral retrieve] → payload: %s", payload)
     async with httpx.AsyncClient(timeout=60.0) as client:
         resp = await client.post(settings.N8N_EPHEMERAL_RETRIEVE_URL, json=payload)
+        logger.info("[ephemeral retrieve] ← status: %s", resp.status_code)
+        logger.info("[ephemeral retrieve] ← body: %s", resp.text[:1000])
         resp.raise_for_status()
         return resp.json()
 

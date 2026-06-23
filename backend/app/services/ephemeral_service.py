@@ -107,11 +107,12 @@ async def handle_upload(
 
     # ── Download with Twilio Basic Auth ──────────────────────────────────────
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
             resp = await client.get(
                 media_url,
                 auth=(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN),
             )
+            logger.info("Twilio media download: status=%s url=%s", resp.status_code, media_url)
             resp.raise_for_status()
             content = resp.content
     except Exception as exc:
