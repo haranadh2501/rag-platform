@@ -23,7 +23,7 @@ export default function StatusBadge({ status, errorMessage }: StatusBadgeProps) 
         <div>
           <span className="text-sm text-red-500">✕ Failed</span>
           {errorMessage && (
-            <p className="mt-0.5 text-xs text-red-400">{errorMessage}</p>
+            <p className="mt-0.5 break-words text-xs text-red-400">{errorMessage}</p>
           )}
         </div>
       );

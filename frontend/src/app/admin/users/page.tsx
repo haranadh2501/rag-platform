@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { useAuth } from '../../../lib/authContext';
 import { listUsersApi, createUserApi } from '../../../lib/userApi';
 import { ApiError } from '../../../lib/apiClient';
@@ -77,6 +78,10 @@ function formatDate(iso: string): string {
 export default function UsersPage() {
   const { user: currentUser } = useAuth();
 
+  // UX-only RBAC guard — backend must independently enforce this restriction.
+  // Role comes from the POST /auth/login response until GET /auth/me is wired.
+  const isRestricted = currentUser?.role === 'user';
+
   // Data state
   const [users, setUsers] = useState<UserOut[]>([]);
   const [loading, setLoading] = useState(true);
@@ -95,6 +100,12 @@ export default function UsersPage() {
   const [inviteError, setInviteError] = useState<PageError | null>(null);
 
   useEffect(() => {
+    // Do not call GET /admin/users for role === 'user' — UX guard; backend enforces RBAC.
+    if (isRestricted) {
+      setLoading(false);
+      return;
+    }
+
     let cancelled = false;
 
     async function fetchUsers() {
@@ -112,7 +123,7 @@ export default function UsersPage() {
 
     void fetchUsers();
     return () => { cancelled = true; };
-  }, []);
+  }, [isRestricted]);
 
   const filteredUsers = users.filter((u) => {
     const matchesEmail = u.email.toLowerCase().includes(searchEmail.toLowerCase());
@@ -158,6 +169,32 @@ export default function UsersPage() {
     } finally {
       setInviteLoading(false);
     }
+  }
+
+  // UX guard — render before table/drawer so neither renders nor calls APIs for user role.
+  // Backend must independently reject GET /admin/users and POST /auth/register for user role.
+  if (isRestricted) {
+    return (
+      <main className="flex min-h-full flex-col items-center justify-center p-6">
+        <div className="max-w-sm text-center">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-slate-100">
+            <svg className="h-6 w-6 text-slate-400" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+            </svg>
+          </div>
+          <h1 className="text-lg font-semibold text-slate-900">Access restricted</h1>
+          <p className="mt-2 text-sm text-slate-500">
+            User management is available only to admins.
+          </p>
+          <Link
+            href="/chat/new"
+            className="mt-5 inline-block rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500"
+          >
+            Go to Chat
+          </Link>
+        </div>
+      </main>
+    );
   }
 
   return (

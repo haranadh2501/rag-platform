@@ -38,4 +38,41 @@ describe('MessageBubble', () => {
 
     expect(screen.queryByText('No citations available')).not.toBeInTheDocument();
   });
+
+  it('renders the user bubble right-aligned with a fixed indigo color', () => {
+    const message: ChatMessageOut = {
+      id: '3',
+      role: 'user',
+      content: 'Hi there',
+      sources: [],
+      faithfulness: null,
+      requires_clarification: false,
+      created_at: new Date().toISOString(),
+    };
+
+    const { container } = render(<MessageBubble message={message} />);
+
+    expect(container.firstElementChild).toHaveClass('justify-end');
+    expect(screen.getByText('Hi there').className).toContain('bg-indigo-600');
+  });
+
+  it('renders the assistant bubble left-aligned and neutral', () => {
+    const message: ChatMessageOut = {
+      id: '4',
+      role: 'assistant',
+      content: 'Here is the answer.',
+      sources: [],
+      faithfulness: 0.9,
+      requires_clarification: false,
+      created_at: new Date().toISOString(),
+    };
+
+    const { container } = render(<MessageBubble message={message} />);
+
+    expect(container.firstElementChild).toHaveClass('items-start');
+    const bubble = container.querySelector('.bg-white');
+    expect(bubble).not.toBeNull();
+    expect(bubble?.className).not.toContain('accent');
+    expect(container.querySelector('[aria-hidden="true"]')?.className).toContain('bg-slate-100');
+  });
 });

@@ -50,11 +50,11 @@ async def _mock_store(filename: str, content: bytes) -> str:
     return f"/mock/uploads/{uuid.uuid4().hex}_{filename}"
 
 
-async def _mock_ingest(document_id, tenant_id, file_path, source_type, title):
+async def _mock_ingest(document_id, tenant_id, source_url, source_type, title):
     return {"status": "mock_started"}
 
 
-async def _mock_ingest_raises(document_id, tenant_id, file_path, source_type, title):
+async def _mock_ingest_raises(document_id, tenant_id, source_url, source_type, title):
     raise RuntimeError("n8n unavailable")
 
 
@@ -673,3 +673,214 @@ async def test_ingestion_callback_failure_sets_error(client, doc_in_db):
         doc = await db.get(Document, doc_in_db["id"])
         assert doc.status == "failed"
         assert doc.error_message == "PDF parse error on page 3"
+
+
+# ═══════════════════════════════════════════
+# POST /admin/documents/upload — R2 source_url
+# ═══════════════════════════════════════════
+
+async def test_upload_r2_source_url_in_response(client, admin_user, monkeypatch):
+    """source_url in the 202 response equals the R2 public URL from store_upload."""
+    r2_url = "https://pub-test.r2.dev/abc_report.pdf"
+
+    async def _r2_store(filename: str, content: bytes) -> str:
+        return r2_url
+
+    monkeypatch.setattr(storage, "store_upload", _r2_store)
+    monkeypatch.setattr(n8n_client, "ingest", _mock_ingest)
+    monkeypatch.setattr(settings, "STORAGE_BACKEND", "r2")
+
+    r = await client.post(
+        "/admin/documents/upload",
+        files={"file": ("report.pdf", _PDF_BYTES, "application/pdf")},
+        headers={"Authorization": f"Bearer {admin_user['token']}"},
+    )
+    assert r.status_code == 202
+    assert r.json()["source_url"] == r2_url
+
+    doc_id = uuid.UUID(r.json()["id"])
+    async with AsyncSessionLocal() as db:
+        doc = await db.get(Document, doc_id)
+        if doc:
+            await db.delete(doc)
+            await db.commit()
+
+
+async def test_upload_n8n_receives_r2_url_as_source_url(client, admin_user, monkeypatch):
+    """n8n ingest background task is called with the R2 public URL as source_url."""
+    r2_url = "https://pub-test.r2.dev/uuid_report.pdf"
+    captured: list[str] = []
+
+    async def _r2_store(filename: str, content: bytes) -> str:
+        return r2_url
+
+    async def _capture_ingest(document_id, tenant_id, source_url, source_type, title):
+        captured.append(source_url)
+
+    monkeypatch.setattr(storage, "store_upload", _r2_store)
+    monkeypatch.setattr(n8n_client, "ingest", _capture_ingest)
+    monkeypatch.setattr(settings, "STORAGE_BACKEND", "r2")
+
+    r = await client.post(
+        "/admin/documents/upload",
+        files={"file": ("report.pdf", _PDF_BYTES, "application/pdf")},
+        headers={"Authorization": f"Bearer {admin_user['token']}"},
+    )
+    assert r.status_code == 202
+    assert captured == [r2_url]
+
+    doc_id = uuid.UUID(r.json()["id"])
+    async with AsyncSessionLocal() as db:
+        doc = await db.get(Document, doc_id)
+        if doc:
+            await db.delete(doc)
+            await db.commit()
+
+
+async def test_upload_local_backend_source_url_is_download_endpoint(client, admin_user, monkeypatch):
+    """With local backend, n8n source_url is the FastAPI download endpoint URL."""
+    captured: list[str] = []
+
+    async def _capture_ingest(document_id, tenant_id, source_url, source_type, title):
+        captured.append(source_url)
+
+    monkeypatch.setattr(storage, "store_upload", _mock_store)
+    monkeypatch.setattr(n8n_client, "ingest", _capture_ingest)
+    monkeypatch.setattr(settings, "STORAGE_BACKEND", "local")
+
+    r = await client.post(
+        "/admin/documents/upload",
+        files={"file": ("report.pdf", _PDF_BYTES, "application/pdf")},
+        headers={"Authorization": f"Bearer {admin_user['token']}"},
+    )
+    assert r.status_code == 202
+    doc_id = r.json()["id"]
+    assert len(captured) == 1
+    assert captured[0] == f"{settings.APP_BASE_URL}/admin/documents/{doc_id}/download"
+
+    async with AsyncSessionLocal() as db:
+        doc = await db.get(Document, uuid.UUID(doc_id))
+        if doc:
+            await db.delete(doc)
+            await db.commit()
+
+
+# ═══════════════════════════════════════════
+# POST /admin/documents/url — n8n source_url
+# ═══════════════════════════════════════════
+
+async def test_ingest_url_n8n_receives_original_url_as_source_url(client, admin_user, monkeypatch):
+    """n8n ingest is called with source_url equal to the original URL submitted."""
+    captured: list[str] = []
+
+    async def _capture_ingest(document_id, tenant_id, source_url, source_type, title):
+        captured.append(source_url)
+
+    monkeypatch.setattr(n8n_client, "ingest", _capture_ingest)
+
+    original_url = "https://en.wikipedia.org/wiki/Retrieval-augmented_generation"
+    r = await client.post(
+        "/admin/documents/url",
+        json={"url": original_url, "title": "RAG Wikipedia"},
+        headers={"Authorization": f"Bearer {admin_user['token']}"},
+    )
+    assert r.status_code == 202
+    assert captured == [original_url]
+
+    doc_id = uuid.UUID(r.json()["id"])
+    async with AsyncSessionLocal() as db:
+        doc = await db.get(Document, doc_id)
+        if doc:
+            await db.delete(doc)
+            await db.commit()
+
+
+# ═══════════════════════════════════════════
+# GET /admin/documents/{id}/download
+# ═══════════════════════════════════════════
+
+@pytest_asyncio.fixture
+async def doc_with_file(admin_user, tmp_path):
+    """Document row backed by a real file in tmp_path."""
+    file = tmp_path / "test_download.pdf"
+    file.write_bytes(_PDF_BYTES)
+
+    async with AsyncSessionLocal() as db:
+        doc = Document(
+            id=uuid.uuid4(),
+            tenant_id=admin_user["tenant_id"],
+            title="Downloadable Doc",
+            source_type="pdf",
+            file_path=str(file),
+            status="pending",
+        )
+        db.add(doc)
+        await db.commit()
+        doc_id = doc.id
+
+    yield {"id": doc_id, "file_path": str(file)}
+
+    async with AsyncSessionLocal() as db:
+        await db.execute(text("DELETE FROM documents WHERE id = :d"), {"d": doc_id})
+        await db.commit()
+
+
+async def test_download_document_200(client, doc_with_file):
+    r = await client.get(f"/admin/documents/{doc_with_file['id']}/download")
+    assert r.status_code == 200
+    assert r.content == _PDF_BYTES
+    assert "application/pdf" in r.headers["content-type"]
+
+
+async def test_download_document_no_file_path_404(client, admin_user):
+    """URL-ingested document has no stored file → 404."""
+    async with AsyncSessionLocal() as db:
+        doc = Document(
+            id=uuid.uuid4(),
+            tenant_id=admin_user["tenant_id"],
+            title="URL Doc",
+            source_type="url",
+            source_url="https://example.com/doc.pdf",
+            file_path=None,
+            status="pending",
+        )
+        db.add(doc)
+        await db.commit()
+        doc_id = doc.id
+
+    try:
+        r = await client.get(f"/admin/documents/{doc_id}/download")
+        assert r.status_code == 404
+    finally:
+        async with AsyncSessionLocal() as db:
+            await db.execute(text("DELETE FROM documents WHERE id = :d"), {"d": doc_id})
+            await db.commit()
+
+
+async def test_download_document_missing_file_404(client, admin_user):
+    """file_path set but file no longer exists on disk → 404."""
+    async with AsyncSessionLocal() as db:
+        doc = Document(
+            id=uuid.uuid4(),
+            tenant_id=admin_user["tenant_id"],
+            title="Ghost Doc",
+            source_type="pdf",
+            file_path="/nonexistent/path/ghost.pdf",
+            status="pending",
+        )
+        db.add(doc)
+        await db.commit()
+        doc_id = doc.id
+
+    try:
+        r = await client.get(f"/admin/documents/{doc_id}/download")
+        assert r.status_code == 404
+    finally:
+        async with AsyncSessionLocal() as db:
+            await db.execute(text("DELETE FROM documents WHERE id = :d"), {"d": doc_id})
+            await db.commit()
+
+
+async def test_download_document_not_found_404(client):
+    r = await client.get(f"/admin/documents/{uuid.uuid4()}/download")
+    assert r.status_code == 404

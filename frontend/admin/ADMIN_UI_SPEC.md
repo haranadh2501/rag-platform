@@ -76,44 +76,59 @@ Poll `GET /admin/documents` every 5 s for rows in `pending` or `processing` stat
 │      Max 25 MB · 20 uploads/hour                    │
 └─────────────────────────────────────────────────────┘
 ```
-- Client-side MIME + size validation before sending. Reject > 25 MB immediately.
+- Client-side extension validation (`.pdf`/`.docx`/`.txt` only) + size validation before sending. Reject > 25 MB immediately.
 - Use `XMLHttpRequest` (not `fetch`) to stream upload progress as a progress bar per file.
-- On submit: `POST /admin/documents/upload` (multipart). New row appears at table top with `pending` status.
+- On submit: `POST /admin/documents/upload` (multipart) through `apiClient`'s shared auth approach. New document appears via the same refetch used by Add by URL.
 
-**Add by URL tab** — URL field + optional Title → sends `POST /admin/documents/url` to backend via `src/lib/documentApi.ts`. "Add source" disabled when URL is invalid or request is in flight. Bearer token attached automatically by `apiClient` from the in-memory store.
+> **Upload wiring (implemented)**: `uploadDocumentApi({ file, title?, onProgress? })` in
+> `src/lib/documentApi.ts` builds a `FormData` (`file` required, `title` optional) and POSTs to
+> `${NEXT_PUBLIC_API_URL}/admin/documents/upload` via `XMLHttpRequest` (not `apiRequest`/`fetch`,
+> so `xhr.upload.onprogress` is available for the progress bar). The `Authorization: Bearer`
+> header is set manually from `getAuthToken()` — same in-memory token store `apiClient` uses, no
+> hardcoded JWT or backend URL. "Browse files" triggers a hidden `<input type="file">`; the
+> dropzone also accepts drag-and-drop. Client-side validation rejects non-`.pdf/.docx/.txt`
+> extensions and files over 25 MB before any request fires, mirroring the backend's own
+> `MAX_UPLOAD_BYTES`/MIME checks. Title is optional (unlike Add by URL, where title is required).
+> On 202 `DocumentOut`: "Upload accepted" panel, selection cleared, and the page calls the same
+> `onAccepted()` callback Add by URL uses — inserting the optimistic `pending` row and triggering
+> a refetch of `GET /admin/documents?page=1&per_page=<perPage>`. On failure: "Could not upload
+> file" panel (`aria-live="assertive"`) with a status-specific message (400/401/403/413/415/422/
+> 429/5xx/network via `classifyFileUploadError()`) plus `Technical detail: <message>` in muted
+> text; no optimistic row inserted. The amber "File upload disabled" notice has been removed.
+> Polling, delete, retry, and live chunk preview remain unimplemented/out of scope for this phase.
 
-> **Backend wiring** (`src/lib/documentApi.ts → apiRequest<DocumentOut>()`):
-> Request body: `{ url: string, title?: string }` (matches `UrlIngestRequest` in openapi.yaml).
-> Backend validates the JWT, enforces tenant isolation, and triggers the n8n ingestion pipeline
-> server-side. No direct browser → n8n call; no webhook URL in the browser bundle.
-> Response: 202 `DocumentOut` — `id`, `title`, `source_type`, `source_url`, `status`,
-> `chunk_count`, `error_message`, `created_at` all come from the backend.
+**Add by URL tab** — required URL field + required Title field → sends `POST /admin/documents/url` to backend through `apiClient` via `src/lib/documentApi.ts`. "Add source" disabled when URL is invalid, title is empty, or a request is in flight. Bearer token attached automatically by `apiClient` from the in-memory store; no hardcoded JWT or backend URL.
+
+> **Backend wiring** (`src/lib/documentApi.ts → ingestDocumentUrlApi() → apiRequest<DocumentOut>()`):
+> Request body: `{ url: string, title: string }` (UI now requires both fields; `UrlIngestRequest`
+> in openapi.yaml marks `title` optional at the schema level — frontend applies a stricter UX
+> requirement, not a contract change). Backend validates the JWT, enforces tenant isolation, and
+> triggers the n8n ingestion pipeline server-side. No direct browser → n8n call; no webhook URL in
+> the browser bundle. Response: 202 `DocumentOut` — `id`, `tenant_id`, `title`, `source_type`,
+> `source_url`, `status` (`"pending"`), `chunk_count`, `error_message`, `created_at` all come from
+> the backend.
 >
-> **Accepted-state UX** (implemented): while the request is in flight, "Add source" button
-> shows a spinner + "Submitting…" (disabled). On 202 response: "Request accepted" inline panel
+> **Accepted-state UX** (implemented): while the request is in flight, "Add source" button shows
+> a spinner + "Submitting…" (disabled). On 202 response: "Request accepted" inline panel
 > (`aria-live="polite"`) — "We have started ingesting this URL. It may take a few minutes before
-> it appears as searchable knowledge." URL and title fields cleared. The returned `DocumentOut`
-> is prepended to the document table as an optimistic row. Row starts with the backend-returned
-> status; if that is `pending`, a local `setTimeout` (1500 ms) advances it to `processing` for
-> demo feedback — this is NOT correlated with actual n8n pipeline progress. The existing
-> `pipelineStateFromDocument` helper drives the stepper automatically: pending shows stage 0
-> (uploaded) filled; processing shows the parsed_ocr stage (index 2) spinning. Row shows
-> "Status preview — live updates require GET /admin/documents polling." only while pending or
-> processing. If the current filter would hide the new row, filter auto-switches to All on
-> submit. On failure: "Could not submit URL" panel (`aria-live="assertive"`); no optimistic row
-> inserted; button re-enables. Friendly message is status-specific via `classifyUrlError()` in
-> `page.tsx`: 401 → "session expired"; 403 → "no permission"; 404 → "URL ingestion endpoint
-> not available yet — please try again after the backend URL ingestion API is deployed" (no
-> internal module names exposed to users);
-> 429 → "too many requests"; 5xx → "service trouble"; network/CORS/no-response (`TypeError`) →
-> "Could not reach the document service. Check backend availability or CORS." All cases include
-> `Technical detail: <original message>` in muted sub-text. Direct n8n browser call is not
-> part of the UI path; backend/CORS availability can block URL ingestion.
+> it appears as searchable knowledge." URL and title fields cleared. The returned `DocumentOut` is
+> prepended to the table as an optimistic row (status always `pending` per the contract — never
+> claimed as `completed`) while the page triggers a real refetch of `GET /admin/documents?page=1&per_page=<perPage>`
+> (preferred over relying solely on the optimistic row, since the list API is already wired); once
+> that refetch returns a persisted row with the same `id`, the optimistic copy is dropped. If the
+> current filter would hide the new row, filter auto-switches to All on submit. On failure: "Could
+> not submit URL" panel (`aria-live="assertive"`); no optimistic row inserted; button re-enables.
+> Friendly message is status-specific via `classifyUrlError()` in `page.tsx`: 400 → "check the URL
+> and title"; 401 → "session expired"; 403 → "no permission"; 404 → "Add by URL endpoint not
+> available yet"; 409 → "document may already exist"; 422 → "URL or title invalid"; 429 → "too many
+> requests"; 5xx → "service trouble"; network/CORS/no-response (`TypeError`) → "Could not reach the
+> document service. Check backend availability or CORS." All cases include
+> `Technical detail: <original message>` in muted sub-text. Direct n8n browser call is not part of
+> the UI path; backend/CORS availability can block URL ingestion.
 >
 > **Optimistic row does not survive page refresh.** Row never auto-completes; completed status
-> requires real backend data from `GET /admin/documents`. `GET /admin/documents` list API wiring
-> remains pending (Phase 3). `n8nIngestionApi.ts` is kept for reference but is no longer
-> imported by `documents/page.tsx`.
+> requires real backend data from `GET /admin/documents`. `n8nIngestionApi.ts` is kept for
+> reference but is no longer imported by `documents/page.tsx`.
 
 ### Storage Quota Bar
 ```
@@ -130,13 +145,53 @@ Amber at 80 %, red at 95 %. Sourced from tenant metadata.
 | 3 | Quick Start | URL | ● Pending | — | just now | — |
 | 4 | Old Policy | TXT | ✕ Failed | — | 1 day ago | Retry · Delete |
 
+> **List wiring (implemented)**: `documents/page.tsx` calls `listDocumentsApi({ page, perPage })`
+> (`src/lib/documentApi.ts` → `apiRequest<DocumentList>('GET', '/admin/documents?page=&per_page=')`)
+> on mount and whenever `page` or `perPage` changes. Bearer token is attached automatically by
+> `apiClient` — no hardcoded JWT, no direct database access. The table renders backend-returned
+> `DocumentOut[]` instead of mock data; there is no silent fallback to mock data on failure. While
+> a request is in flight, the table body shows 5 pulsing skeleton rows. On failure, a red inline
+> error panel appears above the table with a status-specific friendly message and
+> `Technical detail: <message>` in muted text (401/403/404/429/5xx/network mapped by
+> `classifyListError()`); the table area below keeps whatever was last successfully fetched (empty
+> on a first-load failure).
+
 - Filter bar: all / pending / processing / completed / failed.
-  - **Current mock**: client-side filter over `MOCK_DOCUMENTS`; no network request fired.
-  - **Live stack**: calls `GET /admin/documents?status=<value>` and re-fetches from backend.
-- Pagination: 20 rows/page (`GET /admin/documents?page=&per_page=20`).
+  - **Current state**: client-side filter over the currently fetched page of backend documents; no
+    additional network request fired per filter click. Status filtering is applied to the page
+    already in memory until backend `?status=` filtering is wired in a later phase.
+  - **Future**: calls `GET /admin/documents?status=<value>` and re-fetches from backend.
+- Pagination: client-side controls (Previous / Next / per-page selector) drive the backend's
+  paginated `GET /admin/documents?page=&per_page=` response. Default `page=1`, `perPage=20`;
+  optional per-page selector offers 10/20/50 and resets `page` to 1 on change. Range text shows
+  `"<start>-<end> of <total>"`; page text shows `"Page <page> of <totalPages>"`. Previous is
+  disabled on page 1; Next is disabled once `page * perPage >= total`.
 - "Chunks" column shows `—` while not yet `completed`.
-- Actions column: "Detail" → `/admin/documents/[id]`. "Delete" opens `ConfirmDialog`. "Retry" re-posts the same document to upload endpoint.
-- Empty state: illustration + "Upload your first document" CTA.
+- Actions column: "Detail" → `/admin/documents/[id]` for `completed`/`failed` rows (unchanged).
+  "Delete" and "Retry" remain unwired/pending.
+
+> **Responsive layout (implemented)**: the 6-column `<table>` above renders only at `md:` (≥768px)
+> and up, wrapped in its own `overflow-x-auto` scroll container as a safety net (instead of
+> clipping or pushing the page width). Below `md:`, a stacked card list (`md:hidden`) renders the
+> same `filteredDocs` data: each card shows title (`break-words`), source type, `StatusBadge`,
+> chunk count, uploaded date, `source_url` (only when present, truncated with `min-w-0 truncate`
+> inside a flex row — never shown as a bare unbroken string), and a "View detail →" link for
+> `completed`/`failed` rows (matching desktop). `PipelineStepper` itself is responsive — it renders
+> the existing horizontal stage row at `md:` and up (`hidden md:flex`) and a compact vertical
+> stage list below `md:` (`flex flex-col md:hidden`), used by both the desktop table row and the
+> mobile card, so ingestion progress never overflows horizontally. `StatusBadge`'s `error_message`
+> line uses `break-words` so long failure messages wrap instead of overflowing. The upload dropzone,
+> "Browse files", and the Upload file/Add source submit buttons are `w-full` below `sm:` and
+> `w-auto` at `sm:` and up. The pagination row stacks vertically (`flex-col`) below `sm:` and
+> returns to a single row (`sm:flex-row sm:justify-between`) at `sm:` and up. `<main>` padding is
+> `p-4` below `sm:` and `p-6` at `sm:` and up. No API behavior changed — this is layout-only.
+- Add by URL remains a separate flow from the list fetch: a successful submit still prepends a
+  local optimistic row labelled as a status preview; it is not claimed as persisted until
+  `GET /admin/documents` returns a document with the same `id` (at which point the optimistic
+  copy is dropped in favor of the persisted row).
+- 5 s polling for in-progress rows and auto-refresh remain pending (not implemented in this phase).
+- Empty state: "No documents." row when the fetched page (filtered) has no rows. The richer
+  illustration + "Upload your first document" CTA remains a future enhancement.
 
 ---
 
@@ -177,9 +232,25 @@ uploaded → validated → parsed/OCR → chunked → embedded → stored
 └──────────────────────────────────────────────────┘
 ```
 
-- Fetched via `GET /admin/documents/{document_id}`.
-- Delete button opens `ConfirmDialog`: "This will remove all N chunks from the knowledge base." On confirm: `DELETE /admin/documents/{document_id}` → redirect to `/admin/documents` with success toast.
+- Fetched via `GET /admin/documents/{document_id}` (implemented — see "Detail wiring" note below).
+- Delete button opens `ConfirmDialog`: "This will remove all N chunks from the knowledge base." On confirm: `DELETE /admin/documents/{document_id}` → redirect to `/admin/documents` with success toast. *(Remains pending — button stays disabled.)*
 - If `status === 'failed'`: show `error_message` in a red alert box above the delete button.
+
+> **Detail wiring (implemented)**: `src/app/admin/documents/[id]/page.tsx` calls
+> `getDocumentApi(params.id)` (`src/lib/documentApi.ts` →
+> `apiRequest<DocumentOut>('GET', '/admin/documents/{document_id}')`) through `apiClient` on
+> mount/route param load — Bearer token attached automatically, no hardcoded JWT or backend URL.
+> The "Detail" link on the document list (`documents/page.tsx`) already pointed at
+> `/admin/documents/{doc.id}`, matching the existing `[id]` route — no route change was needed.
+> While fetching, a pulsing skeleton replaces the page body. On failure, an inline red panel shows
+> a status-specific friendly message (400/401/403/404/429/5xx/network via `classifyDetailError()`)
+> plus `Technical detail: <message>` in muted text — no mock fallback. On success, all `DocumentOut`
+> fields render: `title`, `status` (via `StatusBadge`), `source_type`, `source_url` (rendered as a
+> link only when non-null; `—` when `null` — never a clickable link for a null value), `chunk_count`
+> (`—` unless `completed`), `error_message` (red alert when `failed`), `created_at`, `id`, and
+> `tenant_id` (shown for admin debugging). `pending`/`processing` show a blue "still in progress"
+> notice; `failed` shows the red error alert; `completed` shows the real `chunk_count`. Delete,
+> retry, live chunk preview, and polling remain pending/unimplemented.
 
 ---
 
@@ -327,7 +398,7 @@ Calls `POST /admin/users/invite` (Phase 5, blocked). On success: new row inserte
 
 All requests send `Authorization: Bearer <token>`. 401 → logout + redirect to `/login`. 429 → toast: "Upload limit reached (20/hour). Try again later."
 
-> **Auth + user context + logout wired; URL ingestion wired (demo mode) with accepted-state UX; document list/detail/file-upload remain mock.**
+> **Auth + user context + logout wired; URL ingestion, document list/pagination, document detail, and file upload all wired to the backend.**
 > `POST /auth/login` wired in `src/app/login/page.tsx` via `src/lib/authApi.ts`.
 > Login calls `useAuth().login(access_token, user)` — `authContext` stores both `access_token` and
 > the full `UserOut` (`user_context` key) in `localStorage`. Admin header shows live data from that
@@ -350,13 +421,26 @@ All requests send `Authorization: Bearer <token>`. 401 → logout + redirect to 
 > failure; direct n8n browser call is not part of the UI path; backend/CORS availability can
 > block URL ingestion.
 > Row never auto-completes; completed status requires real data from `GET /admin/documents`.
-> `GET /admin/documents` polling/list refresh remains pending (Phase 3). File upload disabled.
-> No automated test runner; verified via typecheck + browser check against live backend.
+> **`GET /admin/documents` list wiring (implemented)**: `listDocumentsApi({ page, perPage })` in
+> `src/lib/documentApi.ts` calls `apiRequest<DocumentList>('GET', '/admin/documents?page=&per_page=')`.
+> Bearer token attached automatically by `apiClient`. `documents/page.tsx` fetches on mount and on
+> every `page`/`perPage` change; renders backend `DocumentOut[]` (no mock fallback); shows a 5-row
+> pulsing skeleton while loading; shows a red inline error panel with friendly message +
+> `Technical detail:` on failure. Pagination is implemented as client-side controls (Previous/Next,
+> page-of-total display, optional 10/20/50 per-page selector that resets to page 1) driving the
+> backend's paginated response. Status filters apply to the currently fetched page only — backend
+> `?status=` filtering is a future enhancement. 5 s polling/auto-refresh for in-progress rows
+> remains pending. **File upload (implemented)**: `uploadDocumentApi()` in `src/lib/documentApi.ts`
+> POSTs multipart `FormData` to `/admin/documents/upload` via `XMLHttpRequest` (progress events),
+> Bearer token from `getAuthToken()` — see "Upload wiring" note above. Document detail
+> (`GET /admin/documents/{document_id}`) is also wired — see "Detail wiring" note further below.
+> Delete and retry remain pending.
+> No automated test runner; verified via typecheck + lint + browser check against live backend.
 > User data is localStorage-sourced only — `GET /auth/me` wiring pending.
 > `AuthGuard` protects `/admin/*` by localStorage token presence (no backend verification per request).
-> Document list, detail, file upload, delete, retry, and all user/tenant/settings pages remain
-> mock/placeholder. `apiClient` is not yet called by document pages. `401 → logout + redirect`
-> in `apiClient.ts` remains a TODO. `GET /auth/me`, role guards, and Tenants 403 remain pending.
+> Delete, retry, and all user/tenant/settings live-data pages beyond what's noted above remain
+> mock/placeholder. `401 → logout + redirect` in `apiClient.ts` remains a TODO. `GET /auth/me`,
+> role guards, and Tenants 403 remain pending.
 > No automated test runner; verified via typecheck + browser check.
 
 ---

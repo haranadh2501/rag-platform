@@ -6,6 +6,7 @@ import hashlib
 import hmac
 import json
 import logging
+import re
 from uuid import UUID
 
 import uuid as _uuid
@@ -19,19 +20,20 @@ from fastapi import (
     Request,
     Response,
 )
+from jose import jwt
 from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 from twilio.request_validator import RequestValidator
 
-from app.bots import slack, whatsapp
+from app.bots import slack, teams, whatsapp
 from app.bots.slack import SlackAPIError, SlackUserNotFoundError
 from app.core.config import settings
 from app.core.database import AsyncSessionLocal, get_db
 from app.core.dependencies import require_role
 from app.models.models import Document, User
 from app.schemas.webhook import SlackOnboardRequest, SlackOnboardResponse
-from app.services import file_validator, message_service, n8n_client, pipeline_client
+from app.services import ephemeral_service, file_validator, message_service, n8n_client, pipeline_client
 from app.services.types import MessageContext
 
 logger = logging.getLogger(__name__)
@@ -53,7 +55,7 @@ async def _handle_whatsapp_media(
     """Download, validate, and ingest ephemeral media from WhatsApp."""
     try:
         # Download with Twilio auth
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
             resp = await client.get(
                 media_url,
                 auth=(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
@@ -94,35 +96,68 @@ async def _process_whatsapp_message(
     media_url: str | None = None,
     media_type: str | None = None,
 ) -> None:
-    """Background task — runs Steps 2-8 with its own DB session."""
+    """Background task — runs with its own DB session.
+
+    Branches on ephemeral session state before falling through to the
+    existing normal pipeline. The normal pipeline path is unchanged.
+    """
     async with AsyncSessionLocal() as db:
         ctx = MessageContext(
             request_id=message_sid,
             source="whatsapp",
-            query=query or ".",  # Placeholder if only media
+            query=query or ".",
             whatsapp_from=from_number,
         )
         try:
-            # Resolve identity and find/create conversation first
             await message_service._resolve_identity(ctx, db)
-            await message_service._find_or_create_conversation(ctx, db)
 
-            # Handle media upload if present
+            session = await ephemeral_service.get_active_session(ctx.user_id, db)
+            query_lower = (query or "").strip().lower()
+
+            # ── Ephemeral commands ────────────────────────────────────────────
+            if query_lower == "/askdoc":
+                if session:
+                    await whatsapp.post_text(from_number,
+                        "⚠️ Already in ephemeral mode. /end_session to exit first.")
+                else:
+                    await ephemeral_service.start_session(ctx, db)
+                return
+
+            if query_lower == "/end_session":
+                if session:
+                    await ephemeral_service.end_session(ctx, db, session)
+                else:
+                    await whatsapp.post_text(from_number, "No active ephemeral session.")
+                return
+
+            if query_lower in message_service.RESET_COMMANDS:
+                if session:
+                    # Purge ephemeral session silently, then confirm reset
+                    await ephemeral_service.end_session(ctx, db, session, silent=True)
+                    await whatsapp.post_text(from_number, message_service.RESET_CONFIRMATION)
+                    return
+                # No active session — normal reset flow
+                await message_service._find_or_create_conversation(ctx, db)
+                await message_service._handle_reset(ctx, db)
+                return
+
+            # ── Ephemeral mode active ─────────────────────────────────────────
+            if session:
+                if media_url and media_type:
+                    await ephemeral_service.handle_upload(ctx, db, session, media_url, media_type)
+                else:
+                    await ephemeral_service.handle_query(ctx, db, session)
+                return
+
+            # ── Normal mode (unchanged) ───────────────────────────────────────
             if media_url and media_type:
-                await _handle_whatsapp_media(
-                    media_url,
-                    media_type,
-                    from_number,
-                    ctx.conversation_id
-                )
-                # If there's also a text query, process it
-                if query:
-                    await whatsapp.post_text(from_number, "🤔 Thinking...")
-                    await message_service.process_message(ctx, db)
-            elif query:
-                # Text-only message
-                await whatsapp.post_text(from_number, "🤔 Thinking...")
-                await message_service.process_message(ctx, db)
+                await whatsapp.post_text(from_number,
+                    "📎 File uploads require ephemeral mode. Send /ephemeral_ingest first.")
+                return
+
+            await whatsapp.post_text(from_number, "🤔 Thinking...")
+            await message_service._find_or_create_conversation(ctx, db)
+            await message_service.process_message(ctx, db)
 
         except message_service.IdentityResolutionError:
             await whatsapp.post_text(from_number,
@@ -193,6 +228,254 @@ async def whatsapp_webhook(
 
     # ACK immediately with empty TwiML
     return Response(content=_twiml_ack(), media_type="application/xml")
+
+
+# ── Microsoft Teams (Bot Framework) ──────────────────────────────────────────
+_TEAMS_OPENID_CONFIG = "https://login.botframework.com/v1/.well-known/openidconfiguration"
+_TEAMS_ISSUER = "https://api.botframework.com"
+_TEAMS_FILE_DOWNLOAD = "application/vnd.microsoft.teams.file.download.info"
+_EXT_MIME = {
+    "pdf": "application/pdf",
+    "doc": "application/msword",
+    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "txt": "text/plain",
+    "png": "image/png",
+    "jpg": "image/jpeg",
+    "jpeg": "image/jpeg",
+}
+
+# Cached Bot Framework signing keys: list of JWK dicts.
+_teams_jwks_cache: list[dict] | None = None
+
+
+async def _teams_signing_keys() -> list[dict]:
+    """Fetch (and cache) the Bot Framework JWKS used to sign inbound activities."""
+    global _teams_jwks_cache
+    if _teams_jwks_cache is not None:
+        return _teams_jwks_cache
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        config = (await client.get(_TEAMS_OPENID_CONFIG)).json()
+        jwks = (await client.get(config["jwks_uri"])).json()
+    _teams_jwks_cache = jwks.get("keys", [])
+    return _teams_jwks_cache
+
+
+async def _verify_teams_token(request: Request) -> bool:
+    """Validate the Bot Framework JWT in the Authorization header.
+
+    Skipped in development (mirrors the WhatsApp/Twilio dev bypass). In other
+    environments the token must be RS256-signed by the Bot Connector, issued by
+    api.botframework.com, and scoped to our MICROSOFT_APP_ID.
+    """
+    if settings.APP_ENV == "development":
+        return True
+
+    header = request.headers.get("Authorization", "")
+    if not header.startswith("Bearer "):
+        return False
+    token = header[len("Bearer "):]
+
+    try:
+        kid = jwt.get_unverified_header(token).get("kid")
+        key = next((k for k in await _teams_signing_keys() if k.get("kid") == kid), None)
+        if key is None:
+            return False
+        jwt.decode(
+            token,
+            key,
+            algorithms=["RS256"],
+            audience=settings.MICROSOFT_APP_ID,
+            issuer=_TEAMS_ISSUER,
+        )
+        return True
+    except Exception as exc:  # noqa: BLE001 — any failure is a rejected request
+        logger.warning("Teams token validation failed: %s", exc)
+        return False
+
+
+def _strip_mentions(raw_text: str) -> str:
+    """Remove Teams ``<at>Bot</at>`` mentions (incl. inner name) and HTML tags."""
+    text_ = re.sub(r"<at\b[^>]*>.*?</at>", "", raw_text or "", flags=re.DOTALL)
+    text_ = re.sub(r"<[^>]+>", "", text_)            # any remaining stray tags
+    return re.sub(r"\s+", " ", text_).strip()         # collapse whitespace
+
+
+def _extract_teams_attachment(attachments: list) -> dict | None:
+    """Return {url, mime, filename} for the first supported attachment, else None."""
+    for att in attachments:
+        content_type = att.get("contentType", "")
+        if content_type == _TEAMS_FILE_DOWNLOAD:
+            content = att.get("content") or {}
+            url = content.get("downloadUrl")
+            if not url:
+                continue
+            name = att.get("name") or "teams_upload"
+            ext = (content.get("fileType") or name.rsplit(".", 1)[-1] or "bin").lower()
+            return {
+                "url": url,
+                "mime": _EXT_MIME.get(ext, "application/octet-stream"),
+                "filename": name,
+            }
+        if content_type.startswith("image/"):
+            url = att.get("contentUrl")
+            if not url:
+                continue
+            return {
+                "url": url,
+                "mime": content_type,
+                "filename": att.get("name") or f"teams_upload.{content_type.split('/')[-1]}",
+            }
+    return None
+
+
+async def _handle_teams_media(
+    media: dict,
+    service_url: str,
+    teams_conversation_id: str,
+    conversation_id: UUID,
+) -> None:
+    """Download, validate, and ingest ephemeral media from Teams."""
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.get(media["url"])
+            resp.raise_for_status()
+            content = resp.content
+
+        validated = file_validator.validate_upload(
+            filename=media["filename"],
+            content=content,
+            declared_mime=media["mime"],
+            max_bytes=settings.MAX_TEAMS_UPLOAD_BYTES,
+        )
+
+        await n8n_client.ingest_ephemeral(
+            validated.content,
+            str(conversation_id),
+            validated.mime_type,
+        )
+        await teams.post_text(
+            service_url,
+            teams_conversation_id,
+            "Indexed ✓ — ask me anything about this file for the next 60 minutes.",
+        )
+    except HTTPException as exc:
+        await teams.post_text(service_url, teams_conversation_id, f"File upload failed: {exc.detail}")
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Teams media processing failed: %s", exc)
+        await teams.post_text(service_url, teams_conversation_id, "Sorry, failed to process your file.")
+
+
+async def _process_teams_message(
+    activity_id: str,
+    service_url: str,
+    teams_conversation_id: str,
+    teams_tenant_id: str,
+    teams_user_id: str,
+    query: str,
+    media: dict | None = None,
+) -> None:
+    """Background task — runs Steps 2-8 with its own DB session."""
+    async with AsyncSessionLocal() as db:
+        ctx = MessageContext(
+            request_id=activity_id,
+            source="teams",
+            query=query or ".",  # Placeholder if only media
+            teams_service_url=service_url,
+            teams_conversation_id=teams_conversation_id,
+            teams_tenant_id=teams_tenant_id,
+            teams_user_id=teams_user_id,
+        )
+        try:
+            # Resolve identity and find/create conversation first
+            await message_service._resolve_identity(ctx, db)
+            await message_service._find_or_create_conversation(ctx, db)
+
+            # Handle media upload if present
+            if media is not None:
+                await _handle_teams_media(
+                    media, service_url, teams_conversation_id, ctx.conversation_id
+                )
+                if query:
+                    await teams.post_text(service_url, teams_conversation_id, "🤔 Thinking...")
+                    await message_service.process_message(ctx, db)
+            elif query:
+                await teams.post_text(service_url, teams_conversation_id, "🤔 Thinking...")
+                await message_service.process_message(ctx, db)
+
+        except message_service.IdentityResolutionError:
+            await teams.post_text(
+                service_url,
+                teams_conversation_id,
+                "This Microsoft Teams organization isn't registered. "
+                "Please ask your admin to add it.",
+            )
+        except pipeline_client.PipelineError:
+            await teams.post_text(service_url, teams_conversation_id, message_service.FALLBACK_MESSAGE)
+        except Exception:  # noqa: BLE001 — never let a bg task crash silently
+            logger.exception("Teams processing failed (activity=%s)", activity_id)
+
+
+@router.post("/teams", summary="Microsoft Teams Bot Framework activity")
+async def teams_webhook(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+):
+    """Verify → ACK 200 fast; heavy work runs in a BackgroundTask."""
+    raw = await request.body()
+
+    if not await _verify_teams_token(request):
+        raise HTTPException(status_code=403, detail="Invalid Teams bot token")
+
+    body = json.loads(raw)
+
+    # Only handle user messages — ignore conversationUpdate, typing, etc.
+    if body.get("type") != "message":
+        return {"status": "ignored"}
+
+    activity_id = body.get("id")
+    query = _strip_mentions(body.get("text") or "")
+    service_url = body.get("serviceUrl")
+    conversation = body.get("conversation") or {}
+    teams_conversation_id = conversation.get("id")
+    from_ = body.get("from") or {}
+    teams_user_id = from_.get("id")
+    channel_data = body.get("channelData") or {}
+    teams_tenant_id = (channel_data.get("tenant") or {}).get("id")
+    media = _extract_teams_attachment(body.get("attachments") or [])
+
+    # Dedup on activity id (same pattern as Slack event_id / Twilio MessageSid)
+    if activity_id:
+        result = await db.execute(
+            text("INSERT INTO processed_requests (request_id) VALUES (:rid) ON CONFLICT DO NOTHING"),
+            {"rid": activity_id},
+        )
+        await db.commit()
+        if result.rowcount == 0:
+            return {"status": "duplicate"}
+
+    if not query and media is None:
+        return {"status": "empty"}
+
+    if not activity_id or not service_url or not teams_conversation_id \
+            or not teams_user_id or not teams_tenant_id:
+        logger.warning(
+            "Teams activity missing required fields: activity_id=%s tenant=%s user=%s",
+            activity_id, teams_tenant_id, teams_user_id,
+        )
+        return {"status": "ignored"}
+
+    background_tasks.add_task(
+        _process_teams_message,
+        activity_id,
+        service_url,
+        teams_conversation_id,
+        teams_tenant_id,
+        teams_user_id,
+        query,
+        media,
+    )
+    return {"status": "ok"}
 
 
 def _verify_slack_signature(raw_body: bytes, timestamp: str, signature: str) -> bool:

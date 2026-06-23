@@ -88,6 +88,76 @@ async def retrieve(
         return resp.json()
 
 
+async def ingest_ephemeral_base64(
+    tenant_id: str,
+    n8n_session_id: str,
+    source_name: str,
+    file_base64: str,
+    ttl_seconds: int = 3600,
+) -> dict:
+    """POST base64-encoded file to n8n ephemeral ingest workflow.
+
+    Retries once on 5xx. Caller wraps this in asyncio.wait_for(timeout=300).
+    """
+    payload = {
+        "conversation_id": n8n_session_id,
+        "tenant_id": tenant_id,
+        "source_name": source_name,
+        "file_base64": file_base64,
+        "ttl_seconds": ttl_seconds,
+    }
+    last_exc: Exception | None = None
+    for attempt in range(2):
+        try:
+            async with httpx.AsyncClient(timeout=310.0) as client:
+                resp = await client.post(settings.N8N_EPHEMERAL_INGEST_WF_URL, json=payload)
+                if resp.status_code >= 500 and attempt == 0:
+                    last_exc = httpx.HTTPStatusError(
+                        f"5xx on attempt {attempt}", request=resp.request, response=resp
+                    )
+                    logger.warning("[n8n ephemeral ingest] 5xx on attempt 0, retrying: %s", resp.text[:200])
+                    continue
+                resp.raise_for_status()
+                return resp.json()
+        except httpx.HTTPStatusError as exc:
+            last_exc = exc
+    raise last_exc
+
+
+async def retrieve_ephemeral(
+    query: str,
+    tenant_id: str,
+    n8n_session_id: str,
+    conversation_history: list[dict] | None = None,
+    max_chunks: int = 5,
+) -> dict:
+    """POST query to n8n ephemeral retrieve endpoint, scoped to this session's docs."""
+    payload = {
+        "query": query,
+        "tenant_id": tenant_id,
+        "conversation_id": n8n_session_id,
+        "max_chunks": max_chunks,
+        "conversation_history": conversation_history or [],
+    }
+    logger.info("[ephemeral retrieve] → URL: %s", settings.N8N_EPHEMERAL_RETRIEVE_URL)
+    logger.info("[ephemeral retrieve] → payload: %s", payload)
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        resp = await client.post(settings.N8N_EPHEMERAL_RETRIEVE_URL, json=payload)
+        logger.info("[ephemeral retrieve] ← status: %s", resp.status_code)
+        logger.info("[ephemeral retrieve] ← body: %s", resp.text[:1000])
+        resp.raise_for_status()
+        return resp.json()
+
+
+async def purge_ephemeral(tenant_id: str, n8n_session_id: str) -> dict:
+    """POST to n8n ephemeral purge to wipe session data immediately."""
+    payload = {"conversation_id": n8n_session_id, "tenant_id": tenant_id}
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        resp = await client.post(settings.N8N_EPHEMERAL_PURGE_URL, json=payload)
+        resp.raise_for_status()
+        return resp.json()
+
+
 async def ingest_ephemeral(
     content: bytes,
     conversation_id: str,

@@ -1,0 +1,25 @@
+Managed Kubernetes Failure Notes
+
+Section: EKS networking faults
+On EKS, pod networking failures often trace to AWS VPC CNI IP exhaustion, subnet address shortage, security group rules, route table drift, or IAM permissions for the CNI daemonset. Check aws-node logs and available subnet IP addresses before recreating nodes.
+
+Section: EKS IAM authentication
+EKS authentication failures can come from aws-auth ConfigMap drift, IAM role mapping mistakes, expired client credentials, or API server authentication webhook latency. Verify the caller identity and the aws-auth role or user mapping before changing RBAC.
+
+Section: GKE Autopilot scheduling limits
+On GKE Autopilot, scheduling can fail when requested resources, privileged settings, hostPath mounts, or unsupported security contexts violate Autopilot constraints. Review the admission error and adjust the workload rather than assuming node capacity is missing.
+
+Section: GKE logging agent pressure
+GKE logging agent anomalies can amplify node disk pressure when log volume spikes. Inspect container log growth, node filesystem usage, logging agent status, and whether noisy workloads need log sampling or rate reduction.
+
+Section: AKS Azure CNI routing
+On AKS with Azure CNI, pod connectivity issues may stem from subnet IP exhaustion, network security group rules, user-defined routes, or route propagation delays. Compare affected node subnets, pod IP allocation, and Azure network policy enforcement.
+
+Section: AKS managed identity delay
+AKS managed identity synchronization delays can cause controllers or CSI drivers to receive authorization failures immediately after identity or role-assignment changes. Confirm the role assignment, wait for propagation, and retry the controller action before rotating credentials.
+
+Section: Post-mortem pattern signals
+Kubernetes post-mortems often show cascades where a small configuration change triggers retries, log floods, DNS timeouts, node pressure, and evictions. The evaluation should reward answers that identify the first failing component and the downstream blast radius.
+
+Section: Escalation boundary
+Escalate to platform or cloud-provider support when control-plane APIs are unreachable across multiple clients, managed add-ons fail after rollback, cloud volume operations are stuck beyond the provider SLA, or multiple nodes in different zones become NotReady without a local change.

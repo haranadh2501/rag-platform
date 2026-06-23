@@ -8,8 +8,12 @@ Locked model stack (see ARCHITECTURE.md):
     Hard fallback: DeepSeek V4 Pro
     Insurance    : OpenAI ($5 prepaid + $10 hard cap)
 """
+from pathlib import Path
 from typing import List
 from pydantic_settings import BaseSettings
+
+# Root .env is one level above the backend/ directory
+_ENV_FILE = Path(__file__).resolve().parent.parent.parent.parent / ".env"
 
 
 class Settings(BaseSettings):
@@ -77,6 +81,15 @@ class Settings(BaseSettings):
     SLACK_BOT_TOKEN: str = ""
     SLACK_SIGNING_SECRET: str = ""
 
+    # ── Microsoft Teams (Bot Framework) ──────────────────────────────
+    # From the Azure Bot registration. APP_PASSWORD is the client secret.
+    # APP_TENANT_ID: set for a single-tenant bot; leave blank for multi-tenant
+    # (uses the botframework.com token endpoint).
+    MICROSOFT_APP_ID: str = ""
+    MICROSOFT_APP_PASSWORD: str = ""
+    MICROSOFT_APP_TENANT_ID: str = ""
+    MAX_TEAMS_UPLOAD_BYTES: int = 10_485_760         # 10 MB — Teams ephemeral upload
+
     # ── Cloudflare R2 (file storage) ─────────────────────────────────
     R2_ACCOUNT_ID: str = "c248caff93b57e6b28730410a4e34ca3"
     R2_ACCESS_KEY_ID: str = ""
@@ -89,9 +102,17 @@ class Settings(BaseSettings):
     STORAGE_BACKEND: str = "local"     # "local" | "gcs" | "s3" — see PLAN_M3 §6
     MAX_UPLOAD_BYTES: int = 26_214_400               # 25 MB
     MAX_WHATSAPP_UPLOAD_BYTES: int = 10_485_760      # 10 MB
+    MAX_WHATSAPP_EPHEMERAL_UPLOAD_BYTES: int = 9_437_184   # 9 MB — ephemeral session cap
+
+    # ── n8n Ephemeral (WhatsApp ephemeral sessions) ──────────────────
+    N8N_EPHEMERAL_INGEST_WF_URL: str = "https://n8n-production-c637.up.railway.app/webhook/ingest-ephemeral-wf"
+    N8N_EPHEMERAL_RETRIEVE_URL: str = "https://n8n-production-c637.up.railway.app/webhook/retrieve-ephemeral"
+    N8N_EPHEMERAL_PURGE_URL: str = "https://n8n-production-c637.up.railway.app/webhook/purge-ephemeral"
+
     MAX_PAGES_PER_DOC: int = 500
     MAX_BYTES_PER_TENANT: int = 1_073_741_824        # 1 GB
     MAX_UPLOADS_PER_HOUR: int = 20
+    DEFAULT_SOURCE_TYPE: str = "url"   # fallback when MIME type is unmapped
     ALLOWED_MIME_TYPES: str = (
         "application/pdf,"
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document,"
@@ -108,12 +129,16 @@ class Settings(BaseSettings):
     SEED_TENANT_NAME: str = "IISc Demo"
     SEED_TENANT_SLUG: str = "iisc-demo"
 
+    # ── Pipeline (M4) ────────────────────────────────────────────────
+    PIPELINE_URL: str = "http://localhost:8000/mock/pipeline"
+    PIPELINE_TIMEOUT_SECONDS: float = 120.0
+
     # ── MCP server ───────────────────────────────────────────────────
     MCP_ENABLED: bool = True
     MCP_API_KEY: str = "change-me-mcp-shared-secret"
 
     class Config:
-        env_file = ".env"
+        env_file = str(_ENV_FILE)
         case_sensitive = True
         extra = "ignore"   # tolerate extra env vars without crashing
 

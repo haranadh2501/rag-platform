@@ -235,6 +235,25 @@ async def test_slack_duplicate_event_id_noop(client, slack_user, monkeypatch):
         await db.commit()
 
 
+async def test_slack_unknown_team_identity_failure_noop(client, slack_user, monkeypatch):
+    """team_id not in slack_workspace_map → IdentityResolutionError, logged, no reply, 200 ack."""
+    posted = []
+    monkeypatch.setattr(slack, "post_reply", lambda *a: posted.append(1) or _noop())
+    monkeypatch.setattr(slack, "post_text", lambda *a: posted.append(1) or _noop())
+    monkeypatch.setattr(pipeline_client, "call_pipeline", _mock_pipeline)
+
+    raw, headers = _signed({
+        "type": "event_callback",
+        "event_id": f"Ev{uuid.uuid4().hex[:8]}",
+        "team_id": f"T{uuid.uuid4().hex[:8]}",  # not registered in slack_workspace_map
+        "event": {"user": slack_user["slack_user_id"], "text": "hello", "channel": "C1", "ts": "1.1"},
+    })
+    r = await client.post("/webhooks/slack/events", content=raw, headers=headers)
+    assert r.status_code == 200
+    assert posted == []  # no reply attempted
+    assert await _count_messages(slack_user["user_id"]) == 0
+
+
 async def _noop():
     return None
 

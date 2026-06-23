@@ -9,7 +9,7 @@
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"input\": [\"={{ $('Webhook').item.json.body.query }}\"],\n  \"model\": \"voyage-4-large\"\n}",
+        "jsonBody": "={\n  \"input\": [\"={{ ($('Webhook').item.json.body.current_message || $('Webhook').item.json.body.query) }}\"],\n  \"model\": \"voyage-4-large\"\n}",
         "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
@@ -30,7 +30,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT id, content, metadata\nFROM document_chunks\nORDER BY embedding <=> ('[' || '{{ $('Embed Query').item.json.data[0].embedding.join(',') }}' || ']')::vector\nLIMIT 10;",
+        "query": "SELECT id, content, metadata\nFROM document_chunks\nWHERE tenant_id = '{{ $('Webhook').item.json.body.tenant_id }}'::uuid\nORDER BY embedding <=> ('[' || '{{ $('Embed Query').item.json.data[0].embedding.join(',') }}' || ']')::vector\nLIMIT 10;",
         "options": {}
       },
       "type": "n8n-nodes-base.postgres",
@@ -57,7 +57,7 @@
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"query\": \"={{ $('Webhook').item.json.body.query }}\",\n  \"documents\": {{ JSON.stringify($('Vector Search').all().map(item => item.json.content)) }},\n  \"model\": \"rerank-2.5\",\n  \"top_k\": 3\n}",
+        "jsonBody": "={\n  \"query\": \"={{ ($('Webhook').item.json.body.current_message || $('Webhook').item.json.body.query) }}\",\n  \"documents\": {{ JSON.stringify($('Vector Search').all().map(item => item.json.content)) }},\n  \"model\": \"rerank-2.5\",\n  \"top_k\": 3\n}",
         "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
@@ -83,7 +83,7 @@
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"model\": \"deepseek-chat\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are a precise document assistant. Answer ONLY using the provided context. If the answer is not in the context, say 'I don't have enough information to answer this.' Never make up information. Be concise and accurate.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": {{ JSON.stringify('Context: ' + $('Vector Search').all().map(item => item.json.content).join(' | ') + ' Question: ' + $('Webhook').item.json.body.query) }}\n    }\n  ]\n}",
+        "jsonBody": "={\n  \"model\": \"deepseek-v4-flash\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are a precise document assistant. Answer ONLY using the provided context. If the answer is not in the context, say 'I don't have enough information to answer this.' Never make up information. Be concise and accurate.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": {{ JSON.stringify('Context: ' + $('Vector Search').all().map(item => item.json.content).join(' | ') + ' Question: ' + ($('Webhook').item.json.body.current_message || $('Webhook').item.json.body.query)) }}\n    }\n  ]\n}",
         "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
@@ -111,7 +111,7 @@
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"contents\": [\n    {\n      \"parts\": [\n        {\n          \"text\": {{ JSON.stringify('You are a fact-checker. Given this context and answer, reply with only PASS or FAIL. Context: ' + $('Vector Search').all()[0].json.content + ' Question: ' + $('Webhook').item.json.body.query + ' Answer: ' + $('DeepSeek Generate').item.json.choices[0].message.content) }}\n        }\n      ]\n    }\n  ]\n}",
+        "jsonBody": "={\n  \"contents\": [\n    {\n      \"parts\": [\n        {\n          \"text\": {{ JSON.stringify('You are a fact-checker. Given this context and answer, reply with only PASS or FAIL. Context: ' + $('Vector Search').all()[0].json.content + ' Question: ' + ($('Webhook').item.json.body.current_message || $('Webhook').item.json.body.query) + ' Answer: ' + $('DeepSeek Generate').item.json.choices[0].message.content) }}\n        }\n      ]\n    }\n  ]\n}",
         "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
@@ -496,7 +496,7 @@
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={\n  \"answer\": \"{{ $json.answer }}\",\n  \"model_used\": \"{{ $json.model_used }}\"\n}",
+        "responseBody": "={{ ({ answer: $json.answer, model_used: $json.model_used, sources: $('Vector Search').all().map(i => ({ chunk_text: i.json.content, title: (i.json.metadata && i.json.metadata.title) ? i.json.metadata.title : null })) }) }}",
         "options": {}
       },
       "type": "n8n-nodes-base.respondToWebhook",

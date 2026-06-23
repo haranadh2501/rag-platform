@@ -27,7 +27,7 @@ export default function MessageInput({ onSubmit, disabled = false }: MessageInpu
   }
 
   return (
-    <div className="sticky bottom-0 z-10 flex items-end gap-2 border-t border-slate-200 bg-white px-3 py-3 sm:px-4">
+    <div className="sticky bottom-0 z-10 flex items-end gap-2 border-t border-slate-200 bg-white px-3 py-3 sm:px-4 dark:border-slate-800 dark:bg-slate-900">
       <textarea
         value={value}
         onChange={(e) => setValue(e.target.value)}
@@ -35,14 +35,14 @@ export default function MessageInput({ onSubmit, disabled = false }: MessageInpu
         disabled={disabled}
         rows={1}
         placeholder="Ask anything about your knowledge base…"
-        className="flex-1 resize-none rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-60"
+        className="flex-1 resize-none rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:border-indigo-600 focus:outline-none focus:ring-1 focus:ring-indigo-600 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500"
       />
       <button
         type="button"
         onClick={handleSubmit}
         disabled={!canSubmit}
         aria-disabled={!canSubmit}
-        className="shrink-0 rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
+        className="shrink-0 rounded-full bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-40"
       >
         Send
       </button>

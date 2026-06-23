@@ -1,0 +1,10 @@
+Incident Response Runbook
+
+Section: Declaration
+Declare an incident when customer impact is ongoing, security is suspected, or recovery needs coordination across two or more teams. The incident commander owns decisions and timeline updates.
+
+Section: First fifteen minutes
+Within 15 minutes, create the incident channel, assign commander and scribe, record impact, freeze risky deployments, and publish an initial internal update.
+
+Section: Customer updates
+For severity SEV-1, publish customer updates every 30 minutes. For SEV-2, update every 60 minutes while impact continues.

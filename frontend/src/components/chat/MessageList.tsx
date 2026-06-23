@@ -7,7 +7,7 @@ interface MessageListProps {
 
 export default function MessageList({ messages }: MessageListProps) {
   return (
-    <div className="flex flex-1 flex-col gap-3 overflow-y-auto px-4 py-4">
+    <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-3 py-4 sm:px-4">
       {messages.map((message) => (
         <MessageBubble key={message.id} message={message} />
       ))}

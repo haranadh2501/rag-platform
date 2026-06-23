@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import ChatAuthGuard from '../../../components/chat/ChatAuthGuard';
 import ChatLayout from '../../../components/chat/ChatLayout';
 import MessageList from '../../../components/chat/MessageList';
@@ -101,31 +101,33 @@ export default function ConversationPage({ params }: ConversationPageProps) {
   const hasMessages = messages.length > 0;
 
   return (
-    <ChatAuthGuard>
-      <ChatLayout conversationId={conversationId}>
-        <div className="flex flex-1 flex-col">
-          {isLoadingHistory && <TypingIndicator />}
+    <Suspense fallback={null}>
+      <ChatAuthGuard>
+        <ChatLayout conversationId={conversationId}>
+          <div className="flex flex-1 flex-col">
+            {isLoadingHistory && <TypingIndicator />}
 
-          {!isLoadingHistory && historyError && <ChatErrorState onRetry={loadHistory} />}
+            {!isLoadingHistory && historyError && <ChatErrorState onRetry={loadHistory} />}
 
-          {!isLoadingHistory && !historyError && (
-            <>
-              {hasMessages ? <MessageList messages={messages} /> : <ChatEmptyState onSelectPrompt={handleSend} />}
+            {!isLoadingHistory && !historyError && (
+              <>
+                {hasMessages ? <MessageList messages={messages} /> : <ChatEmptyState onSelectPrompt={handleSend} />}
 
-              {lastResponse && hasMessages && (
-                <div className="-mt-1 px-4 pb-4">
-                  <FollowUpChips questions={lastResponse.follow_up_questions} onSelect={handleSend} />
-                </div>
-              )}
+                {lastResponse && hasMessages && (
+                  <div className="-mt-1 px-4 pb-4">
+                    <FollowUpChips questions={lastResponse.follow_up_questions} onSelect={handleSend} />
+                  </div>
+                )}
 
-              {isSending && <TypingIndicator />}
-              {hasError && <ChatErrorState onRetry={handleRetry} />}
+                {isSending && <TypingIndicator />}
+                {hasError && <ChatErrorState onRetry={handleRetry} />}
 
-              <MessageInput onSubmit={handleSend} disabled={isSending} />
-            </>
-          )}
-        </div>
-      </ChatLayout>
-    </ChatAuthGuard>
+                <MessageInput onSubmit={handleSend} disabled={isSending} />
+              </>
+            )}
+          </div>
+        </ChatLayout>
+      </ChatAuthGuard>
+    </Suspense>
   );
 }

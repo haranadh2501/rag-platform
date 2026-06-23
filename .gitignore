@@ -39,3 +39,4 @@ postgres_data/
 docs/_build/
 
 # Developer-specific
+temp/

@@ -54,7 +54,7 @@
 
 ## Documents Page — Upload
 
-> **URL ingestion wired (demo mode) with accepted-state UX; file upload remains disabled.**
+> **URL ingestion wired with accepted-state UX; file upload also wired — see "File upload" below.**
 > Add by URL tab posts `{ document_id, tenant_id, source_type: "url", source_url, title }` to
 > `NEXT_PUBLIC_N8N_INGEST_WEBHOOK_URL` via `src/lib/n8nIngestionApi.ts`.
 > On submit: button shows spinner + "Submitting…" (disabled). On accepted response: "Request
@@ -65,44 +65,107 @@
 > filter auto-switches to All. On failure: "Could not submit URL" panel with error detail in muted
 > sub-text (aria-live="assertive"); button returns to normal. Optimistic row is local/demo-only —
 > never persisted, does not survive page refresh, does NOT confirm successful ingestion. Actual
-> persistence depends on n8n writing to the backend DB. `GET /admin/documents` list API wiring
-> remains pending (Phase 3). File upload disabled. No automated test runner.
+> persistence depends on n8n writing to the backend DB. `GET /admin/documents` list API wiring is
+> implemented — see "Documents Page — List & Pagination" below. File upload is wired — see "File upload" criteria below. No automated test runner.
 
 **Add by URL — verifiable via `npm run dev` + live backend:**
 - [x] Invalid URL (e.g. `not-a-url`) → "Add source" button disabled; no network request *(verifiable via `npm run dev`)*
 - [x] Partially typed URL → inline "Must be a valid http:// or https:// URL" error shown *(verifiable via `npm run dev`)*
-- [ ] Valid URL → clicking "Add source" shows spinner + "Submitting…" and sends `POST /admin/documents/url` to backend *(requires live backend + .env.local `NEXT_PUBLIC_API_URL`)*
-- [ ] Request includes `Authorization: Bearer <token>` header; no direct n8n request appears in browser Network tab *(requires live backend + browser DevTools Network)*
-- [ ] Backend accepts request → "Request accepted" panel appears; URL and title fields cleared; row inserted from returned `DocumentOut` fields *(requires live backend)*
-- [ ] Invalid/expired token → backend returns 401 → "Unauthorized" error shown in error panel; no row inserted *(requires live backend)*
-- [x] Accepted URL appears as a row at the top of the document table using backend-returned `id`, `title`, `source_type`, `status`, `created_at` *(verifiable via `npm run dev` with mock response)*
-- [x] If backend returns `pending`, row shows stage-0 pipeline stepper; after ~1500 ms row advances locally to Processing *(verifiable via `npm run dev`)*
-- [x] Optimistic row labelled "Status preview — live updates require GET /admin/documents polling." only while pending/processing *(verifiable via `npm run dev`)*
+- [x] Empty Title with a valid URL → "Add source" button stays disabled; "Required." hint shown; no network request *(verifiable via `npm run dev`)*
+- [x] Submit URL + title → clicking "Add source" sends `POST /admin/documents/url` with `{ url, title }` through `apiClient` (`ingestDocumentUrlApi()`); no hardcoded JWT or backend URL *(requires live backend + `.env.local` `NEXT_PUBLIC_API_URL` — verifiable via browser DevTools Network tab)*
+- [x] Form shows loading state while submitting — spinner + "Submitting…"; button disabled for the duration of the request *(verifiable via `npm run dev`)*
+- [x] Request includes `Authorization: Bearer <token>` header attached automatically by `apiClient`; no direct n8n request appears in browser Network tab *(requires live backend + browser DevTools Network)*
+- [x] Successful response (202 `DocumentOut`, `status: "pending"`) shows a `pending` document — never claimed as `completed` — and "Request accepted" panel appears; URL and title fields cleared *(requires live backend)*
+- [ ] Invalid/expired token → backend returns 401 → "Your session expired. Please sign in again." shown in error panel; no row inserted *(requires live backend)*
+- [x] Accepted URL appears as a row at the top of the document table using backend-returned `id`, `title`, `source_type`, `status`, `created_at`, while a refetch of `GET /admin/documents?page=1&per_page=<perPage>` runs in the background and replaces it with the persisted row once it resolves *(verifiable via `npm run dev` with mock response)*
+- [x] If backend returns `pending`, row shows stage-0 pipeline stepper; after ~1500 ms the (still-optimistic) row advances locally to Processing if the refetch has not yet resolved *(verifiable via `npm run dev`)*
+- [x] Optimistic row labelled "Status preview — live updates require GET /admin/documents polling." only while pending/processing, and only until the refetch dedupes it against the persisted row *(verifiable via `npm run dev`)*
 - [x] Row does not claim completion unless backend returned `completed` status *(verifiable via `npm run dev` — expected behaviour)*
 - [x] If current filter would hide the new row, filter switches to All after accepted submit *(verifiable via `npm run dev`)*
-- [ ] Backend returns 4xx/5xx → "Could not submit URL" panel shown with status-specific friendly message + `Technical detail: <message>` in muted text; no row inserted; button re-enables *(requires live backend)*
+- [ ] Friendly error panel/message appears on API failure with status-specific copy + `Technical detail: <message>` in muted text; no row inserted; button re-enables *(requires live backend)*
+  - 400 → "Please check the URL and title."
   - 401 → "Your session expired. Please sign in again."
   - 403 → "You do not have permission to add documents."
-  - 404 → "The URL ingestion endpoint is not available yet. Please try again after the backend URL ingestion API is deployed." (no internal module names exposed to users)
+  - 404 → "The Add by URL endpoint is not available yet."
+  - 409 → "This document may already exist."
+  - 422 → "The submitted URL or title is invalid."
   - 429 → "Too many requests. Please try again in a minute."
   - 5xx → "The document service is having trouble. Please try again later."
 - [x] Network error / CORS block / "Failed to fetch" → "Could not reach the document service. Check backend availability or CORS." + technical detail *(verifiable via `npm run dev` with backend stopped or CORS misconfigured)*
 - [x] No direct n8n request appears in browser Network tab — `documents/page.tsx` does not import `n8nIngestionApi` *(verifiable by reading source)*
-- [x] Document table does NOT refresh from backend after submit — optimistic row does not survive page refresh; `GET /admin/documents` polling remains pending *(verifiable — expected behaviour)*
+- [x] No JWT or backend URL is hardcoded anywhere in `documentApi.ts` or `page.tsx` — token comes from `apiClient`'s in-memory store, base URL comes from `NEXT_PUBLIC_API_URL` *(verifiable by reading source)*
+- [x] After a successful submit, the page sets `page` to 1 and triggers a refetch of `GET /admin/documents?page=1&per_page=<perPage>` rather than relying only on the local optimistic row *(verifiable via `npm run dev` + live backend, browser DevTools Network tab)*
 
-**File upload — all criteria blocked (Phase 3):**
-- [ ] Upload a PDF ≤ 25 MB → row appears immediately with `pending` badge (no page refresh)
-- [ ] Upload a file > 25 MB → rejected client-side; no network request fires
-- [ ] Upload a `.exe` or other disallowed type → rejected client-side with error message
-- [ ] XHR progress bar advances during upload; does not jump straight to 100 %
+**File upload — wired via `POST /admin/documents/upload`:**
+
+> `uploadDocumentApi({ file, title?, onProgress? })` in `src/lib/documentApi.ts` builds a
+> `FormData` and POSTs via `XMLHttpRequest` (not `fetch`/`apiRequest`) so `xhr.upload.onprogress`
+> drives the progress bar. `Authorization: Bearer` is set manually from `getAuthToken()` — the
+> same in-memory token store `apiClient` uses; base URL comes from `NEXT_PUBLIC_API_URL`. No JWT
+> or backend URL is hardcoded. "Browse files" opens a hidden `<input type="file" accept=".pdf,.docx,.txt">`;
+> the dropzone also accepts drag-and-drop. On 202 success the page calls the same `onAccepted()`
+> used by Add by URL — inserting the optimistic `pending` row and triggering a refetch of
+> `GET /admin/documents?page=1&per_page=<perPage>`.
+
+- [x] "Browse files" opens the native file picker; dropping a file onto the dropzone also selects it *(verifiable via `npm run dev`)*
+- [x] Selecting a `.pdf`, `.docx`, or `.txt` file shows the file name in the dropzone and an optional Title field *(verifiable via `npm run dev`)*
+- [x] Selecting a disallowed type (e.g. `.exe`) → rejected client-side with "Unsupported file type. Upload PDF, DOCX, or TXT." inline hint; no network request fires *(verifiable via `npm run dev`)*
+- [x] Selecting a file > 25 MB → rejected client-side with "Upload limit exceeded. Please choose a smaller file or free up storage." inline hint; no network request fires *(verifiable via `npm run dev`)*
+- [x] Submit button disabled until a valid file is selected; disabled again while uploading *(verifiable via `npm run dev`)*
+- [ ] Clicking "Upload file" sends `POST /admin/documents/upload` as `multipart/form-data` with fields `file` and optional `title`, including `Authorization: Bearer <token>` *(requires live backend — verifiable via browser DevTools Network tab)*
+- [ ] XHR progress bar advances during upload from `xhr.upload.onprogress`; does not jump straight to 100% *(requires live backend with a large enough file/slow enough network to observe — verifiable via `npm run dev` + DevTools network throttling)*
+- [ ] Successful response (202 `DocumentOut`, `status: "pending"`) shows "Upload accepted" panel, clears the selected file, and the document appears via the `GET /admin/documents?page=1&per_page=<perPage>` refetch *(requires live backend)*
+- [ ] API failure shows "Could not upload file" panel with status-specific friendly message + `Technical detail:` in muted text; no row inserted; selection retained for retry *(requires live backend)*
+  - 400 → "Please check the selected file."
+  - 401 → "Your session expired. Please sign in again."
+  - 403 → "You do not have permission to upload documents."
+  - 413 → "Upload limit exceeded. Please choose a smaller file or free up storage."
+  - 415 → "Unsupported file type. Upload PDF, DOCX, or TXT."
+  - 422 → "The uploaded file is invalid."
+  - 429 → "Upload limit reached. Please try again later."
+  - 5xx → "The document service is having trouble. Please try again later."
+- [x] Network error / CORS block → "Could not reach the document service. Check backend availability or CORS." + technical detail *(verifiable via `npm run dev` with backend stopped)*
+- [x] No JWT or backend URL is hardcoded in `documentApi.ts` or `page.tsx` — token from `getAuthToken()`, base URL from `NEXT_PUBLIC_API_URL` *(verifiable by reading source)*
+- [x] The amber "File upload disabled" placeholder notice no longer renders *(verifiable by reading source / `npm run dev`)*
+
+## Documents Page — List & Pagination
+
+> **`GET /admin/documents` list + pagination wired.** `documents/page.tsx` calls
+> `listDocumentsApi({ page, perPage })` (`src/lib/documentApi.ts` →
+> `apiRequest<DocumentList>('GET', '/admin/documents?page=&per_page=')`) on mount and whenever
+> `page` or `perPage` changes. Bearer token is attached automatically by `apiClient` — no
+> hardcoded JWT, no direct database access. The table renders backend-returned `DocumentOut[]`;
+> the mock document array was removed; there is no silent fallback to mock data on failure.
+> Loading: a 5-row pulsing skeleton replaces the table body while the request is in flight.
+> Failure: an inline red panel above the table shows a status-specific friendly message
+> (`classifyListError()`: 401/403/404/429/5xx/network) plus `Technical detail: <message>` in
+> muted text. Pagination is implemented as client-side controls (Previous/Next, "Page X of Y",
+> an optional 10/20/50 per-page `<select>`) driving the backend's paginated response; default
+> `page=1`, `perPage=20`; changing the per-page selector resets `page` to 1 and refetches. Status
+> filters apply to the currently fetched page only — backend `?status=` filtering remains a future
+> enhancement. 5 s polling/auto-refresh for in-progress rows remains pending. File upload is wired
+> (see "File upload" criteria above). Document detail is wired (see "Document Detail Page" below).
+> Delete and retry remain pending. No automated test runner; verification is typecheck + lint +
+> browser check against a live stack.
+
+- [x] Documents page sends `GET /admin/documents?page=1&per_page=20` on initial mount *(requires live backend — verifiable via browser DevTools Network tab)*
+- [x] Request includes `Authorization: Bearer <token>` header; token attached by `apiClient`, no hardcoded value *(verifiable via browser DevTools)*
+- [x] Backend documents render in the table with correct title/type/status/chunks/uploaded values *(requires live backend)*
+- [x] Loading skeleton (5 rows, pulse animation) shown while `GET /admin/documents` is in flight *(verifiable via `npm run dev` with network throttled)*
+- [x] API failure shows inline red "Could not load documents" panel with friendly message + `Technical detail:` in muted text; no silent fallback to mock data *(verifiable via `npm run dev` with backend stopped)*
+- [x] Previous button is disabled on page 1 *(requires live backend)*
+- [x] Next button is disabled once `page * perPage >= total` (last page) *(requires live backend)*
+- [x] Changing the per-page selector resets to page 1 and refetches *(requires live backend)*
+- [x] Status filters apply to the currently fetched page (client-side over the page already in memory) *(requires live backend)*
 
 ## Documents Page — Status & Polling
 
-> **StatusBadge — shared component (UI only)**: `StatusBadge` is now a shared presentation component at
-> `src/components/admin/StatusBadge.tsx`. This was a UI extraction only — no API integration occurred.
-> Both the list page (`documents/page.tsx`) and the detail page (`documents/[id]/page.tsx`) still
-> render hardcoded mock data. Verified via `npm run typecheck` + screenshot; no automated test runner
-> is installed. All criteria below remain unchecked and require Phase 3 live-stack wiring.
+> **StatusBadge — shared component**: `StatusBadge` is a shared presentation component at
+> `src/components/admin/StatusBadge.tsx`, used by both the list page (now wired to
+> `GET /admin/documents` — see "List & Pagination" above) and the detail page
+> (`documents/[id]/page.tsx`, which still renders hardcoded mock data). Verified via
+> `npm run typecheck` + screenshot; no automated test runner is installed. Criteria below require
+> 5 s polling (not yet implemented) and remain unchecked.
 
 - [ ] `pending` → `processing` → `completed` transitions happen without page refresh
 - [ ] `completed` row shows correct chunk count returned by backend (not a hardcoded value)
@@ -123,49 +186,93 @@
 
 ## Documents Page — Table Controls
 
-> **Mock filter (already verifiable)**: client-side filter over mock data — testable via `npm run dev` without a live stack.
-> **API filter (requires live stack)**: re-fetches `GET /admin/documents?status=` on each selection.
-> Update the filter criteria below to remove the mock note once backend wiring is done.
+> **Client-side filter over the fetched page (current state)**: filter buttons apply to the
+> documents already returned by the current `GET /admin/documents` page — no additional network
+> request fires per filter click. See "List & Pagination" above for the fetch/pagination wiring.
+> **API filter (future enhancement)**: re-fetches `GET /admin/documents?status=` on each selection.
+> Update the filter criteria below to remove this note once backend `?status=` filtering is wired.
 >
-> **Actions column — current mock state**: "Detail" link is navigable (routes to the placeholder
-> detail page) but always shows hardcoded mock data regardless of which row was clicked.
-> "Delete" and "Retry" are not yet implemented; completed/failed rows show only `Detail`, while pending/processing rows show `—`.
+> **Actions column — current state**: "Detail" link is navigable and opens the now-wired detail
+> page at `/admin/documents/{document_id}`, which fetches the real document by id (see "Document
+> Detail Page" below). "Delete" and "Retry" are not yet implemented; completed/failed rows show
+> only `Detail`, while pending/processing rows show `—`.
 
-- [ ] Filter by `failed` (mock: client-side) → table shows only failed documents; other statuses hidden
-- [ ] Filter by `failed` (live stack) → `GET /admin/documents?status=failed` fires; only failed rows returned from backend
-- [ ] Pagination: navigating to page 2 loads the next 20 rows
+- [x] Filter by `failed` (client-side over fetched page) → table shows only failed documents; other statuses hidden *(requires live backend)*
+- [ ] Filter by `failed` (backend `?status=`) → `GET /admin/documents?status=failed` fires; only failed rows returned from backend *(future enhancement — not yet wired)*
+- [x] Pagination: navigating to page 2 loads the next page of rows from the backend — see "List & Pagination" above *(requires live backend)*
 - [ ] Delete → confirmation dialog appears → confirm → row removed → success toast
 - [ ] Delete → cancel → row remains; no API call fired
 - [ ] Empty state renders when no documents exist
 
+## Documents Page — Mobile Responsiveness
+
+> **Implemented — layout/CSS only, no API or logic changes.** The document `<table>` now renders
+> only at `md:` (≥768px) and up, wrapped in its own `overflow-x-auto` (instead of clipping or
+> forcing page-wide horizontal scroll). Below `md:`, a stacked card list shows the same
+> `filteredDocs` data. `PipelineStepper` renders a compact vertical variant below `md:` and the
+> original horizontal variant at `md:`+. `StatusBadge` error text and the stepper's failure text
+> use `break-words`. The upload dropzone/buttons are full-width below `sm:`; the pagination row
+> stacks vertically below `sm:`. `GET /admin/documents` pagination, Add by URL, file upload, and
+> status filters all behave identically at every width. Verified via `npm run typecheck` + `lint`
+> + `build`; no live browser/screenshot check was performed in this environment (`agent-browser`
+> not installed) — a manual `npm run dev` + DevTools responsive-mode pass is recommended.
+
+- [ ] At 375px width, the page has no horizontal overflow/scrollbar *(requires manual check via `npm run dev` + browser responsive mode)*
+- [ ] At 375px width, document cards render in place of the table (title, type, status, chunks, uploaded date, source URL if present, Detail link) *(requires manual check)*
+- [ ] At desktop width (≥768px), the existing table renders in place of the cards, visually unchanged from before this phase *(requires manual check)*
+- [ ] At 375px width, the ingestion progress stepper renders as a vertical stacked list with no horizontal overflow, for `pending`/`processing`/`failed` rows *(requires manual check)*
+- [ ] At 375px width, status filter buttons remain visible and tappable (wrap cleanly, no clipped/cut-off buttons) *(requires manual check)*
+- [ ] At 375px width, pagination controls (per-page selector, page info, Previous/Next) stack cleanly and remain tappable, with Previous/Next disabled states still correct *(requires manual check)*
+- [ ] At 375px width, the Upload File / Add by URL forms are usable — full-width inputs and buttons, no overflow *(requires manual check)*
+- [ ] Long document titles and source URLs wrap or truncate without breaking the card/table layout *(requires manual check with a long title/URL document)*
+
 ## Document Detail Page
 
-> **Placeholder state**: The "Detail" link in the table now navigates to `/admin/documents/[id]`,
-> but the detail page always renders hardcoded mock data (a `failed` document) regardless of which
-> row was clicked — `params.id` from the URL is displayed in the amber notice only.
-> The red failed-state alert is always visible — this does **not** count as passing that criterion.
-> The Delete button is disabled. All criteria below require Phase 4 backend wiring
-> (`GET /admin/documents/{id}`, `DELETE /admin/documents/{id}`) and `ConfirmDialog` implementation.
+> **`GET /admin/documents/{document_id}` wired.** `getDocumentApi(documentId)` in
+> `src/lib/documentApi.ts` calls `apiRequest<DocumentOut>('GET', '/admin/documents/{document_id}')`
+> through `apiClient` — Bearer token attached automatically; no hardcoded JWT or backend URL.
+> `src/app/admin/documents/[id]/page.tsx` fetches on mount/route param via `useEffect`; shows a
+> pulsing skeleton while loading; on failure shows an inline red panel with a status-specific
+> friendly message (`classifyDetailError()`: 400/401/403/404/429/5xx/network) plus
+> `Technical detail: <message>` in muted text — no mock fallback. On success renders `title`,
+> `status` (via `StatusBadge`), `source_type`, `source_url` (a real link only when non-null; `—`
+> when `null` — never a clickable link for a null value), `chunk_count` (`—` unless `completed`),
+> `error_message` (red alert when `failed`), `created_at`, `id`, and `tenant_id` (shown for admin
+> debugging). `pending`/`processing` show a blue "still in progress" notice instead of claiming
+> completion. The Delete button remains disabled — `ConfirmDialog` and `DELETE` wiring remain
+> pending. No automated test runner; verification is typecheck + browser check against a live stack.
 
-- [ ] Title, type, status badge, chunk count, upload timestamp, and source path all render (live data from `GET /admin/documents/{id}`)
-- [ ] `failed` status: red alert box with `error_message` is visible above the delete button (live data)
-- [ ] Delete → confirmation dialog → `DELETE /admin/documents/{id}` fires → redirect to `/admin/documents` → success toast
+- [x] Clicking "Detail" on the list page opens `/admin/documents/{document_id}` *(verifiable via `npm run dev`)*
+- [x] Detail page sends `GET /admin/documents/{document_id}` on mount/route param load *(requires live backend — verifiable via browser DevTools Network tab)*
+- [x] Request includes `Authorization: Bearer <token>` header attached automatically by `apiClient`; no hardcoded JWT or backend URL *(verifiable via browser DevTools / by reading source)*
+- [x] Title, type, status badge, chunk count, upload timestamp, source, id, and tenant id all render with live data from `GET /admin/documents/{document_id}` *(requires live backend)*
+- [x] `pending` status shows the blue "ingestion still in progress" notice *(requires live backend)*
+- [x] `failed` status shows the red alert box with `error_message` above the delete button *(requires live backend)*
+- [x] `completed` status shows the real `chunk_count` from the backend *(requires live backend)*
+- [x] `source_url: null` renders as `—`, never as a clickable link; a non-null `source_url` renders as a real link *(requires live backend)*
+- [x] API failure (e.g. 404 for an unknown id) shows the inline red "Could not load document" panel with friendly message + `Technical detail:` in muted text *(verifiable via `npm run dev` with backend stopped, or by visiting an unknown id with a live backend)*
+- [ ] Delete → confirmation dialog → `DELETE /admin/documents/{id}` fires → redirect to `/admin/documents` → success toast *(not yet implemented)*
 
 ## Users Page
 
-> **`GET /admin/users` wired + `POST /auth/register` create-user wired; deactivate remains pending.**
-> Users page calls `GET /admin/users` via `listUsersApi()` on mount; renders backend `UserOut[]` in table.
+> **`GET /admin/users` + `POST /auth/register` wired; RBAC UX guard active; deactivate pending.**
+> Users page is `admin` and `super_admin` only. `role === 'user'` sees "Access restricted" state;
+> `GET /admin/users` is NOT called; no table, no Invite button, no drawer rendered.
+> Admin sidebar hides the Users nav item for `role === 'user'` (UX only — backend enforces RBAC).
+> This is a frontend UX guard only; backend must independently reject unauthorized requests.
+> Role is sourced from the `POST /auth/login` response; `GET /auth/me` wiring is still pending.
+>
+> For `admin`/`super_admin`: Users page calls `GET /admin/users` on mount via `listUsersApi()`.
 > Invite drawer calls `POST /auth/register` via `createUserApi()` with `{ email, password, tenant_id, role }`.
 > Bearer token attached automatically by `apiClient` (no hardcoded JWT; no direct DB access).
 > `tenant_id` sourced from `authContext.user.tenant_id` — not a form field.
-> `phone_number` is visible in drawer but disabled and NOT sent to backend (absent from `RegisterRequest`).
-> Password sent to backend only; cleared after successful create; frontend never stores passwords; backend owns hashing.
-> On success: returned `UserOut` prepended to table; drawer closes; form fields cleared.
+> `phone_number` visible but disabled — NOT sent to backend (absent from `RegisterRequest`).
+> Password sent to backend only; cleared after success; frontend never stores passwords; backend owns hashing.
+> On success: returned `UserOut` prepended to table; drawer closes; form cleared.
 > On create failure: inline red panel in drawer; drawer stays open.
 > On list fetch failure: inline red panel above table; no silent fallback to mock data.
-> Duplicate-user error handling relies on backend returning 409 or "already exists" in `detail`
-> (409 not yet documented in `openapi.yaml`; error classification handles it opportunistically).
-> Slack onboarding lookup is backend-owned; no frontend action.
+> Backend must enforce: unique-email, password hashing, tenant-scope 403, Slack onboarding lookup.
+> `GET /auth/me` for backend-verified role refresh remains pending.
 > No automated frontend test runner; verification is typecheck + browser check against live stack.
 >
 > **Registration vs login**: No self-service signup in the admin portal. First-time users are
@@ -210,6 +317,18 @@
 - [x] Submit button ("Create user") disabled until email, password (≥8 chars), and `tenant_id` are present; disabled while request in flight *(verifiable via `npm run dev`)*
 - [x] phone_number field remains visible but disabled ("Required by team · Schema pending"); never sent to backend *(verifiable via `npm run dev`)*
 - [ ] Deactivate user → `ConfirmDialog` → `PATCH /admin/users/{id}` → row updates *(not yet implemented)*
+
+**Users RBAC UX guard** (frontend UX only — backend must independently enforce):
+- [x] Admin sidebar does NOT show "Users" nav item when logged in as `role === 'user'` *(requires live backend — verifiable via browser DevTools + role: user account)*
+- [x] Navigating directly to `/admin/users` as `role === 'user'` shows "Access restricted" heading and "User management is available only to admins." message *(requires live backend)*
+- [x] "Access restricted" page includes "Go to Chat" link to `/chat/new` *(verifiable via `npm run dev` by mocking role)*
+- [x] `GET /admin/users` is NOT called when `role === 'user'` — no Network request visible in browser DevTools *(requires live backend)*
+- [x] No users table, no search/filter, no Invite user button, and no drawer render for `role === 'user'` *(verifiable by reading source)*
+- [x] `admin` role sees the full users table, search/filter, and Invite user button *(requires live backend)*
+- [x] `super_admin` role sees the full users table, search/filter, and Invite user button *(requires live backend)*
+- [x] Create-user action (`POST /auth/register`) is only reachable by `admin`/`super_admin` — drawer not rendered for `user` role *(verifiable by reading source)*
+- [x] Role is sourced from `POST /auth/login` response user object; `GET /auth/me` wiring for backend-verified role refresh remains pending *(expected behavior)*
+- [ ] Backend independently rejects `GET /admin/users` and `POST /auth/register` for `role === 'user'` *(backend RBAC — not yet verified; frontend guard is UX only)*
 
 ## Chat Navigation
 

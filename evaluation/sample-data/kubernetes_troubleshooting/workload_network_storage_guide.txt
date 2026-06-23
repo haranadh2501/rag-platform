@@ -1,0 +1,25 @@
+Kubernetes Workload, Network, and Storage Guide
+
+Section: Service has no endpoints
+If a Service has no endpoints, compare the Service selector with pod labels and confirm matching pods are Ready. A typo in app labels, readiness probe failures, or selecting pods in the wrong namespace can leave the Service without usable backends.
+
+Section: DNS resolution failure
+For DNS failures, verify CoreDNS pods are Running and Ready, inspect CoreDNS logs, test resolution from a temporary debug pod, confirm the Service name and namespace, and check NetworkPolicies that could block traffic to kube-dns.
+
+Section: NetworkPolicy isolation
+NetworkPolicy is namespace scoped and becomes restrictive for selected pods once ingress or egress policies apply. Debug by checking pod labels, namespace labels, policy podSelector, policyTypes, ports, and whether the CNI plugin enforces NetworkPolicy.
+
+Section: Ingress routing
+Ingress failures should be split between DNS, load balancer, ingress controller, TLS secret, class annotation or ingressClassName, backend Service mapping, and pod readiness. Controller logs usually reveal whether the route was accepted or rejected.
+
+Section: PersistentVolumeClaim Pending
+A PersistentVolumeClaim remains Pending when no matching PersistentVolume exists or dynamic provisioning cannot satisfy the request. Check storageClassName, access modes, requested size, provisioner events, quota, and cloud-provider volume limits.
+
+Section: Volume attach or detach failure
+Volume attach and detach failures often involve stale node attachments, zone mismatch, cloud API throttling, CSI driver errors, or a previous pod still terminating. Confirm the pod node, volume zone, VolumeAttachment objects, CSI controller logs, and cloud-provider events.
+
+Section: Autoscaling mismatch
+HorizontalPodAutoscaler decisions depend on metrics availability, target utilization, resource requests, and stabilization windows. If replicas do not change, check metrics-server health, HPA conditions, pod resource requests, and whether maxReplicas has already been reached.
+
+Section: Safe production debugging
+Use kubectl debug or ephemeral containers for live inspection when possible. Avoid editing live Deployments without recording the change, avoid deleting PersistentVolumeClaims during diagnosis, and avoid collecting full environment dumps that may contain secrets.

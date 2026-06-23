@@ -316,6 +316,65 @@ async def test_whatsapp_reset(client, whatsapp_user, monkeypatch):
     assert await _count_messages(whatsapp_user["user_id"]) == 0  # Reset saves nothing
 
 
+async def test_whatsapp_media_upload_indexed(client, whatsapp_user, monkeypatch):
+    """Media-only message → download → validate → ephemeral n8n ingest → confirmation reply."""
+    import app.api.webhooks as webhooks_module
+
+    indexed = []
+
+    async def mock_post_text(to, text):
+        indexed.append(text)
+
+    class _FakeResp:
+        content = b"fake-image-bytes"
+
+        def raise_for_status(self):
+            pass
+
+    class _FakeAsyncClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def get(self, *args, **kwargs):
+            return _FakeResp()
+
+    ingested = []
+
+    async def mock_ingest_ephemeral(content, conversation_id, mime_type):
+        ingested.append((content, conversation_id, mime_type))
+        return {"status": "mock_indexed"}
+
+    def mock_validate_upload(*, filename, content, declared_mime=None, max_bytes=None):
+        from app.services.file_validator import ValidatedUpload
+        return ValidatedUpload(
+            filename=filename, content=content,
+            mime_type=declared_mime or "image/png", size_bytes=len(content),
+        )
+
+    monkeypatch.setattr(webhooks_module.httpx, "AsyncClient", _FakeAsyncClient)
+    monkeypatch.setattr(webhooks_module.file_validator, "validate_upload", mock_validate_upload)
+    monkeypatch.setattr(webhooks_module.n8n_client, "ingest_ephemeral", mock_ingest_ephemeral)
+    monkeypatch.setattr(whatsapp, "post_text", mock_post_text)
+    monkeypatch.setattr(pipeline_client, "call_pipeline", _fail_pipeline)  # media-only must not call pipeline
+
+    form = _twilio_form(f"SM{uuid.uuid4().hex[:8]}", whatsapp_user["phone"], "", num_media=1)
+    r = await client.post("/webhooks/whatsapp", data=form)
+    assert r.status_code == 200
+
+    import asyncio
+    await asyncio.sleep(0.1)
+
+    assert len(ingested) == 1
+    assert ingested[0][0] == b"fake-image-bytes"
+    assert any("Indexed" in t for t in indexed)
+
+
 async def test_tenant_map_lookup():
     """get_tenant_for_phone returns tenant_id for registered phone."""
     if not await _m12_schema_present():

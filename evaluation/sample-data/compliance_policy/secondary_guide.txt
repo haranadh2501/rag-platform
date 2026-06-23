@@ -1,0 +1,10 @@
+Vendor and Incident Compliance
+
+Section: Vendor assessment
+Vendors processing Confidential or Restricted data require security review, a data-processing agreement, and annual reassessment.
+
+Section: Breach notification
+Suspected exposure of Restricted data must be reported to Security within one hour. Legal and Privacy determine external notification obligations.
+
+Section: Evidence
+Compliance evidence must identify the control, system, owner, collection date, and source. Screenshots without timestamps are insufficient.

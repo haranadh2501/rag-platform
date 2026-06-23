@@ -25,7 +25,7 @@ const markdownComponents: Components = {
       );
     }
     return (
-      <code className="rounded bg-slate-100 px-1 py-0.5 font-mono text-xs text-slate-800" {...props}>
+      <code className="rounded bg-slate-100 px-1 py-0.5 font-mono text-xs text-slate-800 dark:bg-slate-700 dark:text-slate-100" {...props}>
         {children}
       </code>
     );
@@ -43,7 +43,7 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
   if (isUser) {
     return (
       <div className="flex justify-end">
-        <div className="max-w-[75%] whitespace-pre-wrap break-words rounded-2xl bg-indigo-600 px-4 py-2.5 text-sm text-white">
+        <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-2xl rounded-br-md bg-indigo-600 px-4 py-2.5 text-sm text-white sm:max-w-[75%]">
           {message.content}
         </div>
       </div>
@@ -54,13 +54,13 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
     <div className="flex items-start gap-3">
       <div
         aria-hidden="true"
-        className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-[11px] font-semibold text-indigo-600"
+        className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-100 text-[11px] font-semibold text-slate-500 dark:bg-slate-700 dark:text-slate-300"
       >
         AI
       </div>
-      <div className="flex max-w-[80%] flex-1 flex-col gap-2">
-        <span className="text-xs font-medium text-slate-400">Assistant</span>
-        <div className="break-words rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm leading-relaxed text-slate-800 shadow-sm">
+      <div className="flex max-w-[85%] flex-1 flex-col gap-2 sm:max-w-[80%]">
+        <span className="text-xs font-medium text-slate-400 dark:text-slate-500">Assistant</span>
+        <div className="break-words rounded-2xl rounded-bl-md border border-slate-200 bg-white px-4 py-3 text-sm leading-relaxed text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100">
           <ReactMarkdown rehypePlugins={[rehypeHighlight]} components={markdownComponents}>
             {message.content}
           </ReactMarkdown>
