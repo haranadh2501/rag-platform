@@ -22,7 +22,8 @@
 12. [Webhook contracts (quick reference)](#12-contracts)
 13. [Deployment & operations](#13-deployment)
 14. [Testing & verification](#14-testing)
-15. [Known limitations & roadmap](#15-roadmap)
+15. [Retrieval quality — measured results & roadmap](#15-roadmap)
+16. [Evaluation harness](#16-eval)
 
 ---
 
@@ -511,21 +512,89 @@ correctly **refused** an unanswerable question — proving grounding.
 ---
 
 <a name="15-roadmap"></a>
-## 15. Known limitations & roadmap
+## 15. Retrieval quality work — measured results & roadmap
 
-| Item | Status / plan |
+### 15.1 What changed (retrieval relevance pass)
+A measured improvement pass on the retrieval flow, backed by the eval harness in
+`eval/` (see §16). Four changes shipped to `retrieval-ephemeral.json`:
+
+1. **Reranking bug fix (latent, significant).** `Build prompt` read `rr.results`, but
+   Voyage's rerank API returns its ranked list under **`data`**. So reranking had been
+   a **silent no-op** — the flow fell back to raw kNN ordering. Now reads `rr.data`
+   (with `results` fallback). Rerank scores went from kNN-derived (~0.34 mean) to real
+   cross-encoder scores (~0.66 mean).
+2. **Relevance threshold + refusal.** `Build prompt` now drops reranked chunks below
+   `RELEVANCE_MIN = 0.30`; if none survive → graceful refusal (no LLM call). Cuts
+   low-signal context and short-circuits weak matches.
+3. **Refusal hygiene.** `Format response` blanks `sources` when the answer is a
+   refusal — a non-answer no longer cites chunks it didn't use.
+4. **Deterministic follow-ups + observability.** `Generate` uses DeepSeek JSON mode
+   (`response_format:{type:"json_object"}`) → reliable `follow_up_questions`. Responses
+   now carry `metadata.retrieval_time_ms`, `relevance_min`, and per-source
+   `rerank_score` + `vector_score`.
+
+### 15.2 Pre/post efficiency (14-case harness, fictional Zorball corpus)
+| Metric | Baseline | After | Δ |
+|---|---|---|---|
+| Retrieval hit-rate | 100% | 100% | = |
+| Answer correctness | 90% | 100% | +10pp |
+| Refusal accuracy | 0% | 100% | +100pp |
+| Overall correct | 64.3% | 100% | +35.7pp |
+| Latency p50 | 12.6 s | 6.6 s | **−48%** |
+| Latency p95 | 31.7 s | 7.4 s | **−77%** |
+| Rerank score (mean) | 0.34 (kNN) | 0.66 (real) | reranking now real |
+
+The biggest wins came from fixing the no-op reranker (real relevance scoring) and
+short-circuiting unanswerable queries (no wasted DeepSeek call → p95 latency cut ~4×).
+
+### 15.3 Remaining roadmap (documented; measurement-gated)
+| Item | Plan / precedent |
 |---|---|
-| `follow_up_questions` sometimes `[]` | Switch DeepSeek to JSON-mode structured output |
-| `faithfulness` is `null` | **v2:** add Gemini self-check + DeepSeek-Pro retry (drop-in between Generate and Format response) |
-| No relevance threshold | Treat top rerank score `< ~0.3` as "no good match" → graceful refusal |
-| Query not history-aware | Add a query-condensation step (rewrite follow-ups into standalone queries) |
-| Naive word-window chunking | Move to structure/recursive chunking; store `page_number` |
-| Vector-only recall | Add hybrid (keyword + vector) retrieval before rerank |
-| PDF OCR completeness varies | Pin `max_tokens` / page handling for deterministic coverage |
-| Purge unauthenticated by default | Enable `__PURGE_TOKEN__` before public exposure |
-| No automated eval | RAGAS harness (faithfulness / context-precision) — M10 |
+| Query not history-aware | **Next:** query-condensation step (rewrite follow-ups into standalone queries before embedding). Designed; staged separately because the single-turn harness can't measure it and it adds an LLM call per multi-turn query. |
+| `faithfulness` is `null` | **v2:** Gemini `gemini-3.5-flash` self-check + DeepSeek-Pro retry — borrow the persistent flow's verify-and-fallback (`retrieval-pipeline.json` does DeepSeek→Gemini PASS/FAIL→OpenAI `gpt-4o`). Drop-in between Generate and Format response. |
+| Threshold tuning | `RELEVANCE_MIN=0.30` chosen from observed score separation; re-tune via the harness on larger/real corpora (reranker scores topical relevance, not answer-presence — the LLM refusal remains the final guard). |
+| Vector-only recall | Hybrid (Postgres full-text/`ILIKE` + vector) merged before rerank — recall on exact terms (law numbers, IDs, proper nouns). |
+| Near-duplicate chunks | MMR / dedup in `Collect candidates`. |
+| Naive word-window chunking | Structure/recursive chunking in `ingest-ephemeral.json`; store `page_number`/section in `metadata` (helps retrieval more than any retrieval-side change; needs re-ingest). |
+| PDF OCR completeness varies | Pin OCR `max_tokens`/page handling for deterministic coverage. |
+| Purge unauthenticated by default | Enable `__PURGE_TOKEN__` before public exposure. |
+| Full quality eval | RAGAS (faithfulness / answer-relevancy / context-precision) on a ground-truth set — M10's `evaluation/` module. |
+
+### 15.4 Persistent-flow reference (M5/M6-owned — not modified)
+Studied for ideas; **not edited** (different ownership + agentic design):
+- `retrieval-pipeline.json` uses an **agentic verify-and-fallback** chain
+  (DeepSeek → Gemini PASS/FAIL → OpenAI `gpt-4o`) — the template for our v2 self-check.
+- `ingestion-pipeline.json` chunking is the **same** naive 512/50 word window — so
+  structure-aware chunking would benefit both.
+- ⚠️ **Flags for M5/M6:** persistent `ingestion-pipeline.json` "Insert Chunk" builds
+  its INSERT via **string interpolation (SQL-injection risk)**, and persistent
+  `retrieval-pipeline.json` has **no tenant isolation** in its vector search. Recorded
+  here as flags only — not in this work's scope to fix.
 
 ---
+
+<a name="16-eval"></a>
+## 16. Evaluation harness (`eval/`)
+
+Self-contained, no RAGAS dependency (M5/M6-scoped, separate from M10's `evaluation/`):
+- `eval/sample-doc.txt` — a **fictional** Zorball rulebook. Fictional on purpose:
+  answers can't come from the LLM's training data, so the harness measures
+  **retrieval + grounding**, not memorization.
+- `eval/qa.json` — 14 cases: 10 answerable (`must_contain` substrings), 4 unanswerable
+  (`expect:"refuse"`).
+- `eval/run_eval.py` — ingests the corpus once into a fresh conversation, queries each
+  case against `/webhook/retrieve-ephemeral`, scores hit-rate / answer correctness /
+  refusal accuracy / latency (p50,p95) / rerank-score distribution, writes
+  `eval/results/run-<label>-<stamp>.json`.
+
+Run: `python3 eval/run_eval.py --label baseline` (before) and `--label post` (after);
+diff the summaries. Hits only public webhooks — no API keys needed.
+
+---
+
+*Workflows: `ingest-ephemeral.json` (M5), `retrieval-ephemeral.json` &
+`purge-ephemeral.json` (M6). Model stack and webhook contracts are locked — see
+`ARCHITECTURE.md` §6 and `specs/MODULE_SPEC_M5.md` / `MODULE_SPEC_M6.md`.*
 
 *Workflows: `ingest-ephemeral.json` (M5), `retrieval-ephemeral.json` &
 `purge-ephemeral.json` (M6). Model stack and webhook contracts are locked — see
