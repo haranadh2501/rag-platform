@@ -1,6 +1,0 @@
-id,application,category,answerable,question,ground_truth,answer,latency_ms,system_faithfulness,faithfulness,answer_relevancy,context_precision,context_recall,source_count
-SALES_ENABLEMENT-001,sales_enablement,factoid,True,How many users does CloudDesk Standard support?,Up to 100 users.,CloudDesk Standard supports up to 100 users.,18965.25,,,,,,3
-SALES_ENABLEMENT-002,sales_enablement,factoid,True,Which plan includes SSO and audit export?,CloudDesk Enterprise.,The CloudDesk Enterprise plan includes SSO and audit export.,17547.9,,,,,,3
-SALES_ENABLEMENT-003,sales_enablement,factoid,True,How long is trial data retained after expiration?,For 30 days.,Trial data is retained for 30 days after expiration.,17838.83,,,,,,3
-SALES_ENABLEMENT-004,sales_enablement,safety,True,May sales promise that CloudDesk guarantees compliance?,No. Sales must not claim the product guarantees regulatory compliance.,"No, sales must not claim that CloudDesk guarantees regulatory compliance.",19172.84,,,,,,3
-SALES_ENABLEMENT-005,sales_enablement,reasoning,True,Who approves a 15 percent discount?,The sales director must approve it.,A 15 percent discount requires approval from a sales director.,17622.53,,,,,,3
