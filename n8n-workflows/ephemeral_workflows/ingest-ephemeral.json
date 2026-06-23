@@ -4,44 +4,45 @@
     {
       "parameters": {
         "httpMethod": "POST",
-        "path": "ingest-ephemeral",
+        "path": "ingest-ephemeral-wf",
         "responseMode": "responseNode",
         "options": {}
       },
-      "id": "wh-ephemeral",
+      "id": "5b8cc26d-cb51-42db-963c-baed6fbd9b02",
       "name": "Webhook /ingest-ephemeral",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1.1,
       "position": [
-        240,
-        380
-      ]
+        624,
+        704
+      ],
+      "webhookId": "7aa0ce9c-27de-45af-bbaa-ab69952b1517"
     },
     {
       "parameters": {
         "functionCode": "// n8n Function node: \"Validate\"\n// Dual-mode input: accepts file_base64 (bytes in the request) OR file_path (a\n// file already on the n8n container). No require('path') -- pure-string guard.\nconst fs = require('fs');\n\nconst src = ($json && $json.body) ? $json.body : $json;\nconst conversation_id = src.conversation_id;\nconst tenant_id       = src.tenant_id;\nconst file_base64     = src.file_base64;\nconst file_path       = src.file_path;\nconst source_name     = src.source_name;\nconst rawTtl          = src.ttl_seconds;\n\n// 1. Required fields (tenant_id is the isolation gate)\nconst required = { conversation_id, tenant_id, source_name };\nfor (const [key, val] of Object.entries(required)) {\n  if (val === undefined || val === null || (typeof val === 'string' && val.trim() === '')) {\n    throw new Error(`Missing required field: ${key}`);\n  }\n}\nconst hasB64  = file_base64 !== undefined && file_base64 !== null && String(file_base64).trim() !== '';\nconst hasPath = file_path   !== undefined && file_path   !== null && String(file_path).trim()   !== '';\nif (!hasB64 && !hasPath) {\n  throw new Error('Missing required field: file_base64 or file_path');\n}\n\nconst MAX_BYTES = 10 * 1024 * 1024; // 10 MB\nconst out = {\n  conversation_id: String(conversation_id),\n  tenant_id: String(tenant_id),\n  source_name: String(source_name),\n};\n\nif (hasB64) {\n  // 2a. Bytes-in-request mode -- size from decoded length\n  const buf = Buffer.from(String(file_base64), 'base64');\n  if (!buf.length) {\n    throw new Error('file_base64 decoded to 0 bytes (invalid or empty base64)');\n  }\n  if (buf.length > MAX_BYTES) {\n    throw new Error(`File exceeds 10 MB limit: ${buf.length} bytes`);\n  }\n  out.file_base64 = String(file_base64);\n  out.input_mode = 'base64';\n} else {\n  // 2b. Path mode -- pure-string traversal guard, then statSync\n  const fp = String(file_path);\n  if (fp.includes('..')) {\n    throw new Error(`file_path must not contain '..': ${fp}`);\n  }\n  const allowedRoots = ['/tmp/', '/uploads/'];\n  if (!allowedRoots.some(root => fp.startsWith(root))) {\n    throw new Error(`file_path outside allowed roots (/tmp, /uploads): ${fp}`);\n  }\n  let stat;\n  try { stat = fs.statSync(fp); }\n  catch (e) { throw new Error(`Cannot stat file_path: ${fp} (${e.message})`); }\n  if (!stat.isFile()) {\n    throw new Error(`file_path is not a regular file: ${fp}`);\n  }\n  if (stat.size > MAX_BYTES) {\n    throw new Error(`File exceeds 10 MB limit: ${stat.size} bytes`);\n  }\n  out.file_path = fp;\n  out.input_mode = 'path';\n}\n\n// 3. TTL bounds -- default 3600; if provided must be integer in [60, 86400]\nlet ttl_seconds = 3600;\nif (rawTtl !== undefined && rawTtl !== null && rawTtl !== '') {\n  const n = Number(rawTtl);\n  if (!Number.isFinite(n) || !Number.isInteger(n)) {\n    throw new Error(`ttl_seconds must be an integer: ${rawTtl}`);\n  }\n  if (n < 60 || n > 86400) {\n    throw new Error(`ttl_seconds out of range [60, 86400]: ${n}`);\n  }\n  ttl_seconds = n;\n}\nout.ttl_seconds = ttl_seconds;\n\nreturn [{ json: out }];"
       },
-      "id": "validate",
+      "id": "7ae562fd-b78b-4d80-91d0-0e83069cd345",
       "name": "Validate",
       "type": "n8n-nodes-base.function",
       "typeVersion": 1,
       "position": [
-        440,
-        380
+        832,
+        704
       ],
       "onError": "continueErrorOutput"
     },
     {
       "parameters": {
-        "functionCode": "// n8n Function node: \"Extract Text\"\n// Obtains a Buffer from either file_base64 or file_path, then extracts by type.\n// Heavy/builtin modules are lazy-loaded only in the branch that needs them, so\n// TXT and image requests need only 'fs' (no pdf-parse/mammoth/poppler).\nconst fs = require('fs');\n\nconst input = items[0].json;\nconst { conversation_id, tenant_id, source_name, ttl_seconds } = input;\n\n// Source bytes (base64 mode preferred; else read the on-container file)\nlet buf;\nif (input.file_base64) {\n  buf = Buffer.from(String(input.file_base64), 'base64');\n} else {\n  buf = fs.readFileSync(input.file_path);\n}\n\n// Extension via plain string ops (no path.extname)\nconst base = String(source_name || input.file_path || '');\nconst dot = base.lastIndexOf('.');\nconst ext = (dot >= 0 ? base.slice(dot + 1) : '').toLowerCase();\nconst SUPPORTED = ['pdf', 'docx', 'txt', 'png', 'jpg', 'jpeg'];\nif (!SUPPORTED.includes(ext)) {\n  throw new Error(`Unsupported file type: .${ext}`);   // -> 422 (validation)\n}\n\nconst TEXT_THRESHOLD = 20;   // chars; a PDF below this is treated as scanned\nconst passthrough = { conversation_id, tenant_id, source_name, ttl_seconds };\nconst dataUrl = (b, mime) => `data:${mime};base64,${b.toString('base64')}`;\nconst pageNum = f => parseInt((f.match(/(\\d+)\\.png$/) || [])[1] || '0', 10);\n\nlet out;\ntry {\n  if (ext === 'txt') {\n    out = { ...passthrough, source_type: 'txt', text: buf.toString('utf8'),\n            needs_ocr: false, page_count: 1, images: [] };\n\n  } else if (ext === 'docx') {\n    const mammoth = require('mammoth');                 // lazy: external\n    const { value } = await mammoth.extractRawText({ buffer: buf });\n    out = { ...passthrough, source_type: 'docx', text: value || '',\n            needs_ocr: false, page_count: 1, images: [] };\n\n  } else if (ext === 'pdf') {\n    const pdfParse = require('pdf-parse');              // lazy: external\n    const parsed = await pdfParse(buf);\n    const text = (parsed.text || '').trim();\n    if (text.length >= TEXT_THRESHOLD) {\n      out = { ...passthrough, source_type: 'pdf', text, needs_ocr: false,\n              page_count: parsed.numpages || 1, images: [] };\n    } else {\n      // Scanned PDF -> write bytes to a temp file, rasterize each page (R1)\n      const { execFileSync } = require('child_process');   // lazy: builtin\n      const workDir = fs.mkdtempSync('/tmp/ocr-');\n      const pdfTmp = `${workDir}/in.pdf`;\n      fs.writeFileSync(pdfTmp, buf);\n      execFileSync('pdftoppm', ['-png', '-r', '150', pdfTmp, `${workDir}/page`]);\n      const files = fs.readdirSync(workDir).filter(f => f.endsWith('.png'))\n                      .sort((a, b) => pageNum(a) - pageNum(b));\n      const images = files.map(f => ({\n        page_number: pageNum(f),\n        data_url: dataUrl(fs.readFileSync(`${workDir}/${f}`), 'image/png'),\n      }));\n      out = { ...passthrough, source_type: 'pdf', text: '', needs_ocr: true,\n              page_count: images.length, images };\n    }\n\n  } else {\n    // png / jpg / jpeg -> single-image OCR (no local lib needed)\n    const mime = ext === 'png' ? 'image/png' : 'image/jpeg';\n    out = { ...passthrough, source_type: ext, text: '', needs_ocr: true, page_count: 1,\n            images: [{ page_number: 1, data_url: dataUrl(buf, mime) }] };\n  }\n} catch (e) {\n  throw new Error(`Extraction failed for ${source_name}: ${e.message}`);  // -> 5xx\n}\n\nreturn [{ json: out }];"
+        "functionCode": "const fs = require('fs');\nconst input = items[0].json;\nconst { conversation_id, tenant_id, source_name, ttl_seconds } = input;\n\nlet buf;\nif (input.file_base64) buf = Buffer.from(String(input.file_base64), 'base64');\nelse buf = fs.readFileSync(input.file_path);\n\nconst base = String(source_name || input.file_path || '');\nconst dot = base.lastIndexOf('.');\nconst ext = (dot >= 0 ? base.slice(dot + 1) : '').toLowerCase();\nconst SUPPORTED = ['pdf', 'docx', 'txt', 'png', 'jpg', 'jpeg'];\nif (!SUPPORTED.includes(ext)) throw new Error(`Unsupported file type: .${ext}`);\n\nconst passthrough = { conversation_id, tenant_id, source_name, ttl_seconds };\nconst OCR_MODEL = 'gpt-4o-mini';\nconst dataUrl = (b, mime) => `data:${mime};base64,${b.toString('base64')}`;\n// OpenAI Responses API input used by the OCR (fallback) node.\nconst ocrInputForPdf = () => ([\n  { role: 'user', content: [\n    { type: 'input_text', text: 'Transcribe ALL readable text from this PDF verbatim, in reading order across every page. Return only the extracted text, no commentary. If the document contains no readable text at all, reply with exactly: NO_TEXT_FOUND' },\n    { type: 'input_file', filename: source_name || 'document.pdf', file_data: dataUrl(buf, 'application/pdf') }\n  ]}\n]);\n\nlet out, binary = null;\ntry {\n  if (ext === 'txt') {\n    out = { ...passthrough, source_type: 'txt', text: buf.toString('utf8'), needs_ocr: false };\n\n  } else if (ext === 'docx') {\n    const mammoth = require('mammoth');\n    const { value } = await mammoth.extractRawText({ buffer: buf });\n    out = { ...passthrough, source_type: 'docx', text: value || '', needs_ocr: false };\n\n  } else if (ext === 'pdf') {\n    // PRIMARY for PDFs: attach the bytes as a binary property so the n8n native\n    // \"Extract from File\" node can read the embedded text layer (cheap, exact).\n    // OCR (Responses API) is kept ONLY as a fallback for scanned/corrupt PDFs.\n    out = { ...passthrough, source_type: 'pdf', text: '', needs_ocr: false, ocr_model: OCR_MODEL, ocr_input: ocrInputForPdf() };\n    binary = { data: { data: buf.toString('base64'), mimeType: 'application/pdf', fileName: source_name || 'document.pdf' } };\n\n  } else {\n    const mime = ext === 'png' ? 'image/png' : 'image/jpeg';\n    out = { ...passthrough, source_type: ext, text: '', needs_ocr: true, ocr_model: OCR_MODEL, ocr_input: [\n      { role: 'user', content: [\n        { type: 'input_text', text: 'Transcribe all readable text from this image verbatim. Return only the extracted text, no commentary. If there is no readable text, reply with exactly: NO_TEXT_FOUND' },\n        { type: 'input_image', image_url: dataUrl(buf, mime) }\n      ]}\n    ] };\n  }\n} catch (e) {\n  throw new Error(`Extraction failed for ${source_name}: ${e.message}`);\n}\n\nconst item = { json: out };\nif (binary) item.binary = binary;\nreturn [item];"
       },
-      "id": "extract",
+      "id": "85f51b0a-9b94-45c2-8f66-24d20bf75e04",
       "name": "Extract Text",
       "type": "n8n-nodes-base.function",
       "typeVersion": 1,
       "position": [
-        640,
-        380
+        1024,
+        704
       ],
       "onError": "continueErrorOutput"
     },
@@ -50,6 +51,7 @@
         "conditions": {
           "options": {
             "caseSensitive": true,
+            "leftValue": "",
             "typeValidation": "loose",
             "version": 2
           },
@@ -68,53 +70,53 @@
         },
         "options": {}
       },
-      "id": "ocr-needed",
+      "id": "d01cceac-2e42-4cf5-bd2b-2c54fdb8fae4",
       "name": "Needs OCR?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        840,
-        380
+        1232,
+        704
       ]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "https://api.openai.com/v1/chat/completions",
+        "url": "https://api.openai.com/v1/responses",
         "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
+        "genericAuthType": "httpBearerAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ { \"model\": \"gpt-4o-mini\", \"messages\": [ { \"role\": \"user\", \"content\": [ { \"type\": \"text\", \"text\": \"OCR these page images. Return only the extracted text in page order, with no commentary.\" } ].concat($json.images.map(im => ({ \"type\": \"image_url\", \"image_url\": { \"url\": im.data_url } }))) } ] } }}",
+        "jsonBody": "={{ { \"model\": $('Extract Text').first().json.ocr_model, \"input\": $('Extract Text').first().json.ocr_input } }}",
         "options": {}
       },
-      "id": "ocr",
+      "id": "4734f630-b0a1-4c7b-a912-c1002b5eaee1",
       "name": "OCR (gpt-4o-mini vision)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1040,
-        240
+        1424,
+        560
       ],
       "onError": "continueErrorOutput",
       "credentials": {
-        "httpHeaderAuth": {
+        "httpBearerAuth": {
           "id": "REPLACE_ME",
-          "name": "OpenAIAuth"
+          "name": "RAG_OPENAI_API_KEY"
         }
       }
     },
     {
       "parameters": {
-        "functionCode": "// n8n Function node: \"Chunk\"\n// Passthrough (conversation_id, tenant_id, ...) is read directly from the\n// \"Extract Text\" node, so it survives the OCR HTTP call with NO reliance on any\n// \"Include Input Fields\" toggle. Text comes from the current item: Extract's\n// text on the non-OCR branch, or the OCR response (choices) on the OCR branch.\n// 512-word windows, 50-word overlap (MODULE_SPEC_M5).\nconst ex = $('Extract Text').first().json;   // passthrough + needs_ocr (both branches)\nconst cur = items[0].json;                    // Extract output OR OCR response\nconst used_ocr = ex.needs_ocr === true;\n\nlet text = (typeof cur.text === 'string' && cur.text.trim().length)\n  ? cur.text\n  : (cur.choices && cur.choices[0] && cur.choices[0].message\n      ? (cur.choices[0].message.content || '')\n      : '');\ntext = String(text).trim();\n\nif (!text.length) {\n  throw new Error(`No extractable text for ${ex.source_name}`);   // -> 5xx (runtime)\n}\n\nconst CHUNK_SIZE = 512;   // words\nconst OVERLAP = 50;\nconst words = text.split(/\\s+/).filter(Boolean);\nconst chunks = [];\nlet i = 0;\nwhile (i < words.length) {\n  chunks.push({\n    content: words.slice(i, i + CHUNK_SIZE).join(' '),\n    chunk_index: chunks.length,\n    page_number: null,     // page boundaries lost after concat; metadata.page_number optional\n  });\n  i += (CHUNK_SIZE - OVERLAP);\n}\n\nreturn [{\n  json: {\n    chunks,\n    conversation_id: ex.conversation_id,\n    tenant_id: ex.tenant_id,\n    source_name: ex.source_name,\n    ttl_seconds: ex.ttl_seconds,\n    used_ocr,\n  },\n}];"
+        "functionCode": "// n8n Function node: \"Chunk\"\n// Text source by path:\n//   - native PDF extract / txt / docx -> item carries .text directly\n//   - OCR branch (images, scanned-PDF fallback) -> OpenAI Responses API response\n// Passthrough is read from \"Extract Text\" so it survives intervening nodes.\n// 512-word windows, 50-word overlap (MODULE_SPEC_M5).\nconst ex = $('Extract Text').first().json;\nconst cur = items[0].json;\n\nfunction parseResponses(r) {\n  if (r && typeof r.output_text === 'string' && r.output_text.trim().length) return r.output_text;\n  let acc = '';\n  if (r && Array.isArray(r.output)) {\n    for (const it of r.output) {\n      const cont = it && it.content;\n      if (Array.isArray(cont)) for (const c of cont) if (c && typeof c.text === 'string') acc += c.text;\n    }\n  }\n  if (!acc && r && r.choices && r.choices[0] && r.choices[0].message) acc = r.choices[0].message.content || '';\n  return acc;\n}\n\nconst hasDirectText = (typeof cur.text === 'string' && cur.text.trim().length > 0);\nlet text, used_ocr;\nif (hasDirectText) { text = cur.text; used_ocr = false; }     // native extract / txt / docx\nelse { text = parseResponses(cur); used_ocr = true; }          // OCR response\ntext = String(text || '').trim();\n\n// A model refusal / empty OCR must NOT be stored as content -> fail loudly (phase 'ocr').\nif (used_ocr) {\n  const REFUSAL = /^\\s*no_text_found\\s*$|i'?m (sorry|unable)|i am (sorry|unable)|cannot (extract|assist|help|process)|can'?t (extract|assist|help|process)|unable to (extract|assist|help|process|read)/i;\n  if (!text.length || REFUSAL.test(text)) {\n    throw new Error(`OCR returned no usable text for ${ex.source_name} (model refusal or empty output)`);\n  }\n}\nif (!text.length) throw new Error(`No extractable text for ${ex.source_name}`);\n\nconst CHUNK_SIZE = 512, OVERLAP = 50;\nconst words = text.split(/\\s+/).filter(Boolean);\nconst chunks = [];\nlet i = 0;\nwhile (i < words.length) {\n  chunks.push({ content: words.slice(i, i + CHUNK_SIZE).join(' '), chunk_index: chunks.length, page_number: null });\n  i += (CHUNK_SIZE - OVERLAP);\n}\nreturn [{ json: { chunks, conversation_id: ex.conversation_id, tenant_id: ex.tenant_id, source_name: ex.source_name, ttl_seconds: ex.ttl_seconds, used_ocr } }];"
       },
-      "id": "chunk",
+      "id": "ad043397-c7aa-47f7-a517-1525b8914f48",
       "name": "Chunk",
       "type": "n8n-nodes-base.function",
       "typeVersion": 1,
       "position": [
-        1240,
-        380
+        1632,
+        704
       ],
       "onError": "continueErrorOutput"
     },
@@ -123,25 +125,25 @@
         "method": "POST",
         "url": "https://api.voyageai.com/v1/embeddings",
         "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
+        "genericAuthType": "httpBearerAuth",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ { \"model\": \"voyage-4-large\", \"input\": $json.chunks.map(c => c.content), \"input_type\": \"document\" } }}",
         "options": {}
       },
-      "id": "embed",
+      "id": "94c37d13-a962-44a0-80c3-53da38f760d9",
       "name": "Voyage embed",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1440,
-        380
+        1824,
+        704
       ],
       "onError": "continueErrorOutput",
       "credentials": {
-        "httpHeaderAuth": {
+        "httpBearerAuth": {
           "id": "REPLACE_ME",
-          "name": "VoyageAuth"
+          "name": "VoyageBearer-api"
         }
       }
     },
@@ -149,13 +151,13 @@
       "parameters": {
         "functionCode": "// n8n Function node: \"Zip Rows\"\n// chunks[] + passthrough are read directly from the \"Chunk\" node; only the\n// embeddings (data[]) come from the current item (Voyage response). NO reliance\n// on any \"Include Input Fields\" toggle. Explodes to N row items whose field\n// order matches the $1..$8 INSERT contract.\nconst chunkOut = $('Chunk').first().json;\nconst cur = items[0].json;                   // Voyage response: { data: [{embedding, index}, ...] }\nconst chunks = chunkOut.chunks || [];\nconst data = (cur.data || []).slice();\n\nif (!chunks.length) {\n  throw new Error('Zip Rows: no chunks to store');   // -> 5xx\n}\nif (data.length !== chunks.length) {\n  throw new Error(`Embedding count mismatch: ${data.length} for ${chunks.length} chunks`); // -> 5xx\n}\n\ndata.sort((a, b) => (a.index ?? 0) - (b.index ?? 0));   // defensive: align by Voyage index\n\nconst { tenant_id, conversation_id, source_name, ttl_seconds, used_ocr } = chunkOut;\n\nreturn chunks.map((c, i) => {\n  const vec = data[i].embedding;\n  if (!Array.isArray(vec) || vec.length !== 1024) {\n    throw new Error(`Bad embedding for chunk ${i}: expected 1024 dims`);   // -> 5xx\n  }\n  return {\n    json: {\n      tenant_id,                                 // $1  isolation gate (rule 3)\n      conversation_id,                           // $2\n      content: c.content,                        // $3\n      embedding: `[${vec.join(',')}]`,           // $4  ::vector literal\n      chunk_index: c.chunk_index,                // $5\n      source_name,                               // $6\n      metadata: JSON.stringify({                 // $7  ::jsonb\n        used_ocr: used_ocr === true,\n        page_number: c.page_number ?? null,\n      }),\n      ttl_seconds,                               // $8\n    },\n  };\n});"
       },
-      "id": "zip",
+      "id": "15800254-c1e2-4e25-8866-88eeb225c2d1",
       "name": "Zip Rows",
       "type": "n8n-nodes-base.function",
       "typeVersion": 1,
       "position": [
-        1640,
-        380
+        2032,
+        704
       ],
       "onError": "continueErrorOutput"
     },
@@ -167,33 +169,33 @@
           "queryReplacement": "={{ [$json.tenant_id, $json.conversation_id, $json.content, $json.embedding, $json.chunk_index, $json.source_name, $json.metadata, $json.ttl_seconds] }}"
         }
       },
-      "id": "store",
+      "id": "2111f195-03f4-4e8a-8f1e-55010976c6a5",
       "name": "Store ephemeral",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        1840,
-        380
+        2224,
+        704
       ],
       "onError": "continueErrorOutput",
       "credentials": {
         "postgres": {
           "id": "REPLACE_ME",
-          "name": "EphemeralDB"
+          "name": "Postgres account 2"
         }
       }
     },
     {
       "parameters": {
-        "functionCode": "// n8n Function node: \"Format success\"\n// Sits between Store ephemeral and Respond (success). Builds the locked \u00a7B\n// success body. Postgres RETURNING gives expires_at (+ one item per inserted\n// row); conversation_id / used_ocr are pulled from the Chunk node (Postgres\n// output doesn't carry them).\nconst rows = items;                          // one item per inserted ephemeral_chunks row\nconst chunk_count = rows.length;\n\nif (!chunk_count) {\n  throw new Error('Format success: no rows were inserted');   // -> 5xx via Format Error\n}\n\nconst rawExpires = rows[0].json.expires_at;\nconst expires_at = (rawExpires instanceof Date) ? rawExpires.toISOString() : rawExpires;\n\nconst chunkMeta = $('Chunk').first().json;\n\nreturn [{\n  json: {\n    status: 'completed',\n    conversation_id: chunkMeta.conversation_id,\n    chunk_count,\n    used_ocr: chunkMeta.used_ocr === true,\n    expires_at,\n  },\n}];"
+        "functionCode": "// n8n Function node: \"Format success\"\n// Sits between Store ephemeral and Respond (success). Builds the locked §B\n// success body. Postgres RETURNING gives expires_at (+ one item per inserted\n// row); conversation_id / used_ocr are pulled from the Chunk node (Postgres\n// output doesn't carry them).\nconst rows = items;                          // one item per inserted ephemeral_chunks row\nconst chunk_count = rows.length;\n\nif (!chunk_count) {\n  throw new Error('Format success: no rows were inserted');   // -> 5xx via Format Error\n}\n\nconst rawExpires = rows[0].json.expires_at;\nconst expires_at = (rawExpires instanceof Date) ? rawExpires.toISOString() : rawExpires;\n\nconst chunkMeta = $('Chunk').first().json;\n\nreturn [{\n  json: {\n    status: 'completed',\n    conversation_id: chunkMeta.conversation_id,\n    chunk_count,\n    used_ocr: chunkMeta.used_ocr === true,\n    expires_at,\n  },\n}];"
       },
-      "id": "format-success",
+      "id": "e3855d2a-d8ec-4cc4-9e98-4b8d83ca5897",
       "name": "Format success",
       "type": "n8n-nodes-base.function",
       "typeVersion": 1,
       "position": [
-        2040,
-        380
+        2432,
+        704
       ],
       "onError": "continueErrorOutput"
     },
@@ -205,26 +207,26 @@
           "responseCode": 200
         }
       },
-      "id": "respond",
+      "id": "4545c824-4190-4593-91c9-da72deeeee80",
       "name": "Respond (success)",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
-        2240,
-        380
+        2624,
+        704
       ]
     },
     {
       "parameters": {
-        "functionCode": "// n8n Function node: \"Format Error\"\n// All error outputs converge here. Derive a structured failure report: which\n// PHASE failed, best-guess node, HTTP statusCode (422 validation / 5xx runtime),\n// errorType, request context, and a timestamp. Phase is inferred from the error\n// signature because every node's error converges on this single handler.\nconst j = items[0].json || {};\nconst rawErr = (j && j.error && typeof j.error === 'object') ? j.error : j;\n\nconst msg =\n  (rawErr && (rawErr.message || rawErr.description)) ||\n  (typeof j.error === 'string' ? j.error : null) ||\n  j.message ||\n  'Unexpected error during ephemeral ingestion';\nconst msgStr = String(msg);\n\n// Best-effort: node name from n8n error metadata (version-dependent)\nlet node = null;\ntry { node = (rawErr.node && (rawErr.node.name || rawErr.node)) || j.node || null; } catch (e) { node = null; }\n\n// Signature table: first match wins. Our own throws are matched explicitly;\n// third-party (Voyage HTTP / Postgres) fall through to broad patterns.\nconst RULES = [\n  { re: /Missing required field/i,                              phase: 'validation', node: 'Validate',        code: 422 },\n  { re: /file_base64|decoded to 0 bytes/i,                      phase: 'validation', node: 'Validate',        code: 422 },\n  { re: /file_path must not contain|outside allowed roots/i,    phase: 'validation', node: 'Validate',        code: 422 },\n  { re: /File exceeds 10 MB limit/i,                            phase: 'validation', node: 'Validate',        code: 422 },\n  { re: /ttl_seconds/i,                                         phase: 'validation', node: 'Validate',        code: 422 },\n  { re: /Unsupported file type/i,                               phase: 'validation', node: 'Extract Text',    code: 422 },\n  { re: /Cannot stat file_path|is not a regular file/i,         phase: 'validation', node: 'Validate',        code: 500 },\n  { re: /Cannot find module/i,                                  phase: 'runtime',    node: 'Function node',   code: 500 },\n  { re: /Extraction failed/i,                                   phase: 'extraction', node: 'Extract Text',    code: 500 },\n  { re: /No extractable text/i,                                 phase: 'chunking',   node: 'Chunk',           code: 500 },\n  { re: /Embedding count mismatch|Bad embedding|no chunks to store/i, phase: 'embedding', node: 'Zip Rows',  code: 500 },\n  { re: /no rows were inserted/i,                               phase: 'finalize',   node: 'Format success',  code: 500 },\n  { re: /voyage|input_type|dimension/i,                         phase: 'embedding',  node: 'Voyage embed',    code: 500 },\n  { re: /INSERT|relation|column|duplicate|violates|syntax error|ephemeral_chunks|::vector/i, phase: 'storage', node: 'Store ephemeral', code: 500 },\n];\nconst matched = RULES.find(r => r.re.test(msgStr));\nconst phase = matched ? matched.phase : 'unknown';\nconst statusCode = matched ? matched.code : 500;\nconst errorType = statusCode === 422 ? 'validation' : 'runtime';\nif (!node) node = matched ? matched.node : 'unknown';\n\n// Best-effort request context from the original webhook payload\nlet conversation_id = null, tenant_id = null, source_name = null;\ntry {\n  const w = $('Webhook /ingest-ephemeral').first().json;\n  const b = (w && w.body) ? w.body : w;\n  conversation_id = b.conversation_id || null;\n  tenant_id = b.tenant_id || null;\n  source_name = b.source_name || null;\n} catch (e) { /* webhook context unavailable */ }\n\nreturn [{\n  json: {\n    status: 'failed',\n    phase,\n    node,\n    errorType,\n    statusCode,\n    error: msgStr,\n    conversation_id,\n    tenant_id,\n    source_name,\n    timestamp: new Date().toISOString(),\n  },\n}];"
+        "functionCode": "// n8n Function node: \"Format Error\"\n// All error outputs converge here. Derive a structured failure report: which\n// PHASE failed, best-guess node, HTTP statusCode (422 validation / 5xx runtime),\n// errorType, request context, and a timestamp. Phase is inferred from the error\n// signature because every node's error converges on this single handler.\nconst j = items[0].json || {};\nconst rawErr = (j && j.error && typeof j.error === 'object') ? j.error : j;\n\nconst msg =\n  (rawErr && (rawErr.message || rawErr.description)) ||\n  (typeof j.error === 'string' ? j.error : null) ||\n  j.message ||\n  'Unexpected error during ephemeral ingestion';\nconst msgStr = String(msg);\n\n// Best-effort: node name from n8n error metadata (version-dependent)\nlet node = null;\ntry { node = (rawErr.node && (rawErr.node.name || rawErr.node)) || j.node || null; } catch (e) { node = null; }\n\n// Signature table: first match wins. Our own throws are matched explicitly;\n// third-party (Voyage HTTP / Postgres) fall through to broad patterns.\nconst RULES = [\n  { re: /Missing required field/i,                              phase: 'validation', node: 'Validate',        code: 422 },\n  { re: /file_base64|decoded to 0 bytes/i,                      phase: 'validation', node: 'Validate',        code: 422 },\n  { re: /file_path must not contain|outside allowed roots/i,    phase: 'validation', node: 'Validate',        code: 422 },\n  { re: /File exceeds 10 MB limit/i,                            phase: 'validation', node: 'Validate',        code: 422 },\n  { re: /ttl_seconds/i,                                         phase: 'validation', node: 'Validate',        code: 422 },\n  { re: /Unsupported file type/i,                               phase: 'validation', node: 'Extract Text',    code: 422 },\n  { re: /Cannot stat file_path|is not a regular file/i,         phase: 'validation', node: 'Validate',        code: 500 },\n  { re: /Cannot find module/i,                                  phase: 'runtime',    node: 'Function node',   code: 500 },\n  { re: /Extraction failed/i,                                   phase: 'extraction', node: 'Extract Text',    code: 500 },\n  { re: /OCR returned no usable text/i,                         phase: 'ocr',        node: 'OCR (gpt-4o-mini vision)', code: 500 },\n  { re: /No extractable text/i,                                 phase: 'chunking',   node: 'Chunk',           code: 500 },\n  { re: /Embedding count mismatch|Bad embedding|no chunks to store/i, phase: 'embedding', node: 'Zip Rows',  code: 500 },\n  { re: /no rows were inserted/i,                               phase: 'finalize',   node: 'Format success',  code: 500 },\n  { re: /voyage|input_type|dimension/i,                         phase: 'embedding',  node: 'Voyage embed',    code: 500 },\n  { re: /INSERT|relation|column|duplicate|violates|syntax error|ephemeral_chunks|::vector/i, phase: 'storage', node: 'Store ephemeral', code: 500 },\n];\nconst matched = RULES.find(r => r.re.test(msgStr));\nconst phase = matched ? matched.phase : 'unknown';\nconst statusCode = matched ? matched.code : 500;\nconst errorType = statusCode === 422 ? 'validation' : 'runtime';\nif (!node) node = matched ? matched.node : 'unknown';\n\n// Best-effort request context from the original webhook payload\nlet conversation_id = null, tenant_id = null, source_name = null;\ntry {\n  const w = $('Webhook /ingest-ephemeral').first().json;\n  const b = (w && w.body) ? w.body : w;\n  conversation_id = b.conversation_id || null;\n  tenant_id = b.tenant_id || null;\n  source_name = b.source_name || null;\n} catch (e) { /* webhook context unavailable */ }\n\nreturn [{\n  json: {\n    status: 'failed',\n    phase,\n    node,\n    errorType,\n    statusCode,\n    error: msgStr,\n    conversation_id,\n    tenant_id,\n    source_name,\n    timestamp: new Date().toISOString(),\n  },\n}];"
       },
-      "id": "format-error",
+      "id": "fb0a55f5-745c-4758-af6b-1a67c1e15905",
       "name": "Format Error",
       "type": "n8n-nodes-base.function",
       "typeVersion": 1,
       "position": [
-        1040,
-        600
+        1424,
+        928
       ],
       "onError": "continueErrorOutput"
     },
@@ -236,13 +238,93 @@
           "responseCode": "={{ $json.statusCode }}"
         }
       },
-      "id": "respond-error",
+      "id": "512de339-52cd-4949-b598-a2239212c36e",
       "name": "Respond (failure)",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
-        1240,
-        600
+        1632,
+        928
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.source_type }}",
+              "rightValue": "pdf",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "isPdf01",
+      "name": "Is PDF?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1140,
+        704
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "binaryPropertyName": "data",
+        "options": {}
+      },
+      "id": "natExt01",
+      "name": "Extract PDF (native)",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        1340,
+        480
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ ($json.text || '').trim().length }}",
+              "rightValue": "={{ 20 }}",
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "natOk01",
+      "name": "Native text OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        480
       ]
     }
   ],
@@ -280,7 +362,7 @@
       "main": [
         [
           {
-            "node": "Needs OCR?",
+            "node": "Is PDF?",
             "type": "main",
             "index": 0
           }
@@ -437,11 +519,66 @@
           }
         ]
       ]
+    },
+    "Is PDF?": {
+      "main": [
+        [
+          {
+            "node": "Extract PDF (native)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Needs OCR?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract PDF (native)": {
+      "main": [
+        [
+          {
+            "node": "Native text OK?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "OCR (gpt-4o-mini vision)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Native text OK?": {
+      "main": [
+        [
+          {
+            "node": "Chunk",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "OCR (gpt-4o-mini vision)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "active": false,
   "settings": {
-    "executionOrder": "v1"
+    "executionOrder": "v1",
+    "binaryMode": "separate"
   },
   "tags": [
     "rag-platform",
