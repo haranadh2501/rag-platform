@@ -1,4 +1,4 @@
-"""Run the multi-application evaluation against a live backend or n8n endpoint."""
+"""Run the multi-application evaluation against the live /chat/query endpoint."""
 from __future__ import annotations
 
 import argparse
@@ -9,7 +9,6 @@ import math
 import os
 import statistics
 import time
-import uuid
 from pathlib import Path
 from typing import Any
 
@@ -52,192 +51,12 @@ def _percentile(values: list[float], percentile: float) -> float:
     return ordered[index]
 
 
-def select_batch(
-    cases: list[dict[str, Any]],
-    *,
-    batch_size: int | None,
-    batch_index: int | None,
-) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
-    if batch_size is None and batch_index is None:
-        return cases, None
-    if batch_size is None or batch_index is None:
-        raise ValueError("--batch-size and --batch-index must be used together")
-    if batch_size <= 0:
-        raise ValueError("--batch-size must be greater than 0")
-    if batch_index <= 0:
-        raise ValueError("--batch-index is 1-based and must be greater than 0")
-
-    total_cases = len(cases)
-    total_batches = (total_cases + batch_size - 1) // batch_size
-    if batch_index > total_batches:
-        raise ValueError(
-            f"--batch-index {batch_index} exceeds total batches {total_batches}"
-        )
-    start = (batch_index - 1) * batch_size
-    end = min(start + batch_size, total_cases)
-    return cases[start:end], {
-        "batch_index": batch_index,
-        "batch_size": batch_size,
-        "total_batches": total_batches,
-        "total_cases_before_batching": total_cases,
-        "start_position": start + 1,
-        "end_position": end,
-    }
-
-
 def _is_mock_response(payload: dict[str, Any]) -> bool:
     metadata = payload.get("metadata")
     if isinstance(metadata, dict) and metadata.get("mock") is True:
         return True
     answer = str(payload.get("answer", "")).casefold()
-    return (
-        "mock mode" in answer
-        or "mock response" in answer
-        or "mock pipeline" in answer
-        or "sample response from the mock" in answer
-    )
-
-
-def _extract_text(value: Any) -> str:
-    """Best-effort extraction for common n8n and LLM response shapes."""
-    if isinstance(value, str):
-        return value
-    if isinstance(value, list):
-        return "\n".join(text for item in value if (text := _extract_text(item)))
-    if not isinstance(value, dict):
-        return ""
-
-    for key in ("answer", "output", "response", "text", "content", "message"):
-        text = _extract_text(value.get(key))
-        if text:
-            return text
-
-    choices = value.get("choices")
-    if isinstance(choices, list) and choices:
-        text = _extract_text(choices[0].get("message") if isinstance(choices[0], dict) else choices[0])
-        if text:
-            return text
-
-    candidates = value.get("candidates")
-    if isinstance(candidates, list) and candidates:
-        text = _extract_text(candidates[0])
-        if text:
-            return text
-
-    parts = value.get("parts")
-    if isinstance(parts, list):
-        return "\n".join(
-            part["text"]
-            for part in parts
-            if isinstance(part, dict) and isinstance(part.get("text"), str)
-        )
-
-    return ""
-
-
-def _normalise_source(source: Any, index: int) -> dict[str, Any] | None:
-    if isinstance(source, str):
-        text = source.strip()
-        return {"title": f"source-{index}", "chunk_text": text} if text else None
-    if not isinstance(source, dict):
-        return None
-
-    chunk_text = (
-        source.get("chunk_text")
-        or source.get("content")
-        or source.get("text")
-        or source.get("pageContent")
-        or source.get("excerpt")
-    )
-    if not isinstance(chunk_text, str) or not chunk_text.strip():
-        return None
-
-    metadata = source.get("metadata") if isinstance(source.get("metadata"), dict) else {}
-    title = (
-        source.get("title")
-        or source.get("document")
-        or source.get("source")
-        or metadata.get("title")
-        or metadata.get("document")
-        or f"source-{index}"
-    )
-    normalised = {
-        "title": str(title),
-        "chunk_text": chunk_text,
-    }
-    if source.get("score") is not None:
-        normalised["score"] = source["score"]
-    if source.get("page_number") is not None:
-        normalised["page_number"] = source["page_number"]
-    return normalised
-
-
-def _normalise_sources(payload: dict[str, Any]) -> list[dict[str, Any]]:
-    candidates = (
-        payload.get("sources")
-        or payload.get("contexts")
-        or payload.get("context")
-        or payload.get("documents")
-        or payload.get("retrieved_documents")
-        or payload.get("candidates")
-        or []
-    )
-    if isinstance(candidates, str):
-        candidates = [candidates]
-    if not isinstance(candidates, list):
-        return []
-    sources: list[dict[str, Any]] = []
-    for index, source in enumerate(candidates, start=1):
-        normalised = _normalise_source(source, index)
-        if normalised is not None:
-            sources.append(normalised)
-    return sources
-
-
-def _normalise_direct_n8n_response(payload: Any) -> dict[str, Any]:
-    """Convert common n8n webhook/subworkflow outputs into ChatQueryResponse shape."""
-    if isinstance(payload, list):
-        if len(payload) == 1:
-            payload = payload[0]
-        else:
-            payload = {"sources": payload, "answer": _extract_text(payload)}
-    if not isinstance(payload, dict):
-        payload = {"answer": _extract_text(payload), "sources": []}
-
-    answer = _extract_text(payload)
-    sources = _normalise_sources(payload)
-    response = {
-        "answer": answer,
-        "sources": sources,
-        "follow_up_questions": payload.get("follow_up_questions", []),
-        "requires_clarification": bool(payload.get("requires_clarification", False)),
-        "metadata": payload.get("metadata", {}),
-    }
-    if payload.get("faithfulness") is not None:
-        response["faithfulness"] = payload["faithfulness"]
-    return response
-
-
-def _decode_db_sources(value: Any) -> list[dict[str, Any]]:
-    """Decode chat_messages.sources from JSONB/text and normalize source objects."""
-    if value is None:
-        return []
-    if isinstance(value, str):
-        try:
-            value = json.loads(value)
-        except json.JSONDecodeError:
-            return []
-    if isinstance(value, dict):
-        value = [value]
-    if not isinstance(value, list):
-        return []
-
-    sources: list[dict[str, Any]] = []
-    for index, source in enumerate(value, start=1):
-        normalised = _normalise_source(source, index)
-        if normalised is not None:
-            sources.append(normalised)
-    return sources
+    return "mock mode" in answer or "mock response" in answer
 
 
 def _validate_chat_response(payload: Any) -> list[str]:
@@ -251,17 +70,6 @@ def _validate_chat_response(payload: Any) -> list[str]:
     if "follow_up_questions" in payload and not isinstance(payload["follow_up_questions"], list):
         errors.append("follow_up_questions must be a list")
     return errors
-
-
-def _source_observability(sources: list[Any], response_metadata: dict[str, Any]) -> dict[str, Any]:
-    source_count = len(sources)
-    metadata_keys = sorted(str(key) for key in response_metadata.keys())
-    return {
-        "source_count": source_count,
-        "has_sources": source_count > 0,
-        "metadata_key_count": len(metadata_keys),
-        "metadata_keys": metadata_keys,
-    }
 
 
 async def _get_token(
@@ -334,8 +142,6 @@ async def collect_system_outputs(
             expected_documents = [
                 source["document"] for source in case.get("expected_sources", [])
             ]
-            response_metadata = payload.get("metadata", {})
-            observability = _source_observability(sources, response_metadata)
             outputs.append(
                 {
                     **case,
@@ -346,152 +152,10 @@ async def collect_system_outputs(
                     "system_faithfulness": payload.get("faithfulness"),
                     "requires_clarification": payload.get("requires_clarification", False),
                     "latency_ms": latency_ms,
-                    "source_count": observability["source_count"],
-                    "observability": observability,
-                    "response_metadata": response_metadata,
+                    "response_metadata": payload.get("metadata", {}),
                 }
             )
             LOGGER.info("Collected %s/%s: %s", position, len(cases), case["id"])
-    return outputs
-
-
-async def collect_direct_n8n_outputs(
-    cases: list[dict[str, Any]],
-    *,
-    n8n_url: str,
-    token: str | None,
-    tenant_id: str | None,
-    timeout: float,
-    allow_mock: bool,
-    max_chunks: int,
-    retries: int,
-) -> list[dict[str, Any]]:
-    outputs: list[dict[str, Any]] = []
-    headers = {"Authorization": f"Bearer {token}"} if token else {}
-    async with httpx.AsyncClient(timeout=timeout) as client:
-        for position, case in enumerate(cases, start=1):
-            payload = {
-                "Query": case["question"],
-                "query": case["question"],
-                "question": case["question"],
-                "current_message": case["question"],
-                "history": [],
-                "request_id": case["id"],
-                "conversation_id": str(uuid.uuid5(uuid.NAMESPACE_URL, case["id"])),
-                "tenant_id": tenant_id,
-                "case_id": case["id"],
-                "application": case["application"],
-                "category": case["category"],
-                "max_chunks": max_chunks,
-                "expected_sources": case.get("expected_sources", []),
-            }
-            raw_payload: Any | None = None
-            attempts_used = 0
-            retry_count = 0
-            for attempt in range(retries + 1):
-                attempts_used = attempt + 1
-                started = time.perf_counter()
-                try:
-                    response = await client.post(n8n_url, headers=headers, json=payload)
-                    latency_ms = round((time.perf_counter() - started) * 1000, 2)
-                    if response.status_code in {408, 429} or response.status_code >= 500:
-                        if attempt >= retries:
-                            break
-                        wait_seconds = min(5 * (attempt + 1), 30)
-                        LOGGER.warning(
-                            "%s n8n attempt %s/%s returned HTTP %s; retrying in %ss",
-                            case["id"],
-                            attempt + 1,
-                            retries + 1,
-                            response.status_code,
-                            wait_seconds,
-                        )
-                        retry_count += 1
-                        await asyncio.sleep(wait_seconds)
-                        continue
-                    try:
-                        raw_payload = response.json()
-                    except ValueError as exc:
-                        if attempt >= retries:
-                            raise RuntimeError(
-                                f"{case['id']} returned non-JSON n8n response"
-                            ) from exc
-                        wait_seconds = min(5 * (attempt + 1), 30)
-                        LOGGER.warning(
-                            "%s n8n attempt %s/%s returned non-JSON body; retrying in %ss",
-                            case["id"],
-                            attempt + 1,
-                            retries + 1,
-                            wait_seconds,
-                        )
-                        retry_count += 1
-                        await asyncio.sleep(wait_seconds)
-                        continue
-                    break
-                except httpx.RequestError as exc:
-                    if attempt >= retries:
-                        raise RuntimeError(
-                            f"{case['id']} failed after {retries + 1} n8n attempts"
-                        ) from exc
-                    wait_seconds = min(5 * (attempt + 1), 30)
-                    LOGGER.warning(
-                        "%s n8n attempt %s/%s failed: %s; retrying in %ss",
-                        case["id"],
-                        attempt + 1,
-                        retries + 1,
-                        exc.__class__.__name__,
-                        wait_seconds,
-                    )
-                    retry_count += 1
-                    await asyncio.sleep(wait_seconds)
-            response.raise_for_status()
-            if raw_payload is None:
-                raise RuntimeError(
-                    f"{case['id']} returned non-JSON n8n response"
-                )
-            normalised = _normalise_direct_n8n_response(raw_payload)
-            response_errors = _validate_chat_response(normalised)
-            if response_errors:
-                raise RuntimeError(
-                    f"{case['id']} returned an invalid n8n response: "
-                    f"{', '.join(response_errors)}"
-                )
-            if _is_mock_response(normalised) and not allow_mock:
-                raise RuntimeError(
-                    "The n8n endpoint returned a fixed mock response. "
-                    "Use a real retrieval workflow or pass --allow-mock only for plumbing tests."
-                )
-
-            sources = normalised["sources"]
-            response_metadata = {
-                **normalised.get("metadata", {}),
-                "evaluation_target": "direct_n8n",
-                "n8n_attempts": attempts_used,
-                "n8n_retry_count": retry_count,
-            }
-            observability = {
-                **_source_observability(sources, response_metadata),
-                "n8n_attempts": attempts_used,
-                "n8n_retry_count": retry_count,
-            }
-            outputs.append(
-                {
-                    **case,
-                    "answer": normalised["answer"],
-                    "contexts": [source["chunk_text"] for source in sources],
-                    "retrieved_documents": [source.get("title") for source in sources],
-                    "expected_documents": [
-                        source["document"] for source in case.get("expected_sources", [])
-                    ],
-                    "system_faithfulness": normalised.get("faithfulness"),
-                    "requires_clarification": normalised.get("requires_clarification", False),
-                    "latency_ms": latency_ms,
-                    "source_count": observability["source_count"],
-                    "observability": observability,
-                    "response_metadata": response_metadata,
-                }
-            )
-            LOGGER.info("Collected %s/%s via n8n: %s", position, len(cases), case["id"])
     return outputs
 
 
@@ -502,34 +166,18 @@ def run_ragas(outputs: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], dict
             "This key is used for independent judging, not by the system under test."
         )
     try:
-        import nest_asyncio
         from datasets import Dataset
         from ragas import evaluate
-        from ragas.embeddings import LangchainEmbeddingsWrapper
-        from ragas.llms import LangchainLLMWrapper
         from ragas.metrics import (
             answer_relevancy,
             context_precision,
             context_recall,
             faithfulness,
         )
-        from langchain_openai import ChatOpenAI, OpenAIEmbeddings
     except ImportError as exc:
         raise RuntimeError(
             "Evaluation dependencies are missing. Install evaluation/requirements.txt."
         ) from exc
-
-    # RAGAS 0.1.10's executor reuses the running event loop; allow nested loops.
-    nest_asyncio.apply()
-
-    # Bind the independent judge LLM + embeddings explicitly. The pinned RAGAS 0.1.10
-    # default binding is unreliable on this langchain version ("LLM is not set").
-    judge_llm = LangchainLLMWrapper(ChatOpenAI(model="gpt-4o-mini", temperature=0))
-    judge_emb = LangchainEmbeddingsWrapper(OpenAIEmbeddings(model="text-embedding-3-small"))
-    for metric in (faithfulness, answer_relevancy, context_precision, context_recall):
-        metric.llm = judge_llm
-        if hasattr(metric, "embeddings"):
-            metric.embeddings = judge_emb
 
     answerable = [row for row in outputs if row["answerable"]]
     if not answerable:
@@ -546,8 +194,6 @@ def run_ragas(outputs: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], dict
     result = evaluate(
         dataset,
         metrics=[faithfulness, answer_relevancy, context_precision, context_recall],
-        llm=judge_llm,
-        embeddings=judge_emb,
         raise_exceptions=False,
     )
     frame = result.to_pandas()
@@ -600,23 +246,6 @@ def build_summary(
         if negatives
         else 0.0
     )
-    source_counts = [
-        int(row.get("source_count") or len(row.get("contexts") or []))
-        for row in outputs
-    ]
-    observability_rows = [
-        row.get("observability")
-        for row in outputs
-        if isinstance(row.get("observability"), dict)
-    ]
-    retry_counts = [
-        int(obs.get("n8n_retry_count", 0))
-        for obs in observability_rows
-    ]
-    attempts = [
-        int(obs.get("n8n_attempts", 1))
-        for obs in observability_rows
-    ]
     return {
         "case_count": len(outputs),
         "answerable_case_count": len(answerable),
@@ -627,24 +256,6 @@ def build_summary(
             "mean": statistics.fmean(latencies) if latencies else 0.0,
             "p95": _percentile(latencies, 0.95),
             "max": max(latencies, default=0.0),
-        },
-        "observability": {
-            "source_return_rate": (
-                sum(count > 0 for count in source_counts) / len(source_counts)
-                if source_counts
-                else 0.0
-            ),
-            "average_sources_per_case": (
-                statistics.fmean(source_counts) if source_counts else 0.0
-            ),
-            "metadata_coverage": (
-                sum(bool(obs.get("metadata_key_count")) for obs in observability_rows)
-                / len(outputs)
-                if outputs
-                else 0.0
-            ),
-            "total_retry_count": sum(retry_counts),
-            "max_attempts": max(attempts, default=1),
         },
         "ragas": ragas_summary,
     }
@@ -713,10 +324,10 @@ def build_report(
 ) -> dict[str, Any]:
     scored_by_id = {row["id"]: row for row in scored_rows or []}
     combined = [scored_by_id.get(row["id"], row) for row in outputs]
-    from datetime import datetime
+    from datetime import datetime, timezone
 
     return {
-        "generated_at": datetime.now().astimezone().isoformat(),
+        "generated_at": datetime.now(timezone.utc).isoformat(),
         "summary": summary,
         "cases": combined,
     }
@@ -745,47 +356,15 @@ async def async_main(args: argparse.Namespace) -> int:
         cases = [case for case in cases if case["application"] in requested]
     if args.max_cases:
         cases = cases[: args.max_cases]
-    batch_info = None
-    if args.from_outputs:
-        outputs = json.loads(Path(args.from_outputs).read_text())
-        LOGGER.info("Loaded %s collected outputs from %s", len(outputs), args.from_outputs)
-    else:
-        try:
-            cases, batch_info = select_batch(
-                cases,
-                batch_size=args.batch_size,
-                batch_index=args.batch_index,
-            )
-        except ValueError as exc:
-            LOGGER.error(str(exc))
-            return 2
-        if args.n8n_url:
-            outputs = await collect_direct_n8n_outputs(
-                cases,
-                n8n_url=args.n8n_url,
-                token=args.n8n_token,
-                tenant_id=args.n8n_tenant_id,
-                timeout=args.timeout,
-                allow_mock=args.allow_mock,
-                max_chunks=args.max_chunks_per_query,
-                retries=args.n8n_retries,
-            )
-        else:
-            outputs = await collect_system_outputs(
-                cases,
-                base_url=args.base_url,
-                token=args.token,
-                email=args.email,
-                password=args.password,
-                timeout=args.timeout,
-                allow_mock=args.allow_mock,
-            )
-        # Persist raw collected outputs immediately so a scoring failure never wastes
-        # the slow collection run; re-score with --from-outputs.
-        args.results_dir.mkdir(parents=True, exist_ok=True)
-        dump_path = args.results_dir / "collected_outputs_latest.json"
-        dump_path.write_text(json.dumps(outputs, indent=1))
-        LOGGER.info("Persisted %s collected outputs to %s", len(outputs), dump_path)
+    outputs = await collect_system_outputs(
+        cases,
+        base_url=args.base_url,
+        token=args.token,
+        email=args.email,
+        password=args.password,
+        timeout=args.timeout,
+        allow_mock=args.allow_mock,
+    )
 
     scored_rows: list[dict[str, Any]] | None = None
     ragas_summary: dict[str, float] | None = None
@@ -793,8 +372,6 @@ async def async_main(args: argparse.Namespace) -> int:
         scored_rows, ragas_summary = run_ragas(outputs)
 
     summary = build_summary(outputs, ragas_summary)
-    if batch_info is not None:
-        summary["batch"] = batch_info
     thresholds = {
         "faithfulness": args.min_faithfulness,
         "answer_relevancy": args.min_answer_relevancy,
@@ -830,29 +407,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--password", default=os.getenv("EVAL_PASSWORD"))
     parser.add_argument("--timeout", type=float, default=90.0)
     parser.add_argument("--max-cases", type=int)
-    parser.add_argument("--batch-size", type=int)
-    parser.add_argument(
-        "--batch-index",
-        type=int,
-        help="1-based batch number to run with --batch-size.",
-    )
-    parser.add_argument("--max-chunks-per-query", type=int, default=5)
     parser.add_argument("--results-dir", type=Path, default=DEFAULT_RESULTS_DIR)
-    parser.add_argument(
-        "--n8n-url",
-        default=os.getenv("EVAL_N8N_URL"),
-        help="Call this n8n webhook directly instead of backend /chat/query.",
-    )
-    parser.add_argument("--n8n-token", default=os.getenv("EVAL_N8N_BEARER_TOKEN"))
-    parser.add_argument("--n8n-tenant-id", default=os.getenv("EVAL_TENANT_ID"))
-    parser.add_argument("--n8n-retries", type=int, default=2)
     parser.add_argument("--skip-ragas", action="store_true")
-    parser.add_argument(
-        "--from-outputs",
-        type=Path,
-        default=None,
-        help="Score from a previously persisted collected_outputs JSON (skips collection).",
-    )
     parser.add_argument("--allow-mock", action="store_true")
     parser.add_argument("--strict-dataset", action="store_true")
     parser.add_argument("--suite-dataset", action="store_true")

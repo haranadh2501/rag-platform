@@ -1,6 +1,6 @@
 # Evaluation Preflight Report
 
-Generated: `2026-06-20T04:15:06.126647+00:00`
+Generated: `2026-06-18T01:41:54.536020+00:00`
 Status: **PASS**
 
 ## Dataset
@@ -46,7 +46,7 @@ test_validator_rejects_duplicate_questions (test_evaluation_dataset.EvaluationDa
 test_validator_rejects_reference_not_present_in_source (test_evaluation_dataset.EvaluationDatasetTests.test_validator_rejects_reference_not_present_in_source) ... ok
 
 ----------------------------------------------------------------------
-Ran 10 tests in 0.769s
+Ran 10 tests in 1.684s
 
 OK
 ```

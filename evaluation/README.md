@@ -64,32 +64,6 @@ $env:OPENAI_API_KEY = "independent-evaluator-key"
 python -m evaluation.run_eval --suite-dataset --enforce-thresholds
 ```
 
-To evaluate a source-returning n8n retrieval webhook directly, bypassing the
-FastAPI backend:
-
-```powershell
-$env:EVAL_N8N_URL = "https://<n8n-service>/webhook/retrieve"
-$env:EVAL_TENANT_ID = "<tenant-id-visible-to-ingested-docs>"
-
-python -m evaluation.run_eval --suite-dataset `
-  --n8n-url $env:EVAL_N8N_URL `
-  --n8n-tenant-id $env:EVAL_TENANT_ID
-```
-
-For slow or flaky public webhooks, split the suite into deterministic batches.
-Batch indices are 1-based:
-
-```powershell
-python -m evaluation.run_eval --suite-dataset `
-  --n8n-url $env:EVAL_N8N_URL `
-  --n8n-tenant-id $env:EVAL_TENANT_ID `
-  --batch-size 10 `
-  --batch-index 1
-```
-
-Each report includes an `Observability` section with source return rate,
-average sources per case, metadata coverage, retry count, and max attempts.
-
 Each run automatically writes timestamped and `latest` versions of:
 
 - JSON: complete machine-readable results

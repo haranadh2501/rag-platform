@@ -110,21 +110,10 @@ async def process_message(ctx: MessageContext, db: AsyncSession) -> dict:
 
     history = await _load_history(ctx, db)                 # Step 5
 
-<<<<<<< HEAD
-    response = await pipeline_client.call_pipeline({       # Step 6 (raises PipelineError)
-        "request_id": ctx.request_id,
-        "tenant_id": str(ctx.tenant_id),
-        "conversation_id": str(ctx.conversation_id),
-        "query": ctx.query,
-        "current_message": ctx.query,
-        "history": history,
-    })
-=======
     formatted_query = _format_query_with_history(history, ctx.query)
     response = await pipeline_client.call_pipeline(        # Step 6 (raises PipelineError)
         {"query": formatted_query}
     )
->>>>>>> origin/codex/evaluation
     answer = response.get("answer", "")
     sources: list = []           # n8n does not return sources
     follow_up_questions: list = []  # n8n does not return follow_up_questions
